@@ -24,3 +24,7 @@ obj/
 *.webm
 *.npy
 *.npz
+
+# Python caches of methods/
+__pycache__/
+.pytest_cache/

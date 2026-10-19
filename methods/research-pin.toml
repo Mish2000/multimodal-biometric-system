@@ -1,0 +1,28 @@
+# H10: the research version the system uses, pinned and checked before every run.
+# The research code is not copied into this repository: it is imported from a local
+# checkout of the repository below, which must be at this commit with no change to
+# its tracked files. Research artefacts outside its git (its R8) are pinned by SHA-256.
+# Machine paths (the checkout and the Python environments) are in local/research.toml.
+
+[repository]
+url = "https://github.com/Mish2000/fingerprint-level3-recognition-research"
+commit = "606c8d33a7a27570b5bb55cca8248259b9b6ba8a"
+
+# Paths are relative to the research checkout.
+[files.learned_descriptor_model]
+# The learned pore descriptor's second training, the system's descriptor (H6).
+path = "runs/method/repeat/model.pt"
+sha256 = "76d541d0017bfefd862334b7c489b9f7605e41a4cf0a569eb142b64c92b29e45"
+
+[files.plain_thresholds]
+# The plain vs plain evaluation that holds the thresholds below.
+path = "runs/plain/eval/report.json"
+sha256 = "6d93566aeb498b8c519e9e1146291561b72859ff1341e08ad8f4311f4584b644"
+
+# Operational thresholds at FAR 0.1 % from the plain vs plain development pairs (the
+# research's R7; validation pairs for the learned descriptor), per scenario. A pair is
+# accepted when its score is above the value. Checked against plain_thresholds when used.
+[thresholds."0.1%"]
+opencv-sift = { RxJ = 57, QxJ = 58 }
+pore-sift = { RxJ = 21, QxJ = 21 }
+learned-pore-repeat = { RxJ = 13, QxJ = 14 }

@@ -65,13 +65,26 @@ commits stay in English.
   (the finger lifted between them) and keeps one checked image per placement
   through the H8 worker. The second set takes three placements per finger.
 
+## Research methods (H10)
+
+- The research repository stays separate and is never written to. `methods/`
+  imports its methods from a local checkout in the research's own Python
+  environments, after checking the pin in `methods/research-pin.toml`
+  (commit, SHA-256 of its artefacts outside git, plain vs plain thresholds);
+  machine paths are in the ignored `local/research.toml`. A new research
+  version enters only by a new pin and a recorded decision.
+- Run research environments' `python.exe` with the environment's folders on
+  `PATH` (as `conda activate` does), or numpy's linear algebra fails to load.
+
 ## Layout
 
 ```
 docs/decisions.md         decision record (H1–H6 and G4 carried over; H7 on)
 docs/scanner-native-capture.md  recovered OEM interface and H8 validation
-scanner/ScannerCapture/   OEM and TWAIN capture tool (H7, H8)
-captures/, local/         git-ignored: captures, probe reports
+docs/hiscan-methods.md    the research methods on HiScan PRO captures (H10)
+scanner/ScannerCapture/   OEM and TWAIN capture tool (H7, H8, H9)
+methods/                  pinned research link and its HiScan evaluation (H10)
+captures/, local/         git-ignored: captures, evaluations, probe reports
 ```
 
 ## Commands
@@ -84,6 +97,9 @@ scanner/ScannerCapture/bin/Release/net48/ScannerCapture.exe selftest
 scanner/ScannerCapture/bin/Release/net48/ScannerCapture.exe oem-probe --driver-dir DRIVER   # report in local/
 scanner/ScannerCapture/bin/Release/net48/ScannerCapture.exe oem-guided --driver-dir DRIVER --session live002 --fingers 1-10 --placements 3
 scanner/ScannerCapture/bin/Release/net48/ScannerCapture.exe check captures/live002
+# PY: the research project environment's python.exe (local/research.toml)
+PY -m pytest methods -p no:cacheprovider
+PY methods/hiscan_eval.py --first FIRST_SET_FOLDER   # about 5 minutes -> captures/live002/evaluation
 ```
 
 ## Status
@@ -110,6 +126,14 @@ scanner/ScannerCapture/bin/Release/net48/ScannerCapture.exe check captures/live0
   checks on readback. Two runs failed with OEM status 110 and succeeded when
   asked again. The ignored `local/second-set-check.py` found no repeated
   placement and every image consistent with its finger label against the
-  first set (`docs/scanner-native-capture.md`). Running the research's
-  methods on these captures is the next step.
+  first set (`docs/scanner-native-capture.md`).
+- 2026-10-19 (H10): the three research methods ran on both sets through the
+  pinned link (`docs/hiscan-methods.md`). At the plain vs plain FAR 0.1 %
+  thresholds OpenCV SIFT accepted 28 of 30 same-finger and 0 of 405
+  different-finger pairs within the second set, but 1 of 30 same-finger
+  pairs against the first set; Pore SIFT and the learned descriptor accepted
+  many different-finger pairs (71 and 28 of 405), so the SD302 thresholds do
+  not carry over to HiScan captures for the pore methods. A 1:1 attempt takes
+  0.4 s (OpenCV SIFT) or about 3.2 s (pore detection on one CPU thread). The
+  researcher decides the next step.
 - Nothing has been pushed; the GitHub repository does not exist yet.

@@ -149,3 +149,28 @@ continue group H here.
   per placement; it records the placement in the file name and JSON and
   resumes an interrupted session after the highest kept placement. Running
   the research's methods on these captures is a separate later step.
+
+## 2026-10-19 — the research methods on HiScan PRO captures
+
+- **H10** Approved by the researcher on 2026-10-19: the two repositories stay
+  separate. The system uses the research's methods through a pinned, checked
+  link (`methods/research-pin.toml`): the research checkout must be at the
+  pinned commit with no change to tracked files, its artefacts outside git
+  (the learned descriptor's second training, the plain vs plain evaluation)
+  must match their SHA-256, and the `fpl3` package each research environment
+  imports must come from that checkout. The research code is never copied or
+  changed, nothing is written into the research repository, and a new
+  research version enters only by a new pin with a recorded decision; machine
+  paths stay in the ignored `local/research.toml`. The research repository's
+  G4 (it stays the research home and the source of the methods) stands.
+- **H10** The first use of the link, approved the same day: OpenCV SIFT, Pore
+  SIFT and the learned pore descriptor (second training) run unchanged, each
+  in its research environment, on the second set (H9) and on the first set:
+  (A) placements of the second set against each other, the earlier capture as
+  reference (30 same-finger and 405 different-finger pairs), and (B) the first
+  set as reference against the second set (30 and 270), each counted at the
+  plain vs plain operational thresholds at FAR 0.1 % (RxJ and QxJ), with pore
+  counts, single-thread timings (the learned descriptor on the GPU) and
+  template sizes. Fusions are left out for now. The different-finger pairs
+  are one person's other fingers, so they cannot confirm FAR 0.1 %. Results
+  are in `docs/hiscan-methods.md`.
