@@ -118,3 +118,18 @@ continue group H here.
   the three runtime DLL hashes, restores prior settings, isolates native calls
   in a bounded worker and keeps biometric evidence out of git. See
   `docs/scanner-native-capture.md` for the evidence and remaining limits.
+- **H8** Correction approved by the researcher on 2026-10-19: the OEM transfer
+  fills rows bottom-up, as in a Windows DIB (`twBiometrika.ds` builds a
+  positive-height 8-bit DIB of the returned size and copies the buffer into
+  it unchanged), but `oem-capture` stored them top-down, so its first images
+  were vertical mirror images of the vendor's own save. Against the
+  researcher's first left-index capture (control panel, "Save 1000 DPI"),
+  counting OpenCV SIFT matches consistent with one similarity transform
+  (RANSAC, 20 px): the four earlier left-index captures gave 6–7 as saved,
+  the level of different fingers (6–9), and 19–50 after a vertical flip.
+  `oem-capture` now reverses the rows before the checks and saving and
+  records this in its JSON files. The H7 checks do not depend on row order,
+  so the earlier validation stands; the earlier test images are kept
+  unchanged and are mirrored. A new left-index capture with the corrected
+  tool gave 29 consistent matches with the first capture as saved and 8–9
+  mirrored; two other fingers of the first set gave 8–13.

@@ -43,6 +43,11 @@ creation preserve earlier attempts. Capture output is restricted to
 `captures/`; probe reports to `local/`. Both are git-ignored. These prototype
 files are unencrypted; do not treat this as the final system's sample store.
 
+Images have the orientation of the vendor's own 1000 DPI save: the OEM
+transfer returns its rows bottom-up and the tool reverses them. Captures made
+before this correction of 2026-10-19 have no `transfer_row_order` in their
+JSON and are vertical mirror images.
+
 Optional native capture settings: `--settle-ms 1500`, `--initial-delay-s 0`,
 `--out captures`. The automatic loop is bounded by `--timeout-s`; the parent
 allows a further 15 seconds before terminating a stuck worker. Exit codes:

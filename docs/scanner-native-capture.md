@@ -6,7 +6,10 @@ The supplied Biometrika OEM 3.3 x86 runtime can acquire 1000x1000 grayscale
 images at 1000 ppi directly from the researcher's HiScan PRO. A fresh
 connection followed by three automatic accepted captures was verified on
 2026-10-19. Each image passed the unchanged H7 checks and was read back from
-PNG. The scanner's red illumination was observed by the researcher.
+PNG. The scanner's red illumination was observed by the researcher. The
+transfer returns its rows bottom-up; since the correction of the same day,
+saved images have the orientation of the vendor's own 1000 DPI save, which
+the earlier test images do not (see [Row order](#row-order)).
 
 The application is our own C# program. It still depends on the installed
 USB driver and the supplied OEM runtime. It does not implement a replacement
@@ -102,6 +105,37 @@ resolution to its four-argument image-retrieval function. The x64 diagnostic
 application independently confirms the zero-argument `Init`, `OpenChannel`
 and `CaptureImage` calls and the five-argument `TransferImageNormal` layout.
 
+## Row order
+
+`twBiometrika.ds` hands the transferred frame to TWAIN as a Windows DIB. RVA
+`0x25390` writes a BITMAPINFOHEADER with the returned width, a positive
+height, 8 bits per pixel and 256 palette entries; RVA `0x25970` copies the
+transfer buffer into the DIB's bits unchanged. A positive-height DIB stores
+its bottom row first, so the OEM transfer fills rows bottom-up.
+
+The first H8 captures stored the first transferred row at the top and are
+therefore vertical mirror images of the vendor's output. A comparison with
+the researcher's first left-index capture, saved through the control panel's
+"Save 1000 DPI", showed it. The measure counts OpenCV SIFT matches (ratio
+0.8) that agree with one similarity transform (RANSAC, 20 px). SIFT is
+rotation invariant but not mirror invariant, so only images of the same
+finger with the same handedness give many:
+
+| Compared with the first left-index capture | Consistent matches |
+| --- | --- |
+| Four earlier H8 left-index captures, as saved | 6–7 |
+| The same four, flipped vertically | 19–50 (rotation 3–5°) |
+| A new capture after the correction, as saved | 29 (rotation −2°) |
+| The new capture, mirrored | 8–9 |
+| Other fingers of the researcher (left middle, right index) | 6–13 |
+
+`oem-capture` now reverses the rows before the checks and saving and writes
+`transfer_row_order` into each JSON file; files without it predate the
+correction. The H7 checks give the same results for either row order. With
+matching handedness, the estimated scale between the vendor's save and our
+captures was 0.93–1.00 across placements, as expected from skin deformation;
+a 500/1000 ppi mix-up would show as 0.5 or 2.
+
 ## Implemented sequence
 
 1. Verify SHA-256 of all three local x86 runtime DLLs before loading any.
@@ -111,8 +145,9 @@ and `CaptureImage` calls and the five-argument `TransferImageNormal` layout.
 5. Read the prior DPI, set 1000 and require a readback of 1000.
 6. Trigger acquisition, allow the configured settling interval, generate the
    16-byte nonce and transfer the full frame using mode 1.
-7. Check buffer guards, returned dimensions and DPI, then apply H7's four
-   image checks. Write unchanged Gray8 pixels to lossless PNG with JSON.
+7. Check buffer guards, returned dimensions and DPI, reverse the bottom-up
+   rows, then apply H7's four image checks. Write the unchanged Gray8 values
+   to lossless PNG with JSON.
 8. Keep failed frames and their checks in the session's `rejected/` folder;
    continue automatically until the requested number passes or time expires.
 9. Restore the prior DPI and capture configuration, close the standby channel
@@ -135,7 +170,16 @@ The application binds no firmware-writing or driver-installation operations.
   metadata. PNG encodes integer pixels/metre, so nominal 1000 ppi reads as
   approximately 999.998 ppi.
 - Existing image/FFT/BMP/PNG tests pass; additional tests cover Windows worker
-  argument parsing and output-folder containment.
+  argument parsing, output-folder containment and the row reversal.
+- Orientation: after the correction, a new left-index capture matched the
+  researcher's first capture as saved (see [Row order](#row-order)).
+- Gray levels differ from the vendor's save. Around the print, 96–100 % of
+  the pixels are pure white in our captures against 69–71 % in the
+  researcher's first ten captures, and inside the print 15–36 % against
+  11–23 %; the print covers a similar share of the frame (36–43 % against
+  31–64 %). This pure white, not enlargement, raises H7's constant-block
+  share (0.055–0.135 against 0.018–0.044). Whether it matters for the
+  fingerprint methods is checked when they run on HiScan PRO captures.
 - Negative command checks verified rejection of an altered runtime and output
   outside `captures/`. The worker deadline was exercised with a delayed worker:
   the parent stopped it after the configured deadline plus its cleanup margin.

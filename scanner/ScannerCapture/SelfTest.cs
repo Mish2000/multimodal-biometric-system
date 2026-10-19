@@ -25,6 +25,7 @@ namespace ScannerCapture
                 Test("JSON order and escapes", JsonOutput),
                 Test("native worker Windows argument round trip (H8)", NativeArguments),
                 Test("native capture outputs stay in ignored folders (H8)", NativeOutputPaths),
+                Test("native transfer rows are stored top-down (H8)", NativeRowOrder),
             };
             int failed = 0;
             foreach (var t in tests)
@@ -249,6 +250,16 @@ namespace ScannerCapture
                 Path.GetFullPath(Path.Combine("captures", "session", "sample.png")), "valid capture path");
             Assert(Throws<UsageException>(() => OemCommands.UnderRoot(Path.Combine("captures", "..", "docs", "sample.json"), "captures")), "parent traversal must be refused");
             Assert(Throws<UsageException>(() => OemCommands.UnderRoot(Path.Combine("captures-other", "sample.json"), "captures")), "sibling prefix must be refused");
+        }
+
+        static void NativeRowOrder()
+        {
+            // The first transferred row is the image's bottom row.
+            var bottomUp = new byte[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 };
+            var topDown = OemScanner.TopDown(bottomUp, 4, 3);
+            Assert(topDown.SequenceEqual(new byte[] { 9, 10, 11, 12, 5, 6, 7, 8, 1, 2, 3, 4 }), "rows must be reversed");
+            Assert(OemScanner.TopDown(topDown, 4, 3).SequenceEqual(bottomUp), "reversing twice must restore the transfer");
+            Assert(Throws<ArgumentException>(() => OemScanner.TopDown(bottomUp, 5, 3)), "a size mismatch must be refused");
         }
     }
 }

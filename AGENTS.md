@@ -58,7 +58,9 @@ commits stay in English.
 - H8 adds `oem-probe` and `oem-capture`: direct access to the supplied OEM
   3.3 x86 library, with exact runtime hashes, explicit sensor activation,
   1000-DPI set/readback, automatic checked PNG/JSON capture and a worker
-  timeout. See `scanner/README.md` and `docs/scanner-native-capture.md`.
+  timeout. The transfer's rows are bottom-up (Windows DIB order);
+  `oem-capture` reverses them, so its images match the vendor's own save.
+  See `scanner/README.md` and `docs/scanner-native-capture.md`.
 
 ## Layout
 
@@ -94,5 +96,9 @@ scanner/ScannerCapture/bin/Release/net48/ScannerCapture.exe check captures/live0
   now works on the connected HiScan PRO: after an initial successful capture,
   a new connection produced three accepted automatic 1000x1000 Gray8 captures
   passing the unchanged H7 checks. First frames can be blank and are rejected.
-  Ten self-tests pass. The second set of ten fingers has not been collected.
+- 2026-10-19 (H8 correction): those first H8 images were vertical mirror
+  images of the vendor's own save, because the transfer's rows are bottom-up.
+  `oem-capture` now reverses them, and a new left-index capture matches the
+  researcher's first capture as saved. Eleven self-tests pass. The second set
+  of ten fingers has not been collected.
 - Nothing has been pushed; the GitHub repository does not exist yet.

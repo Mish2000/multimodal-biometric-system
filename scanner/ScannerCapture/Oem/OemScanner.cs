@@ -122,8 +122,23 @@ namespace ScannerCapture.Oem
                 if (dpi != 1000 || width != 1000 || height != 1000)
                     throw new InvalidDataException("OEM output is " + width + "x" + height + " at " + dpi + " DPI; expected native 1000x1000 at 1000.");
                 elapsedMs = clock.ElapsedMilliseconds;
-                return new GrayImage(width, height, pixels.Read(checked(width * height)));
+                return new GrayImage(width, height, TopDown(pixels.Read(checked(width * height)), width, height));
             }
+        }
+
+        /// <summary>
+        /// H8 correction: the transfer fills rows bottom-up, as in a Windows DIB. twBiometrika.ds builds a
+        /// positive-height 8-bit DIB of the returned size (RVA 0x25390) and copies this buffer into its bits
+        /// unchanged (RVA 0x25970); read top-down, the image is a vertical mirror of the vendor's own save.
+        /// The caller accepts only 1000-pixel rows, which carry no DIB padding.
+        /// </summary>
+        internal static byte[] TopDown(byte[] bottomUp, int width, int height)
+        {
+            if (bottomUp.Length != checked(width * height)) throw new ArgumentException("The pixel count does not match the image size.");
+            var rows = new byte[bottomUp.Length];
+            for (int y = 0; y < height; y++)
+                Buffer.BlockCopy(bottomUp, (height - 1 - y) * width, rows, y * width, width);
+            return rows;
         }
 
         T Bind<T>(string name) where T : class

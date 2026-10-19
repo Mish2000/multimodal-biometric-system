@@ -137,6 +137,7 @@ namespace ScannerCapture.Oem
                         { "attempt", sequence }, { "captured_utc", captured.ToString("o", CultureInfo.InvariantCulture) },
                         { "backend", "Biometrika OEM 3.3 x86" }, { "dll_sha256", OemScanner.LibrarySha256 },
                         { "scanner_type", scanner.ScannerType }, { "transfer_mode", 1 },
+                        { "transfer_row_order", "bottom-up, reversed before checks and saving" },
                         { "requested_ppi", 1000 }, { "readback_ppi", scanner.OutputDpi },
                         { "width", image.Width }, { "height", image.Height }, { "capture_ms", captureMs },
                         { "checks", checks.Select(c => new JsonObject { { "name", c.Name }, { "passed", c.Passed }, { "detail", c.Detail } }).ToList() },
