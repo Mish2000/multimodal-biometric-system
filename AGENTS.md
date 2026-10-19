@@ -61,6 +61,9 @@ commits stay in English.
   timeout. The transfer's rows are bottom-up (Windows DIB order);
   `oem-capture` reverses them, so its images match the vendor's own save.
   See `scanner/README.md` and `docs/scanner-native-capture.md`.
+- H9 adds `oem-guided`: finger by finger, it asks for separate placements
+  (the finger lifted between them) and keeps one checked image per placement
+  through the H8 worker. The second set takes three placements per finger.
 
 ## Layout
 
@@ -77,8 +80,9 @@ captures/, local/         git-ignored: captures, probe reports
 # .NET SDK 10 with the .NET Framework 4.8 targeting pack
 dotnet build scanner/ScannerCapture -c Release -p:RestoreLockedMode=true
 scanner/ScannerCapture/bin/Release/net48/ScannerCapture.exe selftest
-scanner/ScannerCapture/bin/Release/net48/ScannerCapture.exe probe            # report in local/
-scanner/ScannerCapture/bin/Release/net48/ScannerCapture.exe capture --session live002 --fingers 2 --attempts 3
+# DRIVER: the supplied fx_hs_windows_10_driver_v3.3 folder (scanner/README.md)
+scanner/ScannerCapture/bin/Release/net48/ScannerCapture.exe oem-probe --driver-dir DRIVER   # report in local/
+scanner/ScannerCapture/bin/Release/net48/ScannerCapture.exe oem-guided --driver-dir DRIVER --session live002 --fingers 1-10 --placements 3
 scanner/ScannerCapture/bin/Release/net48/ScannerCapture.exe check captures/live002
 ```
 
@@ -99,6 +103,13 @@ scanner/ScannerCapture/bin/Release/net48/ScannerCapture.exe check captures/live0
 - 2026-10-19 (H8 correction): those first H8 images were vertical mirror
   images of the vendor's own save, because the transfer's rows are bottom-up.
   `oem-capture` now reverses them, and a new left-index capture matches the
-  researcher's first capture as saved. Eleven self-tests pass. The second set
-  of ten fingers has not been collected.
+  researcher's first capture as saved.
+- 2026-10-19 (H9): with the guided command `oem-guided` (twelve self-tests
+  pass) the second set was collected: session `live002`, three separate
+  placements of each of the ten fingers, 30 of 30 kept, all passing the H7
+  checks on readback. Two runs failed with OEM status 110 and succeeded when
+  asked again. The ignored `local/second-set-check.py` found no repeated
+  placement and every image consistent with its finger label against the
+  first set (`docs/scanner-native-capture.md`). Running the research's
+  methods on these captures is the next step.
 - Nothing has been pushed; the GitHub repository does not exist yet.

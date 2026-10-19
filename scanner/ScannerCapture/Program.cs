@@ -30,6 +30,10 @@ Commands:
   oem-capture    H8: automatically acquire and save checked 1000 ppi images without TWAIN.
                  --driver-dir DIR --session ID [--finger 2] [--attempts 1]
                  [--out captures] [--timeout-s 60] [--settle-ms 1500] [--initial-delay-s 0]
+  oem-guided     H9: finger by finger, ask for each separate placement (lift the finger between them)
+                 and keep one checked image per placement through the oem-capture worker; resumes.
+                 --driver-dir DIR --session ID [--fingers 1-10] [--placements 3]
+                 [--out captures] [--timeout-s 30 per placement] [--settle-ms 1500]
   probe          List TWAIN sources, describe the scanner's capabilities and try 1000 ppi;
                  every setting is returned to the driver's default at the end.
                  [--source NAME] [--resolution 1000] [--report local\scanner-probe.json]
@@ -62,6 +66,7 @@ Exit codes: 0 done, 1 usage or unexpected error, 2 scanner or fallback not avail
                 {
                     case "oem-probe":
                     case "oem-capture": return OemCommands.RunIsolated(args);
+                    case "oem-guided": return OemCommands.RunGuided(args);
                     case "_oem-probe":
                     case "_oem-capture": return OemCommands.RunWorker(options);
                     case "probe": return TwainHost.Run(host => Probe(host, options));

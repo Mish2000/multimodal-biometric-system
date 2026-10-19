@@ -136,6 +136,14 @@ matching handedness, the estimated scale between the vendor's save and our
 captures was 0.93–1.00 across placements, as expected from skin deformation;
 a 500/1000 ppi mix-up would show as 0.5 or 2.
 
+Most of the low counts in the table (different fingers, wrong handedness)
+come from degenerate transforms with a scale near 0, which map many points
+onto one small cluster. A stricter count, used for the second capture set below,
+keeps only mutual best matches, uses each point once and requires a scale of
+0.8–1.25. It gives 0–6 as saved and 16–44 flipped for the four earlier
+captures, 25 as saved and 5 mirrored for the new one, and 0 for the other
+fingers.
+
 ## Implemented sequence
 
 1. Verify SHA-256 of all three local x86 runtime DLLs before loading any.
@@ -180,6 +188,22 @@ The application binds no firmware-writing or driver-installation operations.
   31–64 %). This pure white, not enlargement, raises H7's constant-block
   share (0.055–0.135 against 0.018–0.044). Whether it matters for the
   fingerprint methods is checked when they run on HiScan PRO captures.
+- Guided second set (H9, session `live002`): 30 of 30 placements kept, each
+  on its first frame, 2.7–3.5 s per capture, all passing the H7 checks on
+  readback. Two of the 32 runs failed in `FXOEM_CaptureImage` with status
+  110, saved nothing, and succeeded when the placement was asked again. The
+  library treats this status as recoverable: for statuses 1–46, 101, 110,
+  111, 114, 116 and 118 it calls another internal routine and repeats the
+  capture once (RVAs `0x5D79`–`0x5DAD`); its meaning is not documented.
+- Placements of one finger in `live002` are separate impressions: their
+  pixel correlation is 0.19–0.63, against 0.94–0.99 for frames of one
+  placement. With the stricter count, placements of one finger share 25–1,465
+  consistent matches and different fingers at most 7 (405 pairs). Against
+  the first set's image of the same finger, 28 placements give 9–121 as
+  saved and 0–7 mirrored, and other fingers at most 6 (270 pairs). The two
+  remaining left-ring placements give 0 and 6: they show a part of the finger
+  outside the first image, and they match the third left-ring placement (33
+  and 25), which matches the first image (49).
 - Negative command checks verified rejection of an altered runtime and output
   outside `captures/`. The worker deadline was exercised with a delayed worker:
   the parent stopped it after the configured deadline plus its cleanup margin.

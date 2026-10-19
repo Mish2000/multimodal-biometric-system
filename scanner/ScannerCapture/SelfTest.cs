@@ -26,6 +26,7 @@ namespace ScannerCapture
                 Test("native worker Windows argument round trip (H8)", NativeArguments),
                 Test("native capture outputs stay in ignored folders (H8)", NativeOutputPaths),
                 Test("native transfer rows are stored top-down (H8)", NativeRowOrder),
+                Test("guided capture resumes after the kept placements (H9)", GuidedResume),
             };
             int failed = 0;
             foreach (var t in tests)
@@ -260,6 +261,28 @@ namespace ScannerCapture
             Assert(topDown.SequenceEqual(new byte[] { 9, 10, 11, 12, 5, 6, 7, 8, 1, 2, 3, 4 }), "rows must be reversed");
             Assert(OemScanner.TopDown(topDown, 4, 3).SequenceEqual(bottomUp), "reversing twice must restore the transfer");
             Assert(Throws<ArgumentException>(() => OemScanner.TopDown(bottomUp, 5, 3)), "a size mismatch must be refused");
+        }
+
+        static void GuidedResume()
+        {
+            string folder = Path.Combine(Path.GetTempPath(), "ScannerCapture-selftest-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(Path.Combine(folder, "rejected"));
+            try
+            {
+                Assert(OemCommands.KeptPlacements(Path.Combine(folder, "missing"), "s1", 2) == 0, "a missing folder holds no placements");
+                foreach (var name in new[] {
+                    "s1_f02_p1_20261019T1600000000000_1.png", "s1_f02_p2_20261019T1601000000000_2.png",
+                    "s1_f03_p3_20261019T1602000000000_1.png", "s1_f02_20261019T1603000000000_1.png",
+                    Path.Combine("rejected", "s1_f02_p3_20261019T1604000000000_1.png") })
+                    File.WriteAllBytes(Path.Combine(folder, name), new byte[0]);
+                Assert(OemCommands.KeptPlacements(folder, "s1", 2) == 2, "finger 2: rejected and unguided files must not count");
+                Assert(OemCommands.KeptPlacements(folder, "s1", 3) == 3, "finger 3 resumes after its highest placement");
+                Assert(OemCommands.KeptPlacements(folder, "s1", 7) == 0, "finger 7 has no placements");
+            }
+            finally
+            {
+                Directory.Delete(folder, true);
+            }
         }
     }
 }

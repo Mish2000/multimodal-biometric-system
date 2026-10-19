@@ -133,3 +133,19 @@ continue group H here.
   unchanged and are mirrored. A new left-index capture with the corrected
   tool gave 29 consistent matches with the first capture as saved and 8–9
   mirrored; two other fingers of the first set gave 8–13.
+
+## 2026-10-19 — second capture set
+
+- **H9** Approved by the researcher on 2026-10-19: the second capture set of
+  his ten fingers (session `live002`) takes three separate placements per
+  finger, the finger lifted off the glass between them, as in H6's enrolment
+  default of three captures per finger. Frames taken back to back from one
+  placement (H8's `--attempts`) are nearly identical and are not separate
+  impressions: the three frames of H8's repeat test, about 2 s apart, have a
+  pixel correlation of 0.94–0.99 without any alignment, against 0.20–0.49
+  between separate placements of the same finger. A guided command,
+  `oem-guided`, asks for each finger and
+  placement in turn and runs the unchanged H8 worker for one accepted image
+  per placement; it records the placement in the file name and JSON and
+  resumes an interrupted session after the highest kept placement. Running
+  the research's methods on these captures is a separate later step.

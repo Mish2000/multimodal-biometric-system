@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
@@ -18,7 +19,77 @@ namespace ScannerCapture.Oem
         {
             var options = Options.Parse(args);
             int seconds = options.GetInt("timeout-s", 60, 5, 600);
-            var workerArgs = new[] { "_" + args[0].ToLowerInvariant() }.Concat(args.Skip(1));
+            return RunWorkerProcess(new[] { "_" + args[0].ToLowerInvariant() }.Concat(args.Skip(1)), seconds);
+        }
+
+        /// <summary>
+        /// H9: guided capture of separate placements. The parent asks for each finger and placement and runs the
+        /// unchanged H8 worker for one accepted image per placement, so time spent answering never counts against
+        /// the worker's deadline. An interrupted session resumes after the highest kept placement of each finger.
+        /// </summary>
+        public static int RunGuided(string[] args)
+        {
+            var options = Options.Parse(args);
+            options.Allow("driver-dir", "session", "fingers", "placements", "timeout-s", "settle-ms", "out");
+            string directory = options.Require("driver-dir"), session = options.Require("session");
+            if (!Regex.IsMatch(session, "^[A-Za-z0-9_-]{1,40}$")) throw new UsageException("--session may hold letters, digits, - and _ only.");
+            var fingers = Fingers.Parse(options.Get("fingers", "1-10"));
+            int placements = options.GetInt("placements", 3, 1, 10);
+            int seconds = options.GetInt("timeout-s", 30, 5, 600);
+            int settle = options.GetInt("settle-ms", 1500, 0, 10000);
+            string output = options.Get("out", "captures");
+            string folder = UnderRoot(Path.Combine(output, session), "captures");
+
+            Console.WriteLine("Guided native capture (H9): session " + session + ", " + placements + " separate placements per finger.");
+            Console.WriteLine("Lift the finger off the glass between placements: frames of one placement are not separate impressions.");
+            bool quit = false, complete = true;
+            var summary = new List<string>();
+            foreach (int finger in fingers)
+            {
+                int placement = KeptPlacements(folder, session, finger) + 1;
+                while (!quit && placement <= placements)
+                {
+                    Console.WriteLine();
+                    Console.Write("[f" + finger.ToString("00") + " " + Fingers.Name(finger) + ", placement " + placement + " of " + placements +
+                                  "] Place the finger, then press Enter (s = skip finger, q = quit): ");
+                    string answer = (Console.ReadLine() ?? "q").Trim().ToLowerInvariant();
+                    if (answer == "q") { quit = true; break; }
+                    if (answer == "s") break;
+                    int code = RunWorkerProcess(new[] {
+                        "_oem-capture", "--driver-dir", directory, "--session", session, "--out", output,
+                        "--finger", finger.ToString(CultureInfo.InvariantCulture), "--placement", placement.ToString(CultureInfo.InvariantCulture),
+                        "--attempts", "1", "--timeout-s", seconds.ToString(CultureInfo.InvariantCulture), "--settle-ms", settle.ToString(CultureInfo.InvariantCulture) }, seconds);
+                    if (code == 0) { Console.WriteLine("Placement " + placement + " kept. Lift the finger off the glass."); placement++; }
+                    else Console.WriteLine("No image was kept for this placement; it will be asked again.");
+                }
+                int kept = KeptPlacements(folder, session, finger);
+                if (kept < placements) complete = false;
+                summary.Add("  f" + finger.ToString("00") + " " + Fingers.Name(finger).PadRight(13) + Math.Min(kept, placements) + " of " + placements + " placements kept");
+                if (quit) break;
+            }
+            if (summary.Count < fingers.Count) complete = false;
+            Console.WriteLine();
+            Console.WriteLine("Summary (" + folder + "):");
+            foreach (var line in summary) Console.WriteLine(line);
+            return complete ? 0 : 3;
+        }
+
+        /// <summary>H9: the highest placement already kept for a finger; rejected frames are not counted.</summary>
+        internal static int KeptPlacements(string folder, string session, int finger)
+        {
+            if (!Directory.Exists(folder)) return 0;
+            var pattern = new Regex("^" + Regex.Escape(session) + "_f" + finger.ToString("00") + "_p(\\d+)_.*\\.png$", RegexOptions.IgnoreCase);
+            int highest = 0;
+            foreach (var file in Directory.GetFiles(folder, "*.png"))
+            {
+                var match = pattern.Match(Path.GetFileName(file));
+                if (match.Success) highest = Math.Max(highest, int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture));
+            }
+            return highest;
+        }
+
+        static int RunWorkerProcess(IEnumerable<string> workerArgs, int seconds)
+        {
             var start = new ProcessStartInfo(Assembly.GetExecutingAssembly().Location, string.Join(" ", workerArgs.Select(Quote)))
             {
                 UseShellExecute = false, CreateNoWindow = true,
@@ -103,10 +174,11 @@ namespace ScannerCapture.Oem
 
         static int Capture(Options options)
         {
-            options.Allow("driver-dir", "session", "finger", "attempts", "timeout-s", "settle-ms", "out", "initial-delay-s");
+            options.Allow("driver-dir", "session", "finger", "placement", "attempts", "timeout-s", "settle-ms", "out", "initial-delay-s");
             string directory = options.Require("driver-dir"), session = options.Require("session");
             if (!Regex.IsMatch(session, "^[A-Za-z0-9_-]{1,40}$")) throw new UsageException("--session may hold letters, digits, - and _ only.");
             int finger = options.GetInt("finger", 2, 1, 10);
+            int placement = options.GetInt("placement", 0, 0, 10); // H9: set by oem-guided, 0 otherwise
             int wanted = options.GetInt("attempts", 1, 1, 20);
             int settle = options.GetInt("settle-ms", 1500, 0, 10000);
             int seconds = options.GetInt("timeout-s", 60, 5, 600);
@@ -126,15 +198,16 @@ namespace ScannerCapture.Oem
                     var image = scanner.Capture(settle, out long captureMs);
                     var checks = CaptureChecks.Run(image, 1000, 1000, 1000, scanner.OutputDpi, scanner.OutputDpi, out var detail);
                     bool passed = CaptureChecks.AllPassed(checks);
-                    string name = session + "_f" + finger.ToString("00") + "_" + captured.ToString("yyyyMMddTHHmmssfffffff", CultureInfo.InvariantCulture) + "_" + sequence;
+                    string name = session + "_f" + finger.ToString("00") + (placement > 0 ? "_p" + placement : "") + "_" +
+                                  captured.ToString("yyyyMMddTHHmmssfffffff", CultureInfo.InvariantCulture) + "_" + sequence;
                     string target = passed ? folder : Path.Combine(folder, "rejected");
                     Directory.CreateDirectory(target);
                     string png = Path.Combine(target, name + ".png");
                     ImageFiles.SavePng(image, 1000, png);
                     var metadata = new JsonObject {
-                        { "decision", "H8" }, { "file", name + ".png" }, { "sha256", OemScanner.Hash(png) },
+                        { "decision", placement > 0 ? "H9" : "H8" }, { "file", name + ".png" }, { "sha256", OemScanner.Hash(png) },
                         { "kept", passed }, { "session", session }, { "finger_position", finger }, { "finger", Fingers.Name(finger) },
-                        { "attempt", sequence }, { "captured_utc", captured.ToString("o", CultureInfo.InvariantCulture) },
+                        { "placement", placement > 0 ? (object)placement : null }, { "attempt", sequence }, { "captured_utc", captured.ToString("o", CultureInfo.InvariantCulture) },
                         { "backend", "Biometrika OEM 3.3 x86" }, { "dll_sha256", OemScanner.LibrarySha256 },
                         { "scanner_type", scanner.ScannerType }, { "transfer_mode", 1 },
                         { "transfer_row_order", "bottom-up, reversed before checks and saving" },

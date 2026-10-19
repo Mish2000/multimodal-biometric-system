@@ -22,7 +22,10 @@ dotnet build scanner/ScannerCapture -c Release --no-restore -p:RestoreLockedMode
 & $scannerExe oem-probe --driver-dir $driverDirectory
 
 # Place the left index finger on the scanner. Capture and save automatically.
-& $scannerExe oem-capture --driver-dir $driverDirectory --session live002 --finger 7 --attempts 3 --timeout-s 60
+& $scannerExe oem-capture --driver-dir $driverDirectory --session test01 --finger 7 --attempts 1 --timeout-s 60
+
+# Second capture set (H9): ten fingers, three separate placements each, guided.
+& $scannerExe oem-guided --driver-dir $driverDirectory --session live002 --fingers 1-10 --placements 3
 
 # Independently read back and check the accepted PNG files.
 & $scannerExe check captures/live002
@@ -33,7 +36,18 @@ dotnet build scanner/ScannerCapture -c Release --no-restore -p:RestoreLockedMode
 `--attempts` is the number of accepted frames requested from that finger;
 rejected frames do not count. No driver window, Enter key, or manual Save
 operation is involved. The first frame may be discarded while the sensor
-starts; hold the finger until the completion message.
+starts; hold the finger until the completion message. Frames requested with
+`--attempts` come from one placement and are nearly identical; separate
+impressions need `oem-guided`.
+
+`oem-guided` asks for each finger and placement in turn: place the finger,
+press Enter and hold it until the placement is reported kept, then lift it
+off the glass before the next one (`s` skips a finger, `q` quits). Each
+placement runs the `oem-capture` worker for one accepted image within
+`--timeout-s` (default 30 s); a placement without one is asked again. Files
+carry `_pN` in their names and a `placement` field in their JSON. Running the
+command again with the same session continues after the highest kept
+placement of each finger.
 
 Files are written under `captures/<session>/`. Each PNG has a JSON sidecar
 containing its hash, timing, finger position, runtime fingerprint, acquisition
