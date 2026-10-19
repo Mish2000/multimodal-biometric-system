@@ -82,8 +82,9 @@ scanner/ScannerCapture/bin/Release/net48/ScannerCapture.exe check captures/live0
   2026-10-18 analysis of the researcher's ten first captures exactly (all
   pass). The probe shows that this driver cannot deliver 1000 ppi through
   TWAIN, so the approved route and its fallback are blocked (H7).
-- Awaiting the researcher: the route to 1000 ppi (the vendor request to
-  DigitalPlatforms with the exact question; a capture through the driver's
-  own window, to be tried at the scanner; the undocumented OEM library is not
+- Awaiting the researcher: the route to 1000 ppi (the reply of
+  DigitalPlatforms to the request the researcher has sent, which asks for the
+  FxISO SDK Light to set 1000 dpi in code; a capture through the driver's own
+  window, to be tried at the scanner; the undocumented OEM library is not
   recommended). His second set of ten fingers waits for that route.
 - Nothing has been pushed; the GitHub repository does not exist yet.
