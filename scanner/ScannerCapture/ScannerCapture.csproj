@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- H7: .NET Framework 4.8, x86, because the TWAIN data source and twain_32.dll are 32-bit. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <PlatformTarget>x86</PlatformTarget>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <AssemblyName>ScannerCapture</AssemblyName>
+    <RootNamespace>ScannerCapture</RootNamespace>
+    <Version>0.1.0</Version>
+    <Product>multimodal-biometric-system scanner capture</Product>
+    <Company>multimodal-biometric-system</Company>
+    <Deterministic>true</Deterministic>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Windows Forms hosts the message loop that TWAIN needs; WPF imaging writes and reads PNG/TIFF. -->
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="PresentationCore" />
+    <Reference Include="WindowsBase" />
+    <PackageReference Include="NTwain" Version="3.7.6" />
+  </ItemGroup>
+
+</Project>

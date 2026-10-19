@@ -1,0 +1,26 @@
+# Build output
+bin/
+obj/
+.vs/
+*.user
+
+# Local-only material at the repository root, never committed
+/captures/
+/local/
+
+# Biometric samples and anything derived from them must never enter git
+*.png
+*.jpg
+*.jpeg
+*.bmp
+*.tif
+*.tiff
+*.wsq
+*.jp2
+*.wav
+*.flac
+*.mp3
+*.ogg
+*.webm
+*.npy
+*.npz

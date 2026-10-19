@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "dependencies": {
+    ".NETFramework,Version=v4.8": {
+      "NTwain": {
+        "type": "Direct",
+        "requested": "[3.7.6, )",
+        "resolved": "3.7.6",
+        "contentHash": "eVE5ZNoz42ur9r0Y2YCnf4IArDH8vyt57K0CYEaDIrnL5qCjhyUjZWTrrifrkLyH1u5wFl9If0kKXRpp6z0eBA=="
+      }
+    },
+    ".NETFramework,Version=v4.8/win-x86": {}
+  }
+}
