@@ -37,7 +37,7 @@ commits stay in English.
   noreply) without co-author trailers; the commit-msg hook strips any. Do not
   push until the researcher asks.
 
-## Scanner (H5, H7)
+## Scanner (H5, H7, H8)
 
 - Biometrika HiScan PRO on USB, reached through its 32-bit TWAIN data source
   "TWAIN Biometrika Driver" (2.2, TWAIN 2.1) and the legacy manager
@@ -55,12 +55,17 @@ commits stay in English.
   save-settings (only for sources with CAP_CUSTOMDSDATA), check, selftest.
   A capture is kept only if it is 1000x1000, reported at 1000 ppi, has ridge
   texture, and has the fine detail of a native 1000 ppi image (H7).
+- H8 adds `oem-probe` and `oem-capture`: direct access to the supplied OEM
+  3.3 x86 library, with exact runtime hashes, explicit sensor activation,
+  1000-DPI set/readback, automatic checked PNG/JSON capture and a worker
+  timeout. See `scanner/README.md` and `docs/scanner-native-capture.md`.
 
 ## Layout
 
 ```
 docs/decisions.md         decision record (H1–H6 and G4 carried over; H7 on)
-scanner/ScannerCapture/   TWAIN capture tool (H7)
+docs/scanner-native-capture.md  recovered OEM interface and H8 validation
+scanner/ScannerCapture/   OEM and TWAIN capture tool (H7, H8)
 captures/, local/         git-ignored: captures, probe reports
 ```
 
@@ -82,9 +87,12 @@ scanner/ScannerCapture/bin/Release/net48/ScannerCapture.exe check captures/live0
   2026-10-18 analysis of the researcher's ten first captures exactly (all
   pass). The probe shows that this driver cannot deliver 1000 ppi through
   TWAIN, so the approved route and its fallback are blocked (H7).
-- Awaiting the researcher: the route to 1000 ppi (the reply of
-  DigitalPlatforms to the request the researcher has sent, which asks for the
-  FxISO SDK Light to set 1000 dpi in code; a capture through the driver's own
-  window, to be tried at the scanner; the undocumented OEM library is not
-  recommended). His second set of ten fingers waits for that route.
+- 2026-10-19 (H8): the researcher reports that the vendor refused the SDK
+  because the scanner is obsolete and unsupported. He approved reverse
+  engineering the supplied driver and UMPI diagnostic binaries and building
+  independent automatic native 1000 ppi capture outside TWAIN. That route
+  now works on the connected HiScan PRO: after an initial successful capture,
+  a new connection produced three accepted automatic 1000x1000 Gray8 captures
+  passing the unchanged H7 checks. First frames can be blank and are rejected.
+  Ten self-tests pass. The second set of ten fingers has not been collected.
 - Nothing has been pushed; the GitHub repository does not exist yet.

@@ -11,19 +11,25 @@ using System.Text.RegularExpressions;
 using NTwain;
 using NTwain.Data;
 using ScannerCapture.Imaging;
+using ScannerCapture.Oem;
 using ScannerCapture.Twain;
 
 namespace ScannerCapture
 {
     /// <summary>
-    /// Scanner prototype (H7): captures native 1000 ppi fingerprints from the Biometrika HiScan PRO through
-    /// TWAIN without the driver dialog, checks every capture and stores it as a lossless PNG with metadata.
+    /// Scanner prototype (H7, H8): direct OEM and TWAIN capture from the Biometrika HiScan PRO,
+    /// with native-detail checks and lossless PNG/metadata output.
     /// </summary>
     static class Program
     {
-        const string Usage = @"ScannerCapture: native 1000 ppi captures from the HiScan PRO through TWAIN (H7).
+        const string Usage = @"ScannerCapture: native 1000 ppi HiScan PRO capture through OEM (H8), plus TWAIN tools (H7).
 
 Commands:
+  oem-probe      H8: connect directly to the supplied OEM 3.3 x86 library and verify 1000 DPI.
+                 --driver-dir DIR [--report local\oem-probe.json] [--timeout-s 60]
+  oem-capture    H8: automatically acquire and save checked 1000 ppi images without TWAIN.
+                 --driver-dir DIR --session ID [--finger 2] [--attempts 1]
+                 [--out captures] [--timeout-s 60] [--settle-ms 1500] [--initial-delay-s 0]
   probe          List TWAIN sources, describe the scanner's capabilities and try 1000 ppi;
                  every setting is returned to the driver's default at the end.
                  [--source NAME] [--resolution 1000] [--report local\scanner-probe.json]
@@ -54,6 +60,10 @@ Exit codes: 0 done, 1 usage or unexpected error, 2 scanner or fallback not avail
                 var options = Options.Parse(args);
                 switch (options.Command)
                 {
+                    case "oem-probe":
+                    case "oem-capture": return OemCommands.RunIsolated(args);
+                    case "_oem-probe":
+                    case "_oem-capture": return OemCommands.RunWorker(options);
                     case "probe": return TwainHost.Run(host => Probe(host, options));
                     case "capture": return TwainHost.Run(host => Capture(host, options));
                     case "save-settings": return TwainHost.Run(host => SaveSettings(host, options));

@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using ScannerCapture.Imaging;
+using ScannerCapture.Oem;
 
 namespace ScannerCapture
 {
@@ -21,6 +23,8 @@ namespace ScannerCapture
                 Test("fine detail: enlarged images do not", EnlargedDoNotLookNative),
                 Test("finger lists", FingerLists),
                 Test("JSON order and escapes", JsonOutput),
+                Test("native worker Windows argument round trip (H8)", NativeArguments),
+                Test("native capture outputs stay in ignored folders (H8)", NativeOutputPaths),
             };
             int failed = 0;
             foreach (var t in tests)
@@ -218,6 +222,33 @@ namespace ScannerCapture
             var json = new JsonObject { { "b", 1 }, { "a", "x\"y\\z" }, { "n", null }, { "list", new[] { 1.5, 2.0 } } }.ToJson();
             string expected = "{\n  \"b\": 1,\n  \"a\": \"x\\\"y\\\\z\",\n  \"n\": null,\n  \"list\": [\n    1.5,\n    2\n  ]\n}\n";
             Assert(json == expected, "got " + json);
+        }
+
+        [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern IntPtr CommandLineToArgvW(string command, out int argc);
+        [DllImport("kernel32.dll")] static extern IntPtr LocalFree(IntPtr memory);
+
+        static void NativeArguments()
+        {
+            string[] expected = { "", "plain", "two words", @"C:\driver with spaces\", "a\"b", "a\\\"b", "עברית", "\\\\", @"C:\plain\" };
+            string command = "test.exe " + string.Join(" ", expected.Select(OemCommands.Quote));
+            IntPtr argv = CommandLineToArgvW(command, out int count);
+            Assert(argv != IntPtr.Zero, "Windows could not parse the command");
+            try
+            {
+                Assert(count == expected.Length + 1, "argument count changed");
+                for (int i = 0; i < expected.Length; i++)
+                    Assert(Marshal.PtrToStringUni(Marshal.ReadIntPtr(argv, (i + 1) * IntPtr.Size)) == expected[i], "argument " + i + " changed");
+            }
+            finally { LocalFree(argv); }
+        }
+
+        static void NativeOutputPaths()
+        {
+            Assert(OemCommands.UnderRoot(Path.Combine("captures", "session", "sample.png"), "captures") ==
+                Path.GetFullPath(Path.Combine("captures", "session", "sample.png")), "valid capture path");
+            Assert(Throws<UsageException>(() => OemCommands.UnderRoot(Path.Combine("captures", "..", "docs", "sample.json"), "captures")), "parent traversal must be refused");
+            Assert(Throws<UsageException>(() => OemCommands.UnderRoot(Path.Combine("captures-other", "sample.json"), "captures")), "sibling prefix must be refused");
         }
     }
 }

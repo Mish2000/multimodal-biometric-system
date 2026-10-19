@@ -91,3 +91,30 @@ continue group H here.
   approved route nor its fallback can deliver 1000 ppi with this driver; the
   next route awaits the researcher's decision. All probed settings were
   returned to the driver's defaults.
+
+## 2026-10-19 — independent native-resolution capture
+
+- **H8** The researcher reports that the vendor declined the SDK request:
+  the scanner is too old and no longer supported. He authorizes reverse
+  engineering of the supplied driver and UMPI diagnostic-tool binaries to
+  develop an independent application that connects, captures and saves
+  native 1000 ppi images automatically, bypassing the TWAIN limitation.
+  Investigate the existing local OEM and FxISO libraries and their actual
+  call sequences; do not treat a DPI label or upsampling as native detail.
+  Retain H7's image checks and record what is established by static analysis
+  separately from what is verified on the scanner. This replaces waiting
+  for the vendor SDK as the next integration step; H1-H6 otherwise remain
+  unchanged. Local binary-analysis artifacts belong under ignored local/;
+  captures and derived data remain under ignored captures/. Report each
+  completed step before starting the next.
+- **H8** Implementation and validation on the same day: the supplied x86 OEM
+  3.3 runtime accepts 1000 DPI for HiScan PRO (model type 8). Reverse
+  engineering its TWAIN caller recovered the required sensor-activation
+  operation and acquisition ABI. `oem-probe` verifies the connection and DPI;
+  `oem-capture` automatically saves lossless Gray8 PNG/JSON frames using the
+  unchanged H7 checks. A hardware test succeeded, followed by three accepted
+  captures after reopening; the researcher observed the scanner's red light.
+  Blank first frames remain rejected and recorded. The implementation pins
+  the three runtime DLL hashes, restores prior settings, isolates native calls
+  in a bounded worker and keeps biometric evidence out of git. See
+  `docs/scanner-native-capture.md` for the evidence and remaining limits.

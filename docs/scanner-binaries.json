@@ -1,0 +1,376 @@
+{
+  "decision": "H8",
+  "date": "2026-10-19",
+  "pe_files": 22,
+  "files": [
+    {
+      "package": "driver33",
+      "file": "biometrika.cat",
+      "bytes": 15588,
+      "sha256": "cde3597d8bc697f160c6442255e92cb0e13c5b99b60c529459eb5ddbe135ff4e"
+    },
+    {
+      "package": "driver33",
+      "file": "Biometrika_bus.inf",
+      "bytes": 5094,
+      "sha256": "726160d41876f010ce7ec2b1c2d61fcfeb28cdf3a0c8884308cafddc3be3ee65"
+    },
+    {
+      "package": "driver33",
+      "file": "BiometrikaDriver.exe",
+      "bytes": 105984,
+      "sha256": "1141ae2ca507de6da5be082c52836101403bde4f50d4e9157496c1887031c009",
+      "architecture": "x86",
+      "export_count": 0,
+      "imports": [
+        "KERNEL32.dll"
+      ]
+    },
+    {
+      "package": "driver33",
+      "file": "CheckPortUSB.dll",
+      "bytes": 91776,
+      "sha256": "1da9bcc30d4075aecee5773a9b239fe790b511a34799d8663bb5f13f7bf952ad",
+      "architecture": "x86",
+      "export_count": 2,
+      "imports": [
+        "CFGMGR32.dll",
+        "KERNEL32.dll",
+        "SETUPAPI.dll"
+      ]
+    },
+    {
+      "package": "driver33",
+      "file": "CheckPortUSB64.dll",
+      "bytes": 96384,
+      "sha256": "5522f4a5a1654543c5fd43c8734f32a08ababb443441e4a4d602f9ae48abb56d",
+      "architecture": "x64",
+      "export_count": 2,
+      "imports": [
+        "CFGMGR32.dll",
+        "KERNEL32.dll",
+        "SETUPAPI.dll"
+      ]
+    },
+    {
+      "package": "driver33",
+      "file": "ftd2xx.dll",
+      "bytes": 274560,
+      "sha256": "a7d64886de70ba593d22b0ef17c039ccd93894240a85b5fed668c85aa98376f2",
+      "architecture": "x86",
+      "export_count": 93,
+      "imports": [
+        "ADVAPI32.dll",
+        "KERNEL32.dll",
+        "SETUPAPI.dll",
+        "USER32.dll"
+      ]
+    },
+    {
+      "package": "driver33",
+      "file": "ftd2xx64.dll",
+      "bytes": 316544,
+      "sha256": "a984176b42c51aca1738d375982ccbb43aea621aea8055167bd878acc85c4fe7",
+      "architecture": "x64",
+      "export_count": 93,
+      "imports": [
+        "ADVAPI32.dll",
+        "KERNEL32.dll",
+        "SETUPAPI.dll",
+        "USER32.dll"
+      ]
+    },
+    {
+      "package": "driver33",
+      "file": "Fxftdibus.sys",
+      "bytes": 105088,
+      "sha256": "a8e31ba65dc189fc7a47aa59fb735a088bec75caeab570f573fa88d1a9ade77a",
+      "architecture": "x86",
+      "export_count": 0,
+      "imports": [
+        "HAL.dll",
+        "USBD.SYS",
+        "WMILIB.SYS",
+        "ntoskrnl.exe"
+      ]
+    },
+    {
+      "package": "driver33",
+      "file": "Fxftdibus_64.sys",
+      "bytes": 129144,
+      "sha256": "c3d1396162be2913717a2d24e567ffce6288f841c397fd91dbc7052496e33b65",
+      "architecture": "x64",
+      "export_count": 0,
+      "imports": [
+        "USBD.SYS",
+        "WMILIB.SYS",
+        "ntoskrnl.exe"
+      ]
+    },
+    {
+      "package": "driver33",
+      "file": "fxoemdll.dll",
+      "bytes": 291960,
+      "sha256": "f18c871610d68a94d15837625581c118ee5c2238a41627b522601376bdbd2903",
+      "architecture": "x86",
+      "export_count": 79,
+      "imports": [
+        "ADVAPI32.dll",
+        "CheckPortUSB.dll",
+        "FTD2XX.dll",
+        "KERNEL32.dll",
+        "SHELL32.dll",
+        "VERSION.dll",
+        "WS2_32.dll"
+      ]
+    },
+    {
+      "package": "driver33",
+      "file": "fxoemdll_64.dll",
+      "bytes": 253568,
+      "sha256": "dcfeb5b3acb575122b5b1c25c3bf4e1dcb47512dc61a7b8a55491fd95a4e4071",
+      "architecture": "x64",
+      "export_count": 79,
+      "imports": [
+        "ADVAPI32.dll",
+        "CheckPortUSB64.dll",
+        "FTD2XX.dll",
+        "KERNEL32.dll",
+        "SHELL32.dll",
+        "VERSION.dll",
+        "WS2_32.dll"
+      ]
+    },
+    {
+      "package": "driver33",
+      "file": "FxOemENU.dll",
+      "bytes": 529016,
+      "sha256": "9a5db277a4b48158fc2c3f12f79ef9b62fe317f24fce62be590a656485f45a73",
+      "architecture": "x86",
+      "export_count": 0,
+      "imports": [
+        "ADVAPI32.dll",
+        "GDI32.dll",
+        "KERNEL32.dll",
+        "OLEAUT32.dll",
+        "SHLWAPI.dll",
+        "USER32.dll",
+        "WINSPOOL.DRV"
+      ]
+    },
+    {
+      "package": "driver33",
+      "file": "FxOemITA.dll",
+      "bytes": 546424,
+      "sha256": "4c0b98baf6811bdc691a5a1d5d7b69e1e9fec2ea9e83c5fdaa6bd360cb053418",
+      "architecture": "x86",
+      "export_count": 0,
+      "imports": [
+        "ADVAPI32.dll",
+        "GDI32.dll",
+        "KERNEL32.dll",
+        "OLEAUT32.dll",
+        "SHLWAPI.dll",
+        "USER32.dll",
+        "WINSPOOL.DRV"
+      ]
+    },
+    {
+      "package": "driver33",
+      "file": "FxOEMUsb.cpl",
+      "bytes": 611968,
+      "sha256": "203b75dadd9e96f639894698c792df2be32cb20a6809267c77c031c7432973f6",
+      "architecture": "x86",
+      "export_count": 2,
+      "imports": [
+        "ADVAPI32.dll",
+        "COMCTL32.dll",
+        "COMDLG32.dll",
+        "CheckPortUSB.dll",
+        "GDI32.dll",
+        "KERNEL32.dll",
+        "OLEAUT32.dll",
+        "SHELL32.dll",
+        "SHLWAPI.dll",
+        "USER32.dll",
+        "VERSION.dll",
+        "WINSPOOL.DRV",
+        "ole32.dll",
+        "oledlg.dll"
+      ]
+    },
+    {
+      "package": "driver33",
+      "file": "S32.upd",
+      "bytes": 428544,
+      "sha256": "09cad9c13a41ea09a83cf258b98be964ccc9143c011272fe8ceb419eec1f0cd9",
+      "architecture": "x86",
+      "export_count": 0,
+      "imports": [
+        "ADVAPI32.dll",
+        "COMCTL32.dll",
+        "CheckPortUSB.dll",
+        "GDI32.dll",
+        "KERNEL32.dll",
+        "OLEAUT32.dll",
+        "SETUPAPI.dll",
+        "SHELL32.dll",
+        "SHLWAPI.dll",
+        "USER32.dll",
+        "VERSION.dll",
+        "WINSPOOL.DRV",
+        "newdev.dll"
+      ]
+    },
+    {
+      "package": "driver33",
+      "file": "S64.upd",
+      "bytes": 484864,
+      "sha256": "349cbcb00b3ec2c4db64ea53aec6ed37bfb70e5cac4a22c4330442b14bad0685",
+      "architecture": "x64",
+      "export_count": 0,
+      "imports": [
+        "ADVAPI32.dll",
+        "COMCTL32.dll",
+        "CheckPortUSB64.dll",
+        "GDI32.dll",
+        "KERNEL32.dll",
+        "OLEAUT32.dll",
+        "SETUPAPI.dll",
+        "SHELL32.dll",
+        "SHLWAPI.dll",
+        "USER32.dll",
+        "VERSION.dll",
+        "WINSPOOL.DRV",
+        "newdev.dll"
+      ]
+    },
+    {
+      "package": "driver33",
+      "file": "SecBank.dll",
+      "bytes": 521856,
+      "sha256": "0a3a62fe8f010ca41965bf3d354a0013ab20762169f05561112d4b98b29a8fe7",
+      "architecture": "x86",
+      "export_count": 39,
+      "imports": [
+        "ADVAPI32.dll",
+        "COMCTL32.dll",
+        "GDI32.dll",
+        "KERNEL32.dll",
+        "USER32.dll",
+        "fxoemdll.dll"
+      ]
+    },
+    {
+      "package": "driver33",
+      "file": "twBiometrika.ds",
+      "bytes": 317056,
+      "sha256": "2ebe1ebf73721a6f107bcd102872405bff70624a626b6e02d206dafc077113b4",
+      "architecture": "x86",
+      "export_count": 1,
+      "imports": [
+        "ADVAPI32.dll",
+        "GDI32.dll",
+        "KERNEL32.dll",
+        "OLEAUT32.dll",
+        "SHELL32.dll",
+        "SHLWAPI.dll",
+        "USER32.dll",
+        "WINSPOOL.DRV",
+        "fxoemdll.dll"
+      ]
+    },
+    {
+      "package": "diagnostic42",
+      "file": "fxISO.dll",
+      "bytes": 460800,
+      "sha256": "3d9b50bf17bc7cc7c80f587b0f57808d934c14530d8c1350441004ab6b959fe0",
+      "architecture": "x64",
+      "export_count": 128,
+      "imports": [
+        "ADVAPI32.dll",
+        "KERNEL32.dll",
+        "SHELL32.dll",
+        "VERSION.dll",
+        "fxISOscan.dll"
+      ]
+    },
+    {
+      "package": "diagnostic42",
+      "file": "FxISOImageTools.dll",
+      "bytes": 489472,
+      "sha256": "4b84d285ce56b2c887dceb60a684b2bfdb953f7234539ac87927001f7039d4a8",
+      "architecture": "x64",
+      "export_count": 14,
+      "imports": [
+        "KERNEL32.dll"
+      ]
+    },
+    {
+      "package": "diagnostic42",
+      "file": "fxISOscan.dll",
+      "bytes": 225792,
+      "sha256": "bdf45b0a88d370ce064945aaf1e6043fa7d67a3ff77860b01a95151460f65606",
+      "architecture": "x64",
+      "export_count": 29,
+      "imports": [
+        "COMCTL32.dll",
+        "GDI32.dll",
+        "KERNEL32.dll",
+        "USER32.dll"
+      ]
+    },
+    {
+      "package": "diagnostic42",
+      "file": "fxoem_legacy_64.dll",
+      "bytes": 339968,
+      "sha256": "04993300e72c28d8c9d874e0ad52e694adb8b9b4542b8aa8239efbac4e7ee482",
+      "architecture": "x64",
+      "export_count": 79,
+      "imports": [
+        "ADVAPI32.dll",
+        "FTD2XX.dll",
+        "KERNEL32.dll",
+        "SHELL32.dll",
+        "VERSION.dll"
+      ]
+    },
+    {
+      "package": "diagnostic42",
+      "file": "fxoemdll_64.dll",
+      "bytes": 355840,
+      "sha256": "ae523554c9854d324c7a533a7f8cd7a52d84bc3c262b016d5f650da1b6f3db29",
+      "architecture": "x64",
+      "export_count": 112,
+      "imports": [
+        "ADVAPI32.dll",
+        "KERNEL32.dll"
+      ]
+    },
+    {
+      "package": "diagnostic42",
+      "file": "UMPI Biometric Diagnostic Tool x64.exe",
+      "bytes": 683520,
+      "sha256": "3a8831207a1c956e3fd2568e4de0b03946cfb55dd35153845a457170129ab506",
+      "architecture": "x64",
+      "export_count": 0,
+      "imports": [
+        "ADVAPI32.dll",
+        "COMCTL32.dll",
+        "FXISOImageTools.dll",
+        "GDI32.dll",
+        "KERNEL32.dll",
+        "OLEACC.dll",
+        "OLEAUT32.dll",
+        "SETUPAPI.dll",
+        "SHLWAPI.dll",
+        "USER32.dll",
+        "VERSION.dll",
+        "WINSPOOL.DRV",
+        "fxISO.dll",
+        "fxoemdll_64.dll",
+        "ole32.dll"
+      ]
+    }
+  ]
+}
