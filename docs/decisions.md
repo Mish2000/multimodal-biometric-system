@@ -271,3 +271,32 @@ present. He left the open questions to the specification.
   pin and a recorded decision. The pin keeps naming the commit that produced
   H10's results. The research repository's AGENTS.md keeps only the research
   and points to this repository for the current state of Stage B.
+
+## 2026-10-20/21 — the server of increment 1
+
+- **H23** Approved by the researcher on 2026-10-21 with the server of
+  increment 1 (H20), within H3, H4, H12, H14 and H19. He approved the
+  downloads on 2026-10-20; the component library left that list for H22.
+  - Environments: `multimodal-server` and `multimodal-postgres`, conda-forge
+    only, each with an explicit lock (SHA-256 per package) in `environments/`;
+    the client's npm packages in `client/package-lock.json`. Every version is
+    the newest stable one published at least 14 days earlier, transitive npm
+    packages included (resolved with `--before`).
+  - PostgreSQL: one cluster in `local/postgres/data` on localhost:55432 with
+    SCRAM passwords, started by `pg_ctl` under the user's account. The
+    databases `mbs_accounts` and `mbs_biometric` each have their own login
+    role and are closed to every other role; pgvector is in the biometric one.
+    libpq's GSSAPI encryption is switched off, as it crashes the process with
+    libpq 18.6 from conda-forge on this PC.
+  - The key file is `%LOCALAPPDATA%\multimodal-biometric-system\keys.json`,
+    with inherited permissions removed and only the current user allowed; it
+    is never replaced automatically.
+  - Parameters: passwords of 12 to 256 characters after NFKC normalisation,
+    with no composition rules; sessions end after 30 minutes without use and
+    after 12 hours at most; after five failed sign-ins for one name, each try
+    waits 2, 4, 8 ... seconds, at most five minutes; usernames of 3 to 32
+    letters or digits of any script, with `.`, `_` and `-` inside; usernames
+    and emails unique regardless of case.
+  - Subjects carry no creation time, so they cannot be matched to accounts by
+    it; a trigger keeps the audit log insert-only; the API answers errors as
+    codes that the client turns into Hebrew text.

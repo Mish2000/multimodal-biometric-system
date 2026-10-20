@@ -1,0 +1,12 @@
+# The database's environment (H19), conda-forge only, exact versions. It is separate
+# from the server's because pgvector 0.8.6's only Windows build needs libpq 16.15,
+# while psycopg in the server's environment uses a newer libpq.
+# The full solved set, with SHA-256 per package, is postgres-win-64.lock:
+#   conda create -n multimodal-postgres --file environments/postgres-win-64.lock
+name: multimodal-postgres
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - postgresql=16.15
+  - pgvector=0.8.6

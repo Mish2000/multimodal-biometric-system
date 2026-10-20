@@ -25,6 +25,11 @@ obj/
 *.npy
 *.npz
 
-# Python caches of methods/
+# Python caches
 __pycache__/
 .pytest_cache/
+
+# Client dependencies and build output (installed from client/package-lock.json)
+node_modules/
+/client/out/
+/client/dist/

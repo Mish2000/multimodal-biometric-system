@@ -1,0 +1,13 @@
+[project]
+name = "mbs-server"
+version = "0.1.0"
+description = "The server of the multimodal biometric system (H4, H20)"
+requires-python = "==3.12.*"
+
+# Not installed: run it from this folder with the multimodal-server environment
+# (environments/server.yml), for example `python -m mbs serve`.
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-p no:cacheprovider"

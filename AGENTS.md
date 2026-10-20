@@ -32,7 +32,8 @@ commits stay in English.
   enter the system.
 - The repository is public: no local user paths in its files.
 - Every download (packages, models) needs the researcher's approval; pin
-  exact versions (NuGet lock files).
+  exact versions (NuGet, conda and npm lock files), each the newest stable
+  version published at least 14 days earlier (H23).
 - Commits use the repository-local identity (Michael Sirkovich, GitHub
   noreply) without co-author trailers; the commit-msg hook strips any. Do not
   push until the researcher asks.
@@ -90,11 +91,21 @@ commits stay in English.
   pgvector 0.8.6 from conda-forge (H19).
 - The build runs in six increments (H20), each approved and reported on its
   own.
+- `server/` (H23): the FastAPI server, run from that folder with the
+  `multimodal-server` environment; it starts PostgreSQL from
+  `multimodal-postgres`. Machine settings are in the ignored
+  `local/server.toml`, the cluster in `local/postgres/`, and the key file
+  outside the repository (`server/README.md`).
+- `client/`: the Electron client's pinned toolchain; its code waits for the
+  design direction and the component library (H22).
 
 ## Layout
 
 ```
 docs/specification.md     the approved system specification (H11–H20)
+environments/             conda environments of the server and PostgreSQL, with locks (H23)
+server/                   FastAPI server: accounts, keys, local PostgreSQL (H23)
+client/                   Electron client: pinned npm toolchain (H22 pending)
 docs/decisions.md         decision record (H1–H6 and G4 carried over; H7 on)
 docs/scanner-native-capture.md  recovered OEM interface and H8 validation
 docs/hiscan-methods.md    the research methods on HiScan PRO captures (H10)
@@ -116,6 +127,12 @@ scanner/ScannerCapture/bin/Release/net48/ScannerCapture.exe check captures/live0
 # PY: the research project environment's python.exe (local/research.toml)
 PY -m pytest methods -p no:cacheprovider
 PY methods/hiscan_eval.py --first FIRST_SET_FOLDER   # about 5 minutes -> captures/live002/evaluation
+# SPY: the multimodal-server environment's python.exe; run from server/
+SPY -m mbs setup                 # key file, local/server.toml, cluster, databases (safe to rerun)
+SPY -m mbs create-admin --username NAME --email ADDRESS   # prints a one-time password
+SPY -m mbs serve                 # API on 127.0.0.1:55433, PostgreSQL with it
+SPY -m pytest                    # 42 tests against a throwaway cluster, about a minute
+# client/: npm ci (installs from package-lock.json)
 ```
 
 ## Status
@@ -156,8 +173,7 @@ PY methods/hiscan_eval.py --first FIRST_SET_FOLDER   # about 5 minutes -> captur
   (PostgreSQL 16.15 with pgvector 0.8.6, attempts keyed only by subject
   identifiers, the flow without enrolment, the provisional thresholds with
   their H10 counts) and approved on 2026-10-20, with the administration
-  added to the client at his request. Next: increment 1, the foundation; its
-  downloads await his approval.
+  added to the client at his request.
 - 2026-10-20: the public GitHub repository
   [Mish2000/multimodal-biometric-system](https://github.com/Mish2000/multimodal-biometric-system)
   was created and `main` pushed. The research repository's ten local commits
@@ -166,3 +182,12 @@ PY methods/hiscan_eval.py --first FIRST_SET_FOLDER   # about 5 minutes -> captur
 - 2026-10-20 (H21): the link accepts research commits that change only
   documentation, and the research repository's AGENTS.md was brought up to
   date: it keeps the research and points here for Stage B.
+- 2026-10-20/21 (increment 1, H23): the two conda environments and the
+  client's npm toolchain (Electron 44.5.1) are installed from their locks.
+  The server part is built: local cluster, key file, both databases,
+  registration with the national ID, sign-in, sessions, roles, the first
+  administrator's command and the accounts part of the administration API;
+  42 tests pass. `setup` ran on this PC, and the researcher still has to
+  back up the key file. Next: the design direction and component library
+  (H22, with `/pick-ui-library` and `/prototype`), then the client part of
+  increment 1.
