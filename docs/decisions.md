@@ -174,3 +174,86 @@ continue group H here.
   template sizes. Fusions are left out for now. The different-finger pairs
   are one person's other fingers, so they cannot confirm FAR 0.1 %. Results
   are in `docs/hiscan-methods.md`.
+
+## 2026-10-20 — the system specification
+
+Approved by the researcher on 2026-10-20 together with
+`docs/specification.md`, which holds the details. After H10 he asked to stop
+the comparison experiments and build the system; the draft of 2026-10-19 was
+revised before the approval, because conda-forge's Windows build of pgvector
+0.8.6 needs PostgreSQL 16.15 rather than 18.6, attempts must name people only
+by subject identifiers, and the camera and microphones had only been found
+present. He left the open questions to the specification.
+
+- **H11** One PC runs the whole system: the researcher's PC with the HiScan
+  PRO, its integrated camera and its microphones. The server listens on
+  127.0.0.1 only.
+- **H12** User accounts are registered in the client with the national ID
+  and hold the biometric functions. Administrator accounts are separate and
+  administrative only, with no national ID and no biometric data
+  (privileged work apart from everyday accounts, as in NIST SP 800-53
+  AC-6(2)). The first administrator is created by a server command; at the
+  researcher's request the administration also lives in the client, so the
+  separation can be shown in use: administrators sign in on the same login
+  screen and get the administration area (accounts, attempt history,
+  thresholds, audit log), create further administrators with a one-time
+  password that is changed at the first sign-in, and disable or re-enable
+  accounts, never the last active administrator. The server checks the role
+  on every request and refuses by default; administrative changes ask for
+  the password again and enter an audit log.
+- **H13** Engines are long-running child processes of the server that keep
+  no data between requests; each message on standard input and output is a
+  JSON header followed by its binary data, and the CPU engines compare 1:N in
+  parallel worker processes. They need only the standard library beyond
+  their method, so the research environments stay unchanged. A new
+  acquisition mode of ScannerCapture returns each image and its checks on
+  standard output and writes no file.
+- **H14** Cryptography, all from the `cryptography` package: HMAC-SHA256 of
+  the national ID under its own key; per-record keys from HKDF-SHA256 of the
+  master secret with a random 32-byte salt and a label per use; AES-256-GCM
+  for the identity link, raw samples, attempts and fingerprint templates,
+  each ciphertext marked with its key version and bound to its row as
+  associated data; passwords with Argon2id at RFC 9106's second recommended
+  option (3 passes, 4 lanes, 64 MiB, 128-bit salt, 256-bit tag), with failed
+  sign-ins slowed down; random session tokens stored only as hashes; face and
+  voice embeddings in pgvector columns under subject identifiers only. Keys
+  live in a file outside the repository that only the Windows user can read,
+  with a backup kept by the researcher.
+- **H15** Verification and identification in a modality need the user's own
+  enrolment in it; otherwise the system offers to enrol now or to return to
+  the home screen (the supervisor's flow of 2026-10-18). A fingerprint
+  enrolment is kept only when its three captures match pairwise with OpenCV
+  SIFT at its threshold, else one more placement is asked for. 1:1 compares
+  the new capture with the three templates of the finger the user picks, and
+  the highest score decides; 1:N compares it with every enrolled template,
+  and the top candidate is reported only when it passes the threshold, else
+  "not found".
+- **H16** Thresholds are settings that administrators can change in the
+  client, each change audit-logged. Initial values: OpenCV SIFT above 57
+  (SD302 plain vs plain, FAR 0.1 %, RxJ); provisional Pore SIFT above 37 and
+  learned descriptor above 21, just above the highest different-finger
+  scores of H10. In H10 these values accept 28, 13 and 24 of 30 same-finger
+  pairs and none of 675 different-finger pairs, which claims no FAR. Fusion
+  thresholds are set by the same rule from H10's saved scores when fusion is
+  built. Calibration with other people is not part of the build; it is a
+  separate step if the supervisor asks for accuracy on the HiScan PRO.
+- **H17** Face and voice enrolment take three images or three recordings of
+  about four seconds.
+- **H18** For the drawings the engines also return matched coordinates; only
+  the research score decides. In 1:N results other users appear as "another
+  registered user", and drawings use only the user's own prints. The
+  algorithm choice shows OpenCV SIFT first (the only threshold that is not
+  provisional on the HiScan PRO, the best HiScan result and the fastest 1:1),
+  then the learned pore descriptor, Pore SIFT and the fusions. Until the
+  thresholds are calibrated with other people, the cards show the SD302
+  plain vs plain results as the accuracy, since that sample is far larger
+  than H10's (the researcher's choice).
+- **H19** PostgreSQL 16.15 with pgvector 0.8.6 from conda-forge, started by
+  the server under the user's account, so no Windows service and no
+  administrator rights are needed; Docker's `pgvector/pgvector` image is the
+  fallback.
+- **H20** The build proceeds in six increments, each working end to end with
+  automated tests and approved and reported on its own: the foundation with
+  accounts, roles and login; fingerprint enrolment and 1:1 with OpenCV SIFT;
+  all fingerprint algorithms, the choice, 1:N and the drawings; face; voice;
+  the rest of the administration area, fusion and the finished experience.

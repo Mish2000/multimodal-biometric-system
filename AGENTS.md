@@ -76,9 +76,21 @@ commits stay in English.
 - Run research environments' `python.exe` with the environment's folders on
   `PATH` (as `conda activate` does), or numpy's linear algebra fails to load.
 
+## System (H11–H20)
+
+- `docs/specification.md` is the approved specification: one PC on
+  localhost (H11); separate administrator accounts, with the administration
+  in the client and role checks on the server (H12); engines as child
+  processes that keep no data between requests (H13); the cryptography
+  (H14); the flows, thresholds and screens (H15–H18); PostgreSQL 16.15 with
+  pgvector 0.8.6 from conda-forge (H19).
+- The build runs in six increments (H20), each approved and reported on its
+  own.
+
 ## Layout
 
 ```
+docs/specification.md     the approved system specification (H11–H20)
 docs/decisions.md         decision record (H1–H6 and G4 carried over; H7 on)
 docs/scanner-native-capture.md  recovered OEM interface and H8 validation
 docs/hiscan-methods.md    the research methods on HiScan PRO captures (H10)
@@ -134,6 +146,12 @@ PY methods/hiscan_eval.py --first FIRST_SET_FOLDER   # about 5 minutes -> captur
   pairs against the first set; Pore SIFT and the learned descriptor accepted
   many different-finger pairs (71 and 28 of 405), so the SD302 thresholds do
   not carry over to HiScan captures for the pore methods. A 1:1 attempt takes
-  0.4 s (OpenCV SIFT) or about 3.2 s (pore detection on one CPU thread). The
-  researcher decides the next step.
+  0.4 s (OpenCV SIFT) or about 3.2 s (pore detection on one CPU thread).
+- 2026-10-19/20 (H11–H20): after H10 the researcher asked to stop the
+  comparison experiments and build. The specification was drafted, revised
+  (PostgreSQL 16.15 with pgvector 0.8.6, attempts keyed only by subject
+  identifiers, the flow without enrolment, the provisional thresholds with
+  their H10 counts) and approved on 2026-10-20, with the administration
+  added to the client at his request. Next: increment 1, the foundation; its
+  downloads await his approval.
 - Nothing has been pushed; the GitHub repository does not exist yet.
