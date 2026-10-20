@@ -156,6 +156,6 @@ PY methods/hiscan_eval.py --first FIRST_SET_FOLDER   # about 5 minutes -> captur
   downloads await his approval.
 - 2026-10-20: the public GitHub repository
   [Mish2000/multimodal-biometric-system](https://github.com/Mish2000/multimodal-biometric-system)
-  was created and `main` pushed. The research commit that the pin names
-  (606c8d3) and the research records of H1–H6 are not on GitHub yet: the
-  research repository's last ten commits are still local.
+  was created and `main` pushed. The research repository's ten local commits
+  followed the same day, so the research commit that the pin names (606c8d3)
+  and the research records of H1–H6 are on GitHub too.
