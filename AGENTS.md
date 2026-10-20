@@ -154,4 +154,8 @@ PY methods/hiscan_eval.py --first FIRST_SET_FOLDER   # about 5 minutes -> captur
   their H10 counts) and approved on 2026-10-20, with the administration
   added to the client at his request. Next: increment 1, the foundation; its
   downloads await his approval.
-- Nothing has been pushed; the GitHub repository does not exist yet.
+- 2026-10-20: the public GitHub repository
+  [Mish2000/multimodal-biometric-system](https://github.com/Mish2000/multimodal-biometric-system)
+  was created and `main` pushed. The research commit that the pin names
+  (606c8d3) and the research records of H1–H6 are not on GitHub yet: the
+  research repository's last ten commits are still local.
