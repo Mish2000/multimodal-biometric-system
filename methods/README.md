@@ -5,8 +5,10 @@ The system uses the fingerprint methods of
 without copying them: a local checkout is imported in its own Python
 environments, pinned and checked by `research_link.py` against
 `research-pin.toml` (commit, SHA-256 of the research artefacts outside git,
-and the plain vs plain thresholds). The link only reads the research
-checkout; outputs stay in this repository's ignored `captures/`.
+and the plain vs plain thresholds). The checkout may carry later commits that
+change only its documentation (`AGENTS.md`, `README.md`, `docs/`); any other
+difference from the pinned commit stops the link (H21). The link only reads
+the research checkout; outputs stay in this repository's ignored `captures/`.
 
 Machine paths go in the ignored `local/research.toml`:
 
@@ -28,7 +30,7 @@ activate` would.
 & $projectPython methods/hiscan_eval.py --first '<first-set folder>'
 ```
 
-`hiscan_eval.py` refuses to run unless the research checkout and its pinned
-files are exactly the pinned ones, and refuses to write over an earlier
+`hiscan_eval.py` refuses to run unless the research checkout's code and its
+pinned files are exactly the pinned ones, and refuses to write over an earlier
 evaluation folder. `--fingers 1-2 --out captures/live002/evaluation-pilot`
 runs a small pilot first. Results: `docs/hiscan-methods.md`.

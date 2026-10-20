@@ -1,7 +1,8 @@
 # H10: the research version the system uses, pinned and checked before every run.
 # The research code is not copied into this repository: it is imported from a local
-# checkout of the repository below, which must be at this commit with no change to
-# its tracked files. Research artefacts outside its git (its R8) are pinned by SHA-256.
+# checkout of the repository below, which must descend from this commit with every
+# tracked file outside its documentation (AGENTS.md, README.md, docs/) as at this
+# commit (H21). Research artefacts outside its git (its R8) are pinned by SHA-256.
 # Machine paths (the checkout and the Python environments) are in local/research.toml.
 
 [repository]

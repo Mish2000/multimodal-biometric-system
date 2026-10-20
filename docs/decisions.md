@@ -257,3 +257,17 @@ present. He left the open questions to the specification.
   accounts, roles and login; fingerprint enrolment and 1:1 with OpenCV SIFT;
   all fingerprint algorithms, the choice, 1:N and the drawings; face; voice;
   the rest of the administration area, fusion and the finished experience.
+
+## 2026-10-20 — documentation changes in the research repository
+
+- **H21** Approved by the researcher on 2026-10-20, amending H10's check so
+  that both repositories' AGENTS.md can always be kept current: the research
+  checkout must descend from the pinned commit, and every tracked file outside
+  its documentation (`AGENTS.md`, `README.md` and `docs/`) must be the pinned
+  commit's, committed or not; the pinned artefacts keep their SHA-256 check
+  and `fpl3` must still come from that checkout. A research commit that
+  changes only documentation therefore needs no new pin, while a change to
+  code, configurations, environments, manifests or tests still needs a new
+  pin and a recorded decision. The pin keeps naming the commit that produced
+  H10's results. The research repository's AGENTS.md keeps only the research
+  and points to this repository for the current state of Stage B.

@@ -71,8 +71,12 @@ commits stay in English.
   imports its methods from a local checkout in the research's own Python
   environments, after checking the pin in `methods/research-pin.toml`
   (commit, SHA-256 of its artefacts outside git, plain vs plain thresholds);
-  machine paths are in the ignored `local/research.toml`. A new research
-  version enters only by a new pin and a recorded decision.
+  machine paths are in the ignored `local/research.toml`. Research commits
+  that change only `AGENTS.md`, `README.md` or `docs/` keep the pin valid
+  (H21); any other change is a new research version, which enters only by a
+  new pin and a recorded decision.
+- This file holds the current state of Stage B; the research repository's
+  AGENTS.md points here instead of repeating it (H21).
 - Run research environments' `python.exe` with the environment's folders on
   `PATH` (as `conda activate` does), or numpy's linear algebra fails to load.
 
@@ -159,3 +163,6 @@ PY methods/hiscan_eval.py --first FIRST_SET_FOLDER   # about 5 minutes -> captur
   was created and `main` pushed. The research repository's ten local commits
   followed the same day, so the research commit that the pin names (606c8d3)
   and the research records of H1–H6 are on GitHub too.
+- 2026-10-20 (H21): the link accepts research commits that change only
+  documentation, and the research repository's AGENTS.md was brought up to
+  date: it keeps the research and points here for Stage B.

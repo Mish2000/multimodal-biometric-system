@@ -107,9 +107,16 @@ def test_pin_matches_report_and_rejects_changes(tmp_path):
     report = {"scenarios": {"RxJ": {"methods": {"m": {"operational": {"0.1%": {"accept_if_score_above": 13.0}}}}}}}
     (repo / "runs" / "report.json").write_text(json.dumps(report), encoding="utf-8")
     (repo / "tracked.txt").write_text("a", encoding="utf-8")
-    for args in (["init", "-q"], ["add", "tracked.txt"], ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "t"]):
-        subprocess.run(["git", "-C", str(repo), *args], check=True)
+    (repo / "AGENTS.md").write_text("a", encoding="utf-8")
+
+    def run(*args):
+        subprocess.run(["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@t", *args], check=True)
+
+    run("init", "-q")
+    run("add", "tracked.txt", "AGENTS.md")
+    run("commit", "-qm", "pinned")
     commit = research_link.git(repo, "rev-parse", "HEAD")
+    branch = research_link.git(repo, "rev-parse", "--abbrev-ref", "HEAD")
     digest = research_link.sha256(repo / "runs" / "report.json")
     pin = tmp_path / "pin.toml"
     pin.write_text(f'[repository]\ncommit = "{commit}"\n[files.plain_thresholds]\npath = "runs/report.json"\n'
@@ -118,10 +125,33 @@ def test_pin_matches_report_and_rejects_changes(tmp_path):
     local.write_text(f'repository = "{repo.as_posix()}"\nproject_python = "p"\ngpu_python = "g"\n', encoding="utf-8")
     research_link.verify(research_link.load(pin, local))
 
-    (repo / "tracked.txt").write_text("b", encoding="utf-8")  # a change to a tracked file
+    # H21: the documentation may change after the pinned commit, committed or not.
+    (repo / "docs").mkdir()
+    (repo / "docs" / "note.md").write_text("n", encoding="utf-8")
+    (repo / "AGENTS.md").write_text("b", encoding="utf-8")
+    run("add", "AGENTS.md", "docs/note.md")
+    run("commit", "-qm", "documentation")
+    (repo / "AGENTS.md").write_text("c", encoding="utf-8")
+    research_link.verify(research_link.load(pin, local))
+
+    (repo / "tracked.txt").write_text("b", encoding="utf-8")  # a change outside the documentation
     with pytest.raises(research_link.LinkError):
         research_link.verify(research_link.load(pin, local))
-    subprocess.run(["git", "-C", str(repo), "checkout", "-q", "--", "tracked.txt"], check=True)
+    run("commit", "-qam", "code")  # the same change, committed
+    with pytest.raises(research_link.LinkError):
+        research_link.verify(research_link.load(pin, local))
+    run("reset", "-q", "--hard", "HEAD~1")
+    run("mv", "tracked.txt", "docs/tracked.txt")  # moved into docs/, it is still gone from where it was
+    with pytest.raises(research_link.LinkError):
+        research_link.verify(research_link.load(pin, local))
+    run("reset", "-q", "--hard", "HEAD")
+    run("checkout", "-q", "--orphan", "unrelated")  # the same files in a history without the pinned commit
+    run("commit", "-qm", "unrelated")
+    with pytest.raises(research_link.LinkError):
+        research_link.verify(research_link.load(pin, local))
+    run("checkout", "-q", branch)
+    research_link.verify(research_link.load(pin, local))
+
     pin.write_text(pin.read_text(encoding="utf-8").replace("RxJ = 13", "RxJ = 14"), encoding="utf-8")
     with pytest.raises(research_link.LinkError):  # a threshold that is not the report's
         research_link.verify(research_link.load(pin, local))
