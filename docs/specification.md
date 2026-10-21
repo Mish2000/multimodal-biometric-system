@@ -1,9 +1,9 @@
 # System specification
 
 Approved by the researcher on 2026-10-20 (H11–H20 in `docs/decisions.md`),
-from the draft of 2026-10-19 as revised on 2026-10-20. Every decision is
-cited by its ID; a change needs the researcher's approval and a new entry in
-the decision record.
+from the draft of 2026-10-19 as revised on 2026-10-20, and amended with his
+approval since (H24, H25). Every decision is cited by its ID; a change needs
+the researcher's approval and a new entry in the decision record.
 
 ## 1. Purpose and scope
 
@@ -88,12 +88,13 @@ FastAPI server: Python 3.12, its own environment
 
 | Database | Tables |
 | --- | --- |
-| accounts | account (username, email, password hash, role, status, created), national ID HMAC (unique; user accounts only), identity link (encrypted random identifier; user accounts only), session, audit log |
-| biometric | subject (random identifier), enrolment (subject, modality, finger position, created), template (enrolment, algorithm, capture number, data), sample (encrypted raw sample), attempt (section 7), threshold (algorithm, value, provisional, changed) |
+| accounts | account (username, email, password hash, role, status, theme (H24), created), national ID HMAC (unique; user accounts only), identity link (encrypted random identifier; user accounts only), session, audit log |
+| biometric | subject (random identifier), algorithm (method, version, threshold), enrolment (subject, modality, finger position, created, replaced), sample (a finding: one encrypted raw capture), template (one per finding and method: encrypted for fingerprints, a vector for face and voice), attempt (section 7) |
 
 The two databases share no key: only the encrypted identity link connects an
 account to its subject, and rows of the biometric database name people only
-by their subject identifiers.
+by their subject identifiers. The exact tables, with every column, key and
+encrypted value, are in `docs/data-model.md` (H25).
 
 ### Cryptography (the `cryptography` package for every primitive, H4)
 
@@ -105,10 +106,13 @@ by their subject identifiers.
   random 32-byte salt per record and a label per use. The function is ours;
   the primitives are standard.
 - **Encryption (H14):** AES-256-GCM for the identity link (a random 128-bit
-  subject identifier), raw samples, attempts and fingerprint templates
-  (templates are only read by the engines). Each ciphertext records the
-  version of the key that sealed it, so keys can be replaced later, and is
-  bound to its row as associated data, so it cannot be moved to another row.
+  subject identifier), raw samples, the captures of attempts and fingerprint
+  templates (templates are only read by the engines); an attempt's outcome
+  stays unencrypted so that its history can be filtered (H25). Each
+  ciphertext records the version of the key that sealed it, so keys can be
+  replaced later, and is bound to its row as associated data, so it cannot
+  be moved to another row; in the biometric database it is also bound to its
+  subject, so it cannot be moved to another person (H25).
 - **Passwords (H14):** Argon2id at RFC 9106's second recommended option (3
   passes, 4 lanes, 64 MiB, 128-bit salt, 256-bit tag); `cryptography`
   documents Argon2id from version 44.0.0 (checked on 2026-10-20; it is tried
@@ -228,6 +232,7 @@ SHA-256.
 | Registration | username, email, password, national ID, with the promise that the ID is never stored; an ID already registered is refused |
 | Login | email or username, password; a user account opens the home screen, an administrator account the administration area |
 | Home | three modality cards, fingerprint first, with each one's enrolment status |
+| Settings (H24) | the theme: light, dark, or Windows' setting (the default), saved per account and applied at once; sign-in and registration follow Windows' setting |
 | Modality | enrol, verify (1:1), identify (1:N); before enrolment, verify and identify lead to the message of section 5 |
 | Algorithm choice | one card per algorithm: accuracy, speed, what its template holds and how two templates are compared (H2), in two or three sentences with a small drawing, and whether its threshold is provisional; OpenCV SIFT first, then the learned pore descriptor, Pore SIFT and the fusions (H18); face and voice have one model each, shown on its card without a choice |
 | Fingerprint capture | scanner status, finger and placement guide, "lift the finger" between placements, the captured print and its checks |
@@ -257,9 +262,9 @@ names, and drawings use only the user's own prints (H18).
 
 Every attempt is stored in the biometric database: time, modality, algorithm,
 mode (1:1 or 1:N), score, threshold, decision, duration, the encrypted sample,
-the subject of the logged-in user and, in 1:N, the subject of the top
-candidate. Only subject identifiers are stored; the administration area turns
-them into usernames through the identity link.
+the subject of the logged-in user and, in 1:N, the top candidate's enrolment,
+and so its subject (H25). Only subject identifiers are stored; the
+administration area turns them into usernames through the identity link.
 
 Administrative changes are stored in the audit log of the accounts database:
 time, administrator, action and target (an account, or the algorithm whose
@@ -297,7 +302,7 @@ and reported on its own.
    accounts database, registration with the national ID, login, the roles
    with the first administrator's command and the accounts part of the
    administration area, keys, and the Hebrew client shell with its home
-   screen.
+   screen and its settings in both themes (H24).
 2. Fingerprint enrolment and 1:1 with OpenCV SIFT: the scanner's acquisition
    mode, the engine, encrypted storage and the attempt history.
 3. All fingerprint algorithms, the algorithm choice, 1:N and the match
@@ -331,3 +336,8 @@ and reported on its own.
 - **H19** PostgreSQL 16.15 with pgvector 0.8.6 from conda-forge, started by
   the server under the user's account; Docker as the fallback (3, 8).
 - **H20** The six build increments (9).
+- **H24** Light, dark or Windows' theme, chosen in the settings and saved per
+  account (4, 6, 9).
+- **H25** The exact data model of `docs/data-model.md`: several findings per
+  person, one template per finding and method, sealed values bound to their
+  subject (4, 7).

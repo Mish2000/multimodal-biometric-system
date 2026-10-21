@@ -97,7 +97,11 @@ commits stay in English.
   `local/server.toml`, the cluster in `local/postgres/`, and the key file
   outside the repository (`server/README.md`).
 - `client/`: the Electron client's pinned toolchain; its code waits for the
-  design direction and the component library (H22).
+  design direction and the component library (H22). Every screen comes in a
+  light and a dark theme, chosen in the settings (light, dark or Windows'
+  setting) and saved per account (H24).
+- `docs/data-model.md`: the exact tables of both databases, with every
+  column, key and sealed value (H25); the increments build them as written.
 
 ## Layout
 
@@ -107,11 +111,12 @@ environments/             conda environments of the server and PostgreSQL, with 
 server/                   FastAPI server: accounts, keys, local PostgreSQL (H23)
 client/                   Electron client: pinned npm toolchain (H22 pending)
 docs/decisions.md         decision record (H1–H6 and G4 carried over; H7 on)
+docs/data-model.md        the exact tables of both databases (H25)
 docs/scanner-native-capture.md  recovered OEM interface and H8 validation
 docs/hiscan-methods.md    the research methods on HiScan PRO captures (H10)
 scanner/ScannerCapture/   OEM and TWAIN capture tool (H7, H8, H9)
 methods/                  pinned research link and its HiScan evaluation (H10)
-captures/, local/         git-ignored: captures, evaluations, probe reports
+captures/, local/         git-ignored: captures, evaluations, probe reports, design prototypes
 ```
 
 ## Commands
@@ -133,6 +138,8 @@ SPY -m mbs create-admin --username NAME --email ADDRESS   # prints a one-time pa
 SPY -m mbs serve                 # API on 127.0.0.1:55433, PostgreSQL with it
 SPY -m pytest                    # 42 tests against a throwaway cluster, about a minute
 # client/: npm ci (installs from package-lock.json)
+# design prototypes, from the repository root: http://localhost:4173/screen-2/
+SPY -m http.server 4173 --bind 127.0.0.1 --directory local/prototypes
 ```
 
 ## Status
@@ -187,7 +194,24 @@ SPY -m pytest                    # 42 tests against a throwaway cluster, about a
   The server part is built: local cluster, key file, both databases,
   registration with the national ID, sign-in, sessions, roles, the first
   administrator's command and the accounts part of the administration API;
-  42 tests pass. `setup` ran on this PC, and the researcher still has to
-  back up the key file. Next: the design direction and component library
-  (H22, with `/pick-ui-library` and `/prototype`), then the client part of
-  increment 1.
+  42 tests pass. `setup` ran on this PC, and the researcher keeps a backup
+  copy of the key file (2026-10-21).
+- 2026-10-21: the supervisor asked for design examples of four screens: (1)
+  the system and sign-in; (2) the fingerprint process, from capture and
+  storage to the template, the method choice (fusion included) when the
+  person is enrolled, and the result (match or not) shown visually; (3)
+  queries, reports and other actions; (4) comparison by further means from a
+  list (his examples: face, gait, ears, voice), with the finding's image
+  taken in. He also asked for an exact table structure that holds several
+  findings per person. The researcher reads the list as examples: for now
+  only modalities with verified ready-made models enter, so screen 4 keeps
+  to face and voice (H1, H4). Screen 2's three directions (examiner's bench,
+  guided path, control room) are built with `/prototype` in the ignored
+  `local/prototypes/screen-2/`, on synthetic prints only, and wait for his
+  choice. The researcher and the supervisor want light and dark themes
+  (H24). For the table structure, the researcher approved the exact tables
+  of `docs/data-model.md` (H25); a diagram for the supervisor is in the
+  ignored `local/supervisor/`, and the supervisor is asked whether findings
+  may also come from files. Next: light and dark in the screen 2
+  prototypes, then screens 1, 3 and 4 the same way; the direction and the
+  component library (H22) wait for the supervisor's choice.

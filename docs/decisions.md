@@ -300,3 +300,45 @@ present. He left the open questions to the specification.
   - Subjects carry no creation time, so they cannot be matched to accounts by
     it; a trigger keeps the audit log insert-only; the API answers errors as
     codes that the client turns into Hebrew text.
+
+## 2026-10-21 — light and dark themes
+
+- **H24** Approved by the researcher on 2026-10-21: he and the supervisor want
+  users to choose between a light and a dark look. As in large current
+  systems, the client's settings menu offers three themes: light, dark, and
+  Windows' setting, which is the default. The choice is saved per account, so
+  each user of the PC keeps their own, and it applies at once; the sign-in
+  and registration screens, before anyone has signed in, follow Windows'
+  setting. Every screen is designed in both themes, so the choice of design
+  direction (H22) does not depend on it.
+
+## 2026-10-21 — the exact data model
+
+- **H25** Approved by the researcher on 2026-10-21, for the supervisor's
+  request of an exact table structure that holds several findings per
+  person: `docs/data-model.md` gives every table, column, type, key and
+  sealed value of both databases, refining section 4 of the specification.
+  A person is one subject; each finger, the face and the voice is an
+  enrolment of it; each enrolment holds its findings, the samples, which are
+  sealed raw captures; and each finding has one template per method. Within
+  H3, H14 and H15–H17:
+  - The thresholds live in an `algorithm` table, the catalogue of the
+    methods with their versions, in place of the specification's threshold
+    table.
+  - One template table serves the three modalities: sealed bytes for
+    fingerprints, an unsealed pgvector embedding for face and voice (H14).
+  - Enrolling the same finger, face or voice again marks the old enrolment
+    as replaced instead of deleting it, so its findings and the attempts that
+    used them stay.
+  - An enrolment keeps only its three captures that pass the checks; a
+    capture that H15's pairwise check rejects is not kept.
+  - An attempt seals its capture, while its outcome (score, threshold,
+    decision, times) stays unsealed so that the administration area can
+    filter the history; this is how H14's sealed attempts are read.
+  - In 1:N the attempt keeps the top candidate's enrolment, and so its
+    subject and finger.
+  - Every sealed value is bound to its person: the subject identifier is
+    part of the associated data, so a finding or template moved to another
+    subject does not open.
+  - Findings come only from the PC's scanner, camera and microphone; taking
+    them from files would add a `source` column.
