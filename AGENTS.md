@@ -212,6 +212,10 @@ SPY -m http.server 4173 --bind 127.0.0.1 --directory local/prototypes
   (H24). For the table structure, the researcher approved the exact tables
   of `docs/data-model.md` (H25); a diagram for the supervisor is in the
   ignored `local/supervisor/`, and the supervisor is asked whether findings
-  may also come from files. Next: light and dark in the screen 2
-  prototypes, then screens 1, 3 and 4 the same way; the direction and the
-  component library (H22) wait for the supervisor's choice.
+  may also come from files. Screen 2's three directions now come in both
+  themes, with the settings menu of H24 (light, dark, Windows' setting).
+  Screen 1 (the system, sign-in and registration) followed in
+  `local/prototypes/screen-1/`, in the same three directions; it follows
+  Windows' setting until someone signs in. Next: screens 3 and 4 the same
+  way; the direction and the component library (H22) wait for the
+  supervisor's choice.

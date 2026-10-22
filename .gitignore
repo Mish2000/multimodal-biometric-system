@@ -25,6 +25,9 @@ obj/
 *.npy
 *.npz
 
+# IDE settings (PyCharm, WebStorm, DataGrip): machine-specific paths, never committed
+.idea/
+
 # Python caches
 __pycache__/
 .pytest_cache/
