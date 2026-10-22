@@ -1,0 +1,316 @@
+/* The skeleton's neutral look (H26). The visual direction and the component library come with the
+   supervisor's choice (H22). Light or dark follows the window's theme, which the main process sets (H24). */
+
+:root {
+  color-scheme: light dark;
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --text: #1b1f24;
+  --muted: #5b6470;
+  --line: #d9dde3;
+  --accent: #1f5fbf;
+  --accent-text: #ffffff;
+  --error: #b42318;
+  --error-bg: #fdecea;
+  --ok: #1a7f37;
+  --ok-bg: #e9f6ec;
+  --notice-bg: #eaf1fb;
+  --radius: 8px;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16181d;
+    --surface: #1f232a;
+    --text: #e6e8eb;
+    --muted: #9aa3ae;
+    --line: #343a45;
+    --accent: #6aa5f2;
+    --accent-text: #0d1117;
+    --error: #f2a39b;
+    --error-bg: #3a1f1d;
+    --ok: #86d29a;
+    --ok-bg: #183021;
+    --notice-bg: #1c2a3d;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+}
+
+h1 {
+  font-size: 1.6rem;
+  margin: 0 0 0.5rem;
+}
+
+h2 {
+  font-size: 1.15rem;
+  margin: 2rem 0 0.75rem;
+}
+
+a {
+  color: var(--accent);
+}
+
+button {
+  font: inherit;
+  padding: 0.5rem 1.1rem;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--accent-text);
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+button.secondary {
+  background: transparent;
+  color: var(--accent);
+}
+
+button.link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+input {
+  font: inherit;
+  width: 100%;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+code {
+  font-family: Consolas, monospace;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  background: var(--bg);
+  user-select: all;
+}
+
+/* Forms */
+
+.field {
+  margin-bottom: 1rem;
+}
+
+.field label {
+  display: block;
+  margin-bottom: 0.3rem;
+  font-weight: 600;
+}
+
+.hint {
+  margin: 0.3rem 0 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+form.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 1rem;
+}
+
+form.row .field {
+  flex: 1 1 12rem;
+  margin-bottom: 0;
+}
+
+form.inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+form.inline input {
+  width: 11rem;
+}
+
+.choices {
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.choices label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0;
+}
+
+.choices input {
+  width: auto;
+}
+
+/* Messages */
+
+.lead {
+  margin: 0 0 1.5rem;
+  color: var(--muted);
+}
+
+.aside {
+  color: var(--muted);
+}
+
+.centered {
+  margin-top: 30vh;
+  text-align: center;
+}
+
+.error,
+.ok,
+.notice {
+  padding: 0.6rem 0.8rem;
+  border-radius: var(--radius);
+}
+
+.error {
+  color: var(--error);
+  background: var(--error-bg);
+}
+
+.ok {
+  color: var(--ok);
+  background: var(--ok-bg);
+}
+
+.notice {
+  background: var(--notice-bg);
+}
+
+span.error {
+  padding: 0.2rem 0.5rem;
+}
+
+/* The frame after sign-in */
+
+.narrow {
+  max-width: 26rem;
+  margin: 0 auto;
+  padding: 3rem 1rem;
+}
+
+.page .narrow {
+  margin: 0;
+  padding: 0;
+}
+
+.shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.75rem 1.5rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.top nav {
+  display: flex;
+  gap: 1.25rem;
+}
+
+.top nav a {
+  padding: 0.25rem 0;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.top nav a.active {
+  border-bottom-color: var(--accent);
+  color: var(--text);
+}
+
+.who {
+  margin-inline-start: auto;
+  color: var(--muted);
+}
+
+.page {
+  width: 100%;
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 1rem;
+  padding: 0;
+  list-style: none;
+}
+
+.card {
+  padding: 1.1rem 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.card h2 {
+  margin: 0 0 0.4rem;
+}
+
+.card p {
+  margin: 0 0 0.4rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+th,
+td {
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+  text-align: start;
+  vertical-align: middle;
+}
+
+th {
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+}

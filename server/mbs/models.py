@@ -16,6 +16,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 USER, ADMIN = "user", "admin"
 ACTIVE, DISABLED = "active", "disabled"
+THEMES = ("system", "light", "dark")  # the account's look: Windows' setting, light or dark (H24)
 
 
 class AccountsBase(DeclarativeBase):
@@ -33,6 +34,7 @@ class Account(AccountsBase):
     __table_args__ = (
         CheckConstraint("role IN ('user', 'admin')", name="account_role"),
         CheckConstraint("status IN ('active', 'disabled')", name="account_status"),
+        CheckConstraint("theme IN ('system', 'light', 'dark')", name="account_theme"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
@@ -44,6 +46,7 @@ class Account(AccountsBase):
     role: Mapped[str] = mapped_column(String(8))
     status: Mapped[str] = mapped_column(String(8))
     must_change_password: Mapped[bool] = mapped_column(Boolean)
+    theme: Mapped[str] = mapped_column(String(8), server_default="system")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 

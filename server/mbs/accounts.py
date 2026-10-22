@@ -25,7 +25,7 @@ from . import keys as keyring
 from . import national_id, passwords
 from .db import Databases
 from .keys import Keys
-from .models import ACTIVE, ADMIN, DISABLED, USER, Account, AuditEntry, IdentityLink, Session, Subject
+from .models import ACTIVE, ADMIN, DISABLED, THEMES, USER, Account, AuditEntry, IdentityLink, Session, Subject
 
 SESSION_IDLE = timedelta(minutes=30)
 SESSION_LONGEST = timedelta(hours=12)
@@ -48,6 +48,7 @@ class SignedIn:
     email: str
     role: str
     must_change_password: bool
+    theme: str
 
 
 def now() -> datetime:
@@ -96,7 +97,7 @@ def _new_account(username: str, email: str, password: str, role: str, must_chang
     (name, name_key), (mail, mail_key) = _username(username), _email(email)
     return Account(id=uuid.uuid4(), username=name, username_key=name_key, email=mail, email_key=mail_key,
                    password_hash=passwords.hash_password(password), role=role, status=ACTIVE,
-                   must_change_password=must_change, created_at=now())
+                   must_change_password=must_change, theme="system", created_at=now())
 
 
 def register(databases: Databases, keys: Keys, username: str, email: str, password: str, national_id_text: str) -> SignedIn:
@@ -229,6 +230,14 @@ def change_password(databases: Databases, account_id: uuid.UUID, token: str, cur
                                                     Session.token_hash != _token_hash(token)))
 
 
+def set_theme(databases: Databases, account_id: uuid.UUID, theme: str) -> None:
+    """The account's look in the client (H24): Windows' setting, light or dark."""
+    if theme not in THEMES:
+        raise AccountError("invalid_theme")
+    with _db(databases.accounts) as db, db.begin():
+        db.get(Account, account_id).theme = theme
+
+
 def modalities(databases: Databases, keys: Keys, account: SignedIn) -> dict[str, dict[str, bool]] | None:
     """Enrolment per modality for the home screen (H15); administrator accounts have none (H12).
     Enrolments arrive with increment 2, so every modality is still unenrolled."""
@@ -315,7 +324,8 @@ def audit_log(databases: Databases) -> list[dict]:
 
 
 def _signed_in(account: Account) -> SignedIn:
-    return SignedIn(account.id, account.username, account.email, account.role, account.must_change_password)
+    return SignedIn(account.id, account.username, account.email, account.role, account.must_change_password,
+                    account.theme)
 
 
 def _token_hash(token: str) -> bytes:

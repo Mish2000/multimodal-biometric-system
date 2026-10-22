@@ -2,7 +2,7 @@
 
 Approved by the researcher on 2026-10-20 (H11–H20 in `docs/decisions.md`),
 from the draft of 2026-10-19 as revised on 2026-10-20, and amended with his
-approval since (H24, H25). Every decision is cited by its ID; a change needs
+approval since (H24–H26). Every decision is cited by its ID; a change needs
 the researcher's approval and a new entry in the decision record.
 
 ## 1. Purpose and scope
@@ -67,6 +67,9 @@ FastAPI server: Python 3.12, its own environment
   closes. The server starts PostgreSQL under the user's own account when it
   is not running, so it needs no Windows service and no administrator rights
   (H19).
+- The client's main process is its only network client and keeps the
+  session token; the page, sandboxed and without Node.js, reaches it only
+  through a preload bridge that offers a fixed list of routes (H26).
 - WebSocket messages carry live progress during capture (scanner light on,
   placement kept, "lift the finger") and during 1:N searches.
 - The engines are long-running child processes of the server (H13). Each
@@ -341,3 +344,5 @@ and reported on its own.
 - **H25** The exact data model of `docs/data-model.md`: several findings per
   person, one template per finding and method, sealed values bound to their
   subject (4, 7).
+- **H26** The client's main process as its only network client, keeping the
+  session token, behind a preload bridge with a fixed list of routes (3).

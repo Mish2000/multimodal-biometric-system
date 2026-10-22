@@ -96,10 +96,15 @@ commits stay in English.
   `multimodal-postgres`. Machine settings are in the ignored
   `local/server.toml`, the cluster in `local/postgres/`, and the key file
   outside the repository (`server/README.md`).
-- `client/`: the Electron client's pinned toolchain; its code waits for the
-  design direction and the component library (H22). Every screen comes in a
-  light and a dark theme, chosen in the settings (light, dark or Windows'
-  setting) and saved per account (H24).
+- `client/` (H26): the Electron client's skeleton. The main process is the
+  only network client and keeps the session token; the sandboxed page
+  reaches it through a preload bridge with a fixed list of routes. Its
+  screens (sign-in, registration, the one-time password's replacement, home,
+  the administration area of increment 1, settings) have a neutral look
+  until the design direction and the component library (H22). Every screen
+  comes in a light and a dark theme, chosen in the settings (light, dark or
+  Windows' setting) and saved per account (H24). For now the server runs on
+  its own; the client will start and stop it in a later step.
 - `docs/data-model.md`: the exact tables of both databases, with every
   column, key and sealed value (H25); the increments build them as written.
 
@@ -109,7 +114,7 @@ commits stay in English.
 docs/specification.md     the approved system specification (H11–H20)
 environments/             conda environments of the server and PostgreSQL, with locks (H23)
 server/                   FastAPI server: accounts, keys, local PostgreSQL (H23)
-client/                   Electron client: pinned npm toolchain (H22 pending)
+client/                   Electron client: main process, preload bridge, React screens (H26)
 docs/decisions.md         decision record (H1–H6 and G4 carried over; H7 on)
 docs/data-model.md        the exact tables of both databases (H25)
 docs/scanner-native-capture.md  recovered OEM interface and H8 validation
@@ -136,8 +141,12 @@ PY methods/hiscan_eval.py --first FIRST_SET_FOLDER   # about 5 minutes -> captur
 SPY -m mbs setup                 # key file, local/server.toml, cluster, databases (safe to rerun)
 SPY -m mbs create-admin --username NAME --email ADDRESS   # prints a one-time password
 SPY -m mbs serve                 # API on 127.0.0.1:55433, PostgreSQL with it
-SPY -m pytest                    # 42 tests against a throwaway cluster, about a minute
-# client/: npm ci (installs from package-lock.json)
+SPY -m pytest                    # 43 tests against a throwaway cluster, about a minute
+# client/: npm ci (installs from package-lock.json); the app needs the server running
+npm run dev                      # the app with hot reload; MBS_SERVER_URL overrides 127.0.0.1:55433
+npm test                         # 16 tests (Vitest): the server client, the screens with a fake bridge
+npm run typecheck                # TypeScript, main process and page
+npm run build                    # out/: main process, preload and page
 # design prototypes, from the repository root: http://localhost:4173/screen-2/
 SPY -m http.server 4173 --bind 127.0.0.1 --directory local/prototypes
 ```
@@ -216,6 +225,13 @@ SPY -m http.server 4173 --bind 127.0.0.1 --directory local/prototypes
   themes, with the settings menu of H24 (light, dark, Windows' setting).
   Screen 1 (the system, sign-in and registration) followed in
   `local/prototypes/screen-1/`, in the same three directions; it follows
-  Windows' setting until someone signs in. Next: screens 3 and 4 the same
-  way; the direction and the component library (H22) wait for the
-  supervisor's choice.
+  Windows' setting until someone signs in.
+- 2026-10-22 (H26): while the supervisor chooses, the client's skeleton was
+  built and connected to the real server: the server keeps each account's
+  theme (migration `accounts_0002`), `serve` upgrades the tables when it
+  starts, and 43 server tests pass. In the client, the type checks pass, 16
+  tests pass, and the ignored `local/tools/client-check/` ran the built
+  client and the development page offscreen against a throwaway server, 24
+  of 24 checks each, with screenshots in `local/client-check/`. Next:
+  screens 3 and 4 as prototypes, like screens 1 and 2; the direction and the
+  component library (H22) wait for the supervisor's choice.

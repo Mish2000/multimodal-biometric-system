@@ -342,3 +342,32 @@ present. He left the open questions to the specification.
     subject does not open.
   - Findings come only from the PC's scanner, camera and microphone; taking
     them from files would add a `source` column.
+
+## 2026-10-22 — the client's skeleton
+
+- **H26** Approved by the researcher on 2026-10-22: the client's skeleton is
+  built before the supervisor chooses the design direction and the component
+  library (H22), so that increment 1 works end to end in the client:
+  sign-in, registration, the replacement of a one-time password, the home
+  screen, the administration area of increment 1 and the settings, in a
+  neutral look that the chosen direction replaces. Within H4, H11, H12, H14
+  and H24:
+  - The main process is the client's only network client and keeps the
+    session token, which never reaches the page. The page runs sandboxed,
+    isolated and without Node.js, and reaches the main process only through
+    a preload bridge that offers named routes from a fixed list and the
+    theme; its Content Security Policy keeps it from connecting anywhere
+    itself. The window cannot be navigated away or open other windows, and
+    every permission request (camera, microphone, ...) is refused until a
+    modality needs one.
+  - The screens use hash navigation and read the account's role and
+    one-time password only to choose what to show; the server decides every
+    request (H12).
+  - During development the server runs on its own (`python -m mbs serve`),
+    at 127.0.0.1:55433 unless `MBS_SERVER_URL` names another address. The
+    client's start and stop of the server (specification, section 3) follow
+    as a step of their own: the client will start the server only when it
+    does not answer, and stop only a server it started.
+  - `serve` brings the tables up to date before it answers, so a newer
+    server, such as this one with the account's theme (H24), upgrades the
+    databases when it first starts.

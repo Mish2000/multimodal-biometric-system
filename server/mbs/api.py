@@ -76,6 +76,10 @@ class NewAdministrator(BaseModel):
     email: str = Field(max_length=320)
 
 
+class ThemeChange(BaseModel):
+    theme: str = Field(max_length=16)
+
+
 class StatusChange(BaseModel):
     password: str = Field(max_length=1024)
     status: str = Field(max_length=16)
@@ -83,7 +87,7 @@ class StatusChange(BaseModel):
 
 def account_json(account: SignedIn) -> dict:
     return {"id": str(account.id), "username": account.username, "email": account.email, "role": account.role,
-            "must_change_password": account.must_change_password}
+            "must_change_password": account.must_change_password, "theme": account.theme}
 
 
 def create_app(databases: Databases, keys: Keys) -> FastAPI:
@@ -128,6 +132,11 @@ def create_app(databases: Databases, keys: Keys) -> FastAPI:
     @allow(USER, ADMIN, during_password_change=True)
     def change_password(body: PasswordChange, request: Request, account: SignedIn = Depends(signed_in)) -> None:
         accounts.change_password(databases, account.id, request.state.token, body.current, body.new)
+
+    @app.post("/api/me/theme", status_code=204)
+    @allow(USER, ADMIN)
+    def change_theme(body: ThemeChange, account: SignedIn = Depends(signed_in)) -> None:
+        accounts.set_theme(databases, account.id, body.theme)
 
     @app.get("/api/admin/accounts")
     @allow(ADMIN)

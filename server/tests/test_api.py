@@ -233,3 +233,13 @@ def test_the_migrated_schema_matches_the_models(databases):
     for engine, base in ((databases.accounts, AccountsBase), (databases.biometric, BiometricBase)):
         with engine.connect() as conn:
             assert compare_metadata(MigrationContext.configure(conn), base.metadata) == []
+
+
+def test_each_account_keeps_its_own_theme(client):
+    register(client)
+    token = sign_in(client)
+    assert client.get("/api/me", headers=auth(token)).json()["account"]["theme"] == "system"
+    assert client.post("/api/me/theme", json={"theme": "dark"}, headers=auth(token)).status_code == 204
+    assert client.get("/api/me", headers=auth(sign_in(client))).json()["account"]["theme"] == "dark"
+    assert error(client.post("/api/me/theme", json={"theme": "blue"}, headers=auth(token))) == (400, "invalid_theme")
+    assert error(client.post("/api/me/theme", json={"theme": "dark"})) == (401, "not_signed_in")

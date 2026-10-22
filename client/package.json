@@ -5,8 +5,16 @@
   "description": "The Hebrew desktop client of the multimodal biometric system (H4, H20)",
   "license": "UNLICENSED",
   "type": "module",
+  "main": "./out/main/index.js",
   "engines": {
     "node": ">=24.15.0"
+  },
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "test": "vitest run"
   },
   "dependencies": {
     "react": "19.3.0",

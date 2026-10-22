@@ -3,7 +3,7 @@
     python -m mbs setup                                    key file, local/server.toml, cluster, databases
     python -m mbs db start | stop | status
     python -m mbs create-admin --username NAME --email ADDRESS     prints a one-time password (H12)
-    python -m mbs serve                                    the API on 127.0.0.1 (H11)
+    python -m mbs serve                                    the API on 127.0.0.1 (H11), after bringing the tables up to date
 """
 
 from __future__ import annotations
@@ -79,6 +79,7 @@ def serve(_args) -> None:
     started = postgres.start(config)
     databases = open_databases(config, keys)
     try:
+        migrate(databases)  # a newer version of the server brings its tables up to date before it answers
         uvicorn.run(create_app(databases, keys), host="127.0.0.1", port=config.server_port, log_level="info")
     finally:
         databases.dispose()
