@@ -232,6 +232,22 @@ SPY -m http.server 4173 --bind 127.0.0.1 --directory local/prototypes
   starts, and 43 server tests pass. In the client, the type checks pass, 16
   tests pass, and the ignored `local/tools/client-check/` ran the built
   client and the development page offscreen against a throwaway server, 24
-  of 24 checks each, with screenshots in `local/client-check/`. Next:
-  screens 3 and 4 as prototypes, like screens 1 and 2; the direction and the
-  component library (H22) wait for the supervisor's choice.
+  of 24 checks each, with screenshots in `local/client-check/`.
+- 2026-10-22: screen 3 (queries, reports and the administration's actions)
+  followed in `local/prototypes/screen-3/`, in the same three directions and
+  both themes, on synthetic attempts only: the attempt history with its
+  filters, a report per method, thresholds with a preview of their effect,
+  accounts and the audit log; it never shows samples or national IDs (H12).
+  The researcher answered H25's open question: findings may also come from
+  files, uploaded with a button or by drag and drop, while the capture from
+  the PC's own devices stays the dominant option; this needs its own
+  decision entry before it enters the data model.
+- 2026-10-23: screen 4 (face and voice) followed in
+  `local/prototypes/screen-4/`, in the same three directions and both
+  themes: the list of the two modalities, enrolment from three findings
+  (H17), 1:1 and 1:N with the visual result, the offer to enrol first
+  (H15), and other users in 1:N without a picture or a name (H18). The
+  camera and the microphone are simulated with synthetic faces and voices;
+  an uploaded file stays in the browser, and the result follows the
+  demonstration's switch. All four screens now wait for the supervisor's
+  choice of direction; the component library (H22) follows it.
