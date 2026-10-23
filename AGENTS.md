@@ -111,6 +111,7 @@ commits stay in English.
 ## Layout
 
 ```
+README.md                 the public overview for visitors; its banner is docs/assets/banner.svg
 docs/specification.md     the approved system specification (H11–H20)
 environments/             conda environments of the server and PostgreSQL, with locks (H23)
 server/                   FastAPI server: accounts, keys, local PostgreSQL (H23)
