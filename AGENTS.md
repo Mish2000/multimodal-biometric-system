@@ -111,7 +111,7 @@ commits stay in English.
 ## Layout
 
 ```
-README.md                 the public overview for visitors; its banner is docs/assets/banner.svg
+README.md                 the public overview for visitors; its banner and screenshots are in docs/assets/
 docs/specification.md     the approved system specification (H11–H20)
 environments/             conda environments of the server and PostgreSQL, with locks (H23)
 server/                   FastAPI server: accounts, keys, local PostgreSQL (H23)
@@ -252,3 +252,8 @@ SPY -m http.server 4173 --bind 127.0.0.1 --directory local/prototypes
   an uploaded file stays in the browser, and the result follows the
   demonstration's switch. All four screens now wait for the supervisor's
   choice of direction; the component library (H22) follows it.
+- 2026-10-23: a public `README.md` for visitors, with a banner and four
+  screenshots of the prototypes (synthetic data only) in `docs/assets/`. The
+  screenshots are taken offscreen with
+  `local/tools/prototype-shots/readme-shots.json`; once the client has the
+  chosen direction (H22), screenshots of the real client replace them.

@@ -27,6 +27,38 @@ matching methods run inside the system, on native 1000 ppi captures.
 > Built in six approved increments. The first, accounts, roles and the client's skeleton, is in place;
 > the visual direction of the client is being chosen with the academic supervisor.
 
+## Screenshots
+
+Interactive design prototypes of the client, from the directions under review with the supervisor.
+Every print, face, account and score in them is synthetic.
+
+<table>
+<tr>
+<td width="50%" valign="top">
+<img src="docs/assets/screenshots/fingerprint-bench.jpg" alt="Fingerprint verification: numbered lines join the sweat pores matched between the stored template and a new capture, next to the comparison methods with their accuracy and time">
+<p><b>Fingerprint · 1:1 verification</b><br>
+<sub>Matched sweat pores, numbered, between the stored template and the new capture, beside each method's accuracy on SD302 and its time.</sub></p>
+</td>
+<td width="50%" valign="top">
+<img src="docs/assets/screenshots/fingerprint-control-room.jpg" alt="Fingerprint control room in the dark theme: the new capture aligned on the stored template with its matched pores, every method's score against its threshold, and the steps of the process">
+<p><b>Fingerprint · control room</b><br>
+<sub>The new capture aligned on the template with its matched pores, and every method's score against its threshold.</sub></p>
+</td>
+</tr>
+<tr>
+<td valign="top">
+<img src="docs/assets/screenshots/admin-control-room.jpg" alt="Administration dashboard in the dark theme: attempts per day, a method's score distribution with a threshold being dragged, the methods, the accounts and the latest attempts">
+<p><b>Administration</b><br>
+<sub>Attempts per day and a method's score distribution; dragging a threshold shows which recent decisions it would change, before it is saved.</sub></p>
+</td>
+<td valign="top">
+<img src="docs/assets/screenshots/face-identification.jpg" alt="Face identification: a search across everyone enrolled, where other users appear without a name or a picture, and the candidates ranked by similarity against the threshold">
+<p><b>Face · 1:N identification</b><br>
+<sub>A search across everyone enrolled, ranked by similarity against the threshold; other users appear without a name or a picture.</sub></p>
+</td>
+</tr>
+</table>
+
 ## Highlights
 
 <table>

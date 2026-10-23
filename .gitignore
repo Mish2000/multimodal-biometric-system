@@ -24,6 +24,8 @@ obj/
 *.webm
 *.npy
 *.npz
+# The one exception: the README's screenshots of the design prototypes, synthetic data only
+!/docs/assets/screenshots/*.jpg
 
 # IDE settings (PyCharm, WebStorm, DataGrip): machine-specific paths, never committed
 .idea/
