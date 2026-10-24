@@ -371,3 +371,46 @@ present. He left the open questions to the specification.
   - `serve` brings the tables up to date before it answers, so a newer
     server, such as this one with the account's theme (H24), upgrades the
     databases when it first starts.
+
+## 2026-10-23 — findings from files
+
+- **H27** Approved by the researcher on 2026-10-23, answering H25's open
+  question (on 2026-10-22 he said that findings may also come from files): a
+  face image or a voice recording may be taken from a file as the new
+  finding of a 1:1 verification or a 1:N identification. Within H6, H14, H17
+  and H25:
+  - Face and voice only. A fingerprint always comes from the scanner, whose
+    captures H7 checks; a file cannot show that it was captured natively at
+    1000 ppi (D1).
+  - Verification and identification only. Enrolment, the reference that
+    every later comparison relies on, takes its findings from the PC's
+    camera and microphone alone: without liveness detection (out of scope,
+    H6), an enrolment from a file would let anyone enrol another person from
+    a picture or a recording.
+  - The files accepted: faces as JPEG or PNG, up to 10 MB, at least 240
+    pixels on the short side and at most 50 million pixels (OpenCV's
+    `OPENCV_IO_MAX_IMAGE_PIXELS`), with exactly one face found; voices as
+    WAV, MP3 or OGG, up to 10 MB and 3 to 30 seconds long, decoded with
+    libsndfile and converted to 16 kHz mono. M4A (AAC) and HEIC would need
+    further decoders (FFmpeg, a HEIF library) and are not accepted. The
+    exact libraries come with the download lists of increments 4 and 5.
+  - The server recognises a file by its content, never by its name or the
+    type the client states, checks its size before reading it whole, and
+    decodes it in the modality's engine. Only the normalised finding is
+    kept, sealed like a capture from the device: the image's pixels as PNG,
+    which drops metadata such as a GPS position or a camera's serial number,
+    and the recording as 16 kHz mono WAV. Neither the original file nor its
+    name is kept.
+  - The attempt records where its finding came from: `attempt.source`,
+    `device` (the default) or `file`, created with the table in increment 2,
+    and a check in the database keeps fingerprint attempts to `device`.
+    `sample` is unchanged, since enrolment takes no files.
+  - The upload stays out of sight until someone looks for it, the
+    progressive disclosure that large products use for rare alternatives:
+    the capture from the device is the only prominent action, and no
+    button, link or drop area for files shows by default. A small "more
+    options" button (⋯) beside the device's view opens a menu whose one item
+    takes a file, with a line saying that a file can also be dragged onto
+    the window; a file dragged over the window shows the drop target only
+    while it is dragged. Enrolment's pages offer neither. The result names
+    its source, and the administration's history can filter by it.

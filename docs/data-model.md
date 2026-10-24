@@ -192,6 +192,7 @@ erDiagram
         double threshold
         boolean accepted
         integer duration_ms
+        varchar source "device or file"
         bytea probe "sealed"
     }
 ```
@@ -302,7 +303,8 @@ table.
 | `threshold` | `double precision` | the threshold used (H16) |
 | `accepted` | `boolean` | same person (1:1), or found (1:N) |
 | `duration_ms` | `integer` | |
-| `probe` | `bytea` | the sealed new capture |
+| `source` | `varchar(8)` | `device` (the default) or `file` (H27); a check keeps fingerprint attempts to `device` |
+| `probe` | `bytea` | the sealed new capture; from a file, its normalised form: a face's pixels as PNG, a voice as 16 kHz mono WAV, without the original file or its name |
 
 The attempt's outcome stays unsealed, so the administration area can filter
 the history (H12); its capture is sealed (H14). The administration area turns
@@ -335,6 +337,6 @@ of a face image is known once the camera is tried (increment 4).
   without the key file could still guess links from matching times.
 - Face and voice embeddings are unsealed (H14), so they are kept only under
   subject identifiers.
-- Findings come only from the PC's scanner, camera and microphone. Taking a
-  finding from a file (for example a face image from elsewhere) would add a
-  `source` column to `sample` and `attempt`.
+- Enrolments take their findings only from the PC's scanner, camera and
+  microphone, so `sample` has no source; a face or voice attempt may take its
+  new finding from a file (H27), as `attempt.source` records.

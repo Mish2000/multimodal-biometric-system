@@ -2,7 +2,7 @@
 
 Approved by the researcher on 2026-10-20 (H11–H20 in `docs/decisions.md`),
 from the draft of 2026-10-19 as revised on 2026-10-20, and amended with his
-approval since (H24–H26). Every decision is cited by its ID; a change needs
+approval since (H24–H27). Every decision is cited by its ID; a change needs
 the researcher's approval and a new entry in the decision record.
 
 ## 1. Purpose and scope
@@ -98,6 +98,11 @@ The two databases share no key: only the encrypted identity link connects an
 account to its subject, and rows of the biometric database name people only
 by their subject identifiers. The exact tables, with every column, key and
 encrypted value, are in `docs/data-model.md` (H25).
+
+A face image or a voice recording taken from a file (H27) is recognised by its
+content, never by its name or stated type, and decoded in its engine; only the
+normalised finding is kept, sealed like a capture from the device, so neither
+the original file, its metadata nor its name is stored.
 
 ### Cryptography (the `cryptography` package for every primitive, H4)
 
@@ -204,6 +209,9 @@ flow of 2026-10-18).
 ### 5.2 Face
 
 - **Capture:** the integrated camera, through the client.
+- **Files (H27):** for 1:1 and 1:N only, never for enrolment: JPEG or PNG up
+  to 10 MB, at least 240 pixels on the short side and at most 50 million
+  pixels, with exactly one face; kept as its pixels, as PNG.
 - **Models:** YuNet for detection (MIT) and SFace for recognition (Apache
   2.0), from OpenCV Zoo, run with OpenCV in the system's face environment.
   SFace gives an embedding of fixed length (128 values according to secondary
@@ -217,6 +225,8 @@ flow of 2026-10-18).
 ### 5.3 Voice
 
 - **Capture:** the microphone, through the client, as 16 kHz mono audio.
+- **Files (H27):** for 1:1 and 1:N only, never for enrolment: WAV, MP3 or OGG
+  up to 10 MB and 3 to 30 seconds long, converted to 16 kHz mono.
 - **Model:** SpeechBrain's ECAPA-TDNN trained on VoxCeleb
   (`speechbrain/spkrec-ecapa-voxceleb`, Apache 2.0): a 192-value embedding
   compared by cosine similarity; SpeechBrain's verification threshold is 0.25,
@@ -260,6 +270,12 @@ provisional thresholds. For the drawings, the engines also
 return the matched coordinates; only the research score decides (H18). In 1:N
 results, other users appear as "another registered user", without their
 names, and drawings use only the user's own prints (H18).
+
+Files for face and voice (H27) stay out of sight until someone looks for
+them: the capture from the device is the only prominent action; a small "more
+options" button (⋯) beside the device's view opens a menu that takes a file,
+and a file dragged onto the window shows the drop target only while it is
+dragged. Enrolment offers neither, and a result names its source.
 
 ## 7. Attempts and audit (H6, H12)
 
@@ -346,3 +362,6 @@ and reported on its own.
   subject (4, 7).
 - **H26** The client's main process as its only network client, keeping the
   session token, behind a preload bridge with a fixed list of routes (3).
+- **H27** Face and voice findings from files, for 1:1 and 1:N only, kept
+  normalised and sealed, recorded as the attempt's source and reached only
+  through a "more options" menu or by dragging (4, 5.2, 5.3, 6).

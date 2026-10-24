@@ -241,8 +241,8 @@ SPY -m http.server 4173 --bind 127.0.0.1 --directory local/prototypes
   accounts and the audit log; it never shows samples or national IDs (H12).
   The researcher answered H25's open question: findings may also come from
   files, uploaded with a button or by drag and drop, while the capture from
-  the PC's own devices stays the dominant option; this needs its own
-  decision entry before it enters the data model.
+  the PC's own devices stays the dominant option; recorded as H27 on
+  2026-10-23.
 - 2026-10-23: screen 4 (face and voice) followed in
   `local/prototypes/screen-4/`, in the same three directions and both
   themes: the list of the two modalities, enrolment from three findings
@@ -257,3 +257,14 @@ SPY -m http.server 4173 --bind 127.0.0.1 --directory local/prototypes
   screenshots are taken offscreen with
   `local/tools/prototype-shots/readme-shots.json`; once the client has the
   chosen direction (H22), screenshots of the real client replace them.
+- 2026-10-23: screens 3 and 4 passed a strict motion review after fixes: the
+  steps of one capture redraw quietly, so only what is new enters (the
+  guided page used to re-enter at every step); the 1:N pass over the
+  gallery now plays; tab switches no longer animate; reduced motion keeps
+  short fades and the capture's countdown. Their click-through checks pass
+  (14 and 12).
+- 2026-10-23 (H27): face and voice findings may come from files, for 1:1
+  and 1:N only (enrolment and fingerprints never), kept normalised and
+  sealed, with `attempt.source` created in increment 2. The upload stays out
+  of sight: a "more options" menu (⋯) beside the device's view, or a file
+  dragged onto the window. Screen 4's prototype follows it.
