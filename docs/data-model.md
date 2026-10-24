@@ -1,6 +1,6 @@
 # Data model
 
-Approved by the researcher on 2026-10-21 (H25 in `docs/decisions.md`): the
+Approved on 2026-10-21 (H25 in `docs/decisions.md`): the
 exact tables of the two databases of `docs/specification.md` (section 4),
 with every column, type, key and sealed value, and how one person holds many
 findings. Types are PostgreSQL 16's; every `uuid` is random (version 4). The

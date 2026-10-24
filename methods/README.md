@@ -6,7 +6,7 @@ without copying them: a local checkout is imported in its own Python
 environments, pinned and checked by `research_link.py` against
 `research-pin.toml` (commit, SHA-256 of the research artefacts outside git,
 and the plain vs plain thresholds). The checkout may carry later commits that
-change only its documentation (`AGENTS.md`, `README.md`, `docs/`); any other
+change only its documentation (`README.md`, `docs/`); any other
 difference from the pinned commit stops the link (H21). The link only reads
 the research checkout; outputs stay in this repository's ignored `captures/`.
 

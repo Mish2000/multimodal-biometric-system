@@ -1,6 +1,6 @@
 # System specification
 
-Approved by the researcher on 2026-10-20 (H11–H20 in `docs/decisions.md`),
+Approved on 2026-10-20 (H11–H20 in `docs/decisions.md`),
 from the draft of 2026-10-19 as revised on 2026-10-20, and amended with his
 approval since (H24–H28). Every decision is cited by its ID; a change needs
 the researcher's approval and a new entry in the decision record.

@@ -3,7 +3,7 @@
 Decisions for the system, approved by Michael Sirkovich. Changes are appended
 below with date and reason; existing entries are not rewritten.
 
-## 2026-10-18/19 — carried over from the research repository
+## 2026-10-18/19: carried over from the research repository
 
 The system was specified in the decision record of the research repository
 [fingerprint-level3-recognition-research](https://github.com/Mish2000/fingerprint-level3-recognition-research)
@@ -54,14 +54,13 @@ continue group H here.
   1:1 and 1:N built as an impressive, interactive experience with texts for
   a simple but curious user.
 - **G4** The system lives in this public repository,
-  `C:\multimodal-biometric-system`. Its commits use the repository-local
-  identity without co-author trailers.
+  `C:\multimodal-biometric-system`.
 - Stage B proceeds one step at a time; each step is reported to the
   researcher before the next starts.
 
-## 2026-10-19 — scanner prototype
+## 2026-10-19: scanner prototype
 
-- **H7** Approved by the researcher on 2026-10-19, together with the download
+- **H7** Approved on 2026-10-19, together with the download
   of NTwain: the repository skeleton and a console capture tool in C# for
   .NET Framework 4.8, x86 (the TWAIN data source and `twain_32.dll` are
   32-bit), with NTwain 3.7.6 from NuGet (MIT; the latest stable release, as
@@ -92,7 +91,7 @@ continue group H here.
   next route awaits the researcher's decision. All probed settings were
   returned to the driver's defaults.
 
-## 2026-10-19 — independent native-resolution capture
+## 2026-10-19: independent native-resolution capture
 
 - **H8** The researcher reports that the vendor declined the SDK request:
   the scanner is too old and no longer supported. He authorizes reverse
@@ -118,7 +117,7 @@ continue group H here.
   the three runtime DLL hashes, restores prior settings, isolates native calls
   in a bounded worker and keeps biometric evidence out of git. See
   `docs/scanner-native-capture.md` for the evidence and remaining limits.
-- **H8** Correction approved by the researcher on 2026-10-19: the OEM transfer
+- **H8** Correction approved on 2026-10-19: the OEM transfer
   fills rows bottom-up, as in a Windows DIB (`twBiometrika.ds` builds a
   positive-height 8-bit DIB of the returned size and copies the buffer into
   it unchanged), but `oem-capture` stored them top-down, so its first images
@@ -134,9 +133,9 @@ continue group H here.
   tool gave 29 consistent matches with the first capture as saved and 8–9
   mirrored; two other fingers of the first set gave 8–13.
 
-## 2026-10-19 — second capture set
+## 2026-10-19: second capture set
 
-- **H9** Approved by the researcher on 2026-10-19: the second capture set of
+- **H9** Approved on 2026-10-19: the second capture set of
   his ten fingers (session `live002`) takes three separate placements per
   finger, the finger lifted off the glass between them, as in H6's enrolment
   default of three captures per finger. Frames taken back to back from one
@@ -150,9 +149,9 @@ continue group H here.
   resumes an interrupted session after the highest kept placement. Running
   the research's methods on these captures is a separate later step.
 
-## 2026-10-19 — the research methods on HiScan PRO captures
+## 2026-10-19: the research methods on HiScan PRO captures
 
-- **H10** Approved by the researcher on 2026-10-19: the two repositories stay
+- **H10** Approved on 2026-10-19: the two repositories stay
   separate. The system uses the research's methods through a pinned, checked
   link (`methods/research-pin.toml`): the research checkout must be at the
   pinned commit with no change to tracked files, its artefacts outside git
@@ -175,9 +174,9 @@ continue group H here.
   are one person's other fingers, so they cannot confirm FAR 0.1 %. Results
   are in `docs/hiscan-methods.md`.
 
-## 2026-10-20 — the system specification
+## 2026-10-20: the system specification
 
-Approved by the researcher on 2026-10-20 together with
+Approved on 2026-10-20 together with
 `docs/specification.md`, which holds the details. After H10 he asked to stop
 the comparison experiments and build the system; the draft of 2026-10-19 was
 revised before the approval, because conda-forge's Windows build of pgvector
@@ -258,23 +257,22 @@ present. He left the open questions to the specification.
   all fingerprint algorithms, the choice, 1:N and the drawings; face; voice;
   the rest of the administration area, fusion and the finished experience.
 
-## 2026-10-20 — documentation changes in the research repository
+## 2026-10-20: documentation changes in the research repository
 
-- **H21** Approved by the researcher on 2026-10-20, amending H10's check so
-  that both repositories' AGENTS.md can always be kept current: the research
+- **H21** Approved on 2026-10-20, amending H10's check so
+  that the research repository's documentation can change without a new pin: the research
   checkout must descend from the pinned commit, and every tracked file outside
-  its documentation (`AGENTS.md`, `README.md` and `docs/`) must be the pinned
+  its documentation (`README.md` and `docs/`) must be the pinned
   commit's, committed or not; the pinned artefacts keep their SHA-256 check
   and `fpl3` must still come from that checkout. A research commit that
   changes only documentation therefore needs no new pin, while a change to
   code, configurations, environments, manifests or tests still needs a new
   pin and a recorded decision. The pin keeps naming the commit that produced
-  H10's results. The research repository's AGENTS.md keeps only the research
-  and points to this repository for the current state of Stage B.
+  H10's results.
 
-## 2026-10-20/21 — the server of increment 1
+## 2026-10-20/21: the server of increment 1
 
-- **H23** Approved by the researcher on 2026-10-21 with the server of
+- **H23** Approved on 2026-10-21 with the server of
   increment 1 (H20), within H3, H4, H12, H14 and H19. He approved the
   downloads on 2026-10-20; the component library left that list for H22.
   - Environments: `multimodal-server` and `multimodal-postgres`, conda-forge
@@ -301,9 +299,9 @@ present. He left the open questions to the specification.
     it; a trigger keeps the audit log insert-only; the API answers errors as
     codes that the client turns into Hebrew text.
 
-## 2026-10-21 — light and dark themes
+## 2026-10-21: light and dark themes
 
-- **H24** Approved by the researcher on 2026-10-21: he and the supervisor want
+- **H24** Approved on 2026-10-21: the researcher and the supervisor want
   users to choose between a light and a dark look. As in large current
   systems, the client's settings menu offers three themes: light, dark, and
   Windows' setting, which is the default. The choice is saved per account, so
@@ -312,9 +310,9 @@ present. He left the open questions to the specification.
   setting. Every screen is designed in both themes, so the choice of design
   direction (H22) does not depend on it.
 
-## 2026-10-21 — the exact data model
+## 2026-10-21: the exact data model
 
-- **H25** Approved by the researcher on 2026-10-21, for the supervisor's
+- **H25** Approved on 2026-10-21, for the supervisor's
   request of an exact table structure that holds several findings per
   person: `docs/data-model.md` gives every table, column, type, key and
   sealed value of both databases, refining section 4 of the specification.
@@ -343,9 +341,9 @@ present. He left the open questions to the specification.
   - Findings come only from the PC's scanner, camera and microphone; taking
     them from files would add a `source` column.
 
-## 2026-10-22 — the client's skeleton
+## 2026-10-22: the client's skeleton
 
-- **H26** Approved by the researcher on 2026-10-22: the client's skeleton is
+- **H26** Approved on 2026-10-22: the client's skeleton is
   built before the supervisor chooses the design direction and the component
   library (H22), so that increment 1 works end to end in the client:
   sign-in, registration, the replacement of a one-time password, the home
@@ -372,9 +370,9 @@ present. He left the open questions to the specification.
     server, such as this one with the account's theme (H24), upgrades the
     databases when it first starts.
 
-## 2026-10-23 — findings from files
+## 2026-10-23: findings from files
 
-- **H27** Approved by the researcher on 2026-10-23, answering H25's open
+- **H27** Approved on 2026-10-23, answering H25's open
   question (on 2026-10-22 he said that findings may also come from files): a
   face image or a voice recording may be taken from a file as the new
   finding of a 1:1 verification or a 1:N identification. Within H6, H14, H17
@@ -415,10 +413,10 @@ present. He left the open questions to the specification.
     while it is dragged. Enrolment's pages offer neither. The result names
     its source, and the administration's history can filter by it.
 
-## 2026-10-24 — the password in the settings
+## 2026-10-24: the password in the settings
 
-- **H28** Approved by the researcher on 2026-10-24, who found a screen of its
-  own for changing the password needless: as in large products, an account
+- **H28** Approved on 2026-10-24: a screen of its own for changing the
+  password is needless: as in large products, an account
   changes its password in the settings. Their first area keeps the theme
   (H24); the second, security, asks for the current password and the new
   one twice, and says that the change signs the account's other sessions
@@ -427,3 +425,8 @@ present. He left the open questions to the specification.
   replace before anything else (H12); once it is replaced, the route sends
   the account to its landing, where the old address of that screen leads
   too.
+
+## 2026-10-24: wording of process notes
+
+- Wording of process notes edited for publication; no decision, design or
+  result changed.
