@@ -24,8 +24,8 @@ an academic research project on level-3 fingerprint features such as sweat pores
 matching methods run inside the system, on native 1000 ppi captures.
 
 > [!NOTE]
-> Built in six approved increments. The first, accounts, roles and the client's skeleton, is in place;
-> the visual direction of the client is being chosen with the academic supervisor.
+> Built in six approved increments. The first, accounts, roles and the client's skeleton, is being
+> completed while the client's visual direction is chosen with the academic supervisor.
 
 ## Screenshots
 
@@ -65,7 +65,7 @@ Every print, face, account and score in them is synthetic.
 <tr>
 <td width="33%" valign="top">
 
-**🔬 Research-grade fingerprints**<br>
+**🔬 Fingerprint methods from the research**<br>
 Keypoints and sweat pores at a native 1000 ppi, matched by three methods from the research and
 their fusion.
 
@@ -96,8 +96,7 @@ checked 1000 ppi images.
 <td valign="top">
 
 **📜 Every decision on record**<br>
-Each design choice is numbered (H1–H26), approved by the researcher, and cited in the code and
-the commits.
+Each design choice is numbered (H1 to H28), dated, and cited in the code and the commits.
 
 </td>
 <td valign="top">
@@ -119,7 +118,8 @@ have tests of their own.
 | 🎙️ **Voice** | the PC's microphone, 16 kHz mono | SpeechBrain ECAPA-TDNN | 192-value embedding in pgvector | cosine similarity above 0.25 |
 
 Run unchanged on the scanner's own captures, OpenCV SIFT accepted 28 of 30 same-finger pairs and
-none of 405 different-finger pairs within one session ([evaluation](docs/hiscan-methods.md)).
+none of 405 different-finger pairs within one session; across two sessions, results fell sharply
+([evaluation](docs/hiscan-methods.md)).
 
 ## Architecture
 
