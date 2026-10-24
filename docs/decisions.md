@@ -414,3 +414,16 @@ present. He left the open questions to the specification.
     the window; a file dragged over the window shows the drop target only
     while it is dragged. Enrolment's pages offer neither. The result names
     its source, and the administration's history can filter by it.
+
+## 2026-10-24 — the password in the settings
+
+- **H28** Approved by the researcher on 2026-10-24, who found a screen of its
+  own for changing the password needless: as in large products, an account
+  changes its password in the settings. Their first area keeps the theme
+  (H24); the second, security, asks for the current password and the new
+  one twice, and says that the change signs the account's other sessions
+  out. The bar after sign-in no longer links to a password screen. A screen
+  of its own stays only for the one-time password, which an account must
+  replace before anything else (H12); once it is replaced, the route sends
+  the account to its landing, where the old address of that screen leads
+  too.

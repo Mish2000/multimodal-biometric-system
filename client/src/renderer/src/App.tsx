@@ -12,8 +12,9 @@ import { landing, useSession } from './session'
 
 // The navigation of the system (docs/specification.md, section 6): sign-in and registration before an
 // account is signed in; then the home screen for users, the administration area for administrators, and
-// the settings. An account with a one-time password goes nowhere until it is replaced (H12). The server
-// checks every request again, whatever the page shows.
+// the settings, where the password is changed too (H28). An account with a one-time password goes nowhere
+// but its own replacement screen until it is replaced (H12). The server checks every request again,
+// whatever the page shows.
 export function App() {
   const { account, ready } = useSession()
   if (!ready) return <p className="aside centered">טוען…</p>
@@ -34,7 +35,7 @@ export function App() {
         <Route path="/" element={only('user', <Home />)} />
         <Route path="/admin" element={only('admin', <Admin />)} />
         <Route path="/settings" element={only('any', <Settings />)} />
-        <Route path="/password" element={<ChangePassword />} />
+        <Route path="/password" element={account?.must_change_password ? <ChangePassword /> : <Navigate to={home} replace />} />
       </Route>
       <Route path="*" element={<Navigate to={home} replace />} />
     </Routes>

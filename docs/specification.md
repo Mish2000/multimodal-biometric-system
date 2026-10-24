@@ -2,7 +2,7 @@
 
 Approved by the researcher on 2026-10-20 (H11–H20 in `docs/decisions.md`),
 from the draft of 2026-10-19 as revised on 2026-10-20, and amended with his
-approval since (H24–H27). Every decision is cited by its ID; a change needs
+approval since (H24–H28). Every decision is cited by its ID; a change needs
 the researcher's approval and a new entry in the decision record.
 
 ## 1. Purpose and scope
@@ -245,7 +245,7 @@ SHA-256.
 | Registration | username, email, password, national ID, with the promise that the ID is never stored; an ID already registered is refused |
 | Login | email or username, password; a user account opens the home screen, an administrator account the administration area |
 | Home | three modality cards, fingerprint first, with each one's enrolment status |
-| Settings (H24) | the theme: light, dark, or Windows' setting (the default), saved per account and applied at once; sign-in and registration follow Windows' setting |
+| Settings (H24) | the theme: light, dark, or Windows' setting (the default), saved per account and applied at once; sign-in and registration follow Windows' setting. Under security, the password's change (H28); a screen of its own only for replacing a one-time password (H12) |
 | Modality | enrol, verify (1:1), identify (1:N); before enrolment, verify and identify lead to the message of section 5 |
 | Algorithm choice | one card per algorithm: accuracy, speed, what its template holds and how two templates are compared (H2), in two or three sentences with a small drawing, and whether its threshold is provisional; OpenCV SIFT first, then the learned pore descriptor, Pore SIFT and the fusions (H18); face and voice have one model each, shown on its card without a choice |
 | Fingerprint capture | scanner status, finger and placement guide, "lift the finger" between placements, the captured print and its checks |
@@ -365,3 +365,5 @@ and reported on its own.
 - **H27** Face and voice findings from files, for 1:1 and 1:N only, kept
   normalised and sealed, recorded as the attempt's source and reached only
   through a "more options" menu or by dragging (4, 5.2, 5.3, 6).
+- **H28** The password changed in the settings' security area; a screen of its
+  own only for replacing a one-time password (6).

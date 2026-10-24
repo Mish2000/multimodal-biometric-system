@@ -100,7 +100,8 @@ commits stay in English.
   only network client and keeps the session token; the sandboxed page
   reaches it through a preload bridge with a fixed list of routes. Its
   screens (sign-in, registration, the one-time password's replacement, home,
-  the administration area of increment 1, settings) have a neutral look
+  the administration area of increment 1, settings with the theme and the
+  password (H28)) have a neutral look
   until the design direction and the component library (H22). Every screen
   comes in a light and a dark theme, chosen in the settings (light, dark or
   Windows' setting) and saved per account (H24). For now the server runs on
@@ -145,7 +146,7 @@ SPY -m mbs serve                 # API on 127.0.0.1:55433, PostgreSQL with it
 SPY -m pytest                    # 43 tests against a throwaway cluster, about a minute
 # client/: npm ci (installs from package-lock.json); the app needs the server running
 npm run dev                      # the app with hot reload; MBS_SERVER_URL overrides 127.0.0.1:55433
-npm test                         # 16 tests (Vitest): the server client, the screens with a fake bridge
+npm test                         # 18 tests (Vitest): the server client, the screens with a fake bridge
 npm run typecheck                # TypeScript, main process and page
 npm run build                    # out/: main process, preload and page
 # design prototypes, from the repository root: http://localhost:4173/screen-2/
@@ -268,3 +269,7 @@ SPY -m http.server 4173 --bind 127.0.0.1 --directory local/prototypes
   sealed, with `attempt.source` created in increment 2. The upload stays out
   of sight: a "more options" menu (⋯) beside the device's view, or a file
   dragged onto the window. Screen 4's prototype follows it.
+- 2026-10-24 (H28): the password is changed in the settings' security area,
+  under the theme; the bar no longer links to a password screen, which stays
+  only for replacing a one-time password. 18 client tests pass, and the
+  end-to-end check passes 26 of 26 against a throwaway server.

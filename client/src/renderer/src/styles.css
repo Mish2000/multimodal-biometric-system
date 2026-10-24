@@ -216,6 +216,21 @@ span.error {
 
 /* The frame after sign-in */
 
+/* The areas of the settings (H24, H28), one under the other, with a line between them. */
+.setting {
+  margin-top: 20px;
+}
+
+.setting + .setting {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+
+.setting h2 {
+  margin: 0 0 12px;
+}
+
 .narrow {
   max-width: 26rem;
   margin: 0 auto;

@@ -231,6 +231,32 @@ describe('the settings', () => {
     expect(dana.theme).toBe('dark')
     expect((screen.getByLabelText('כהה') as HTMLInputElement).checked).toBe(true)
   })
+
+  it('change the password in the security area, only with the current one (H28)', async () => {
+    const dana = server.add('dana', 'user')
+    server.current = dana
+    open('/settings')
+    expect(await screen.findByRole('heading', { name: 'אבטחה' })).toBeTruthy()
+    type('הסיסמה הנוכחית', 'not her password')
+    type('סיסמה חדשה', 'a new long password')
+    type('הסיסמה החדשה שוב', 'a new long password')
+    fireEvent.click(screen.getByRole('button', { name: 'החלפת הסיסמה' }))
+    expect(await screen.findByText('הסיסמה שגויה.')).toBeTruthy()
+    expect(dana.password).toBe('dana password 1')
+    type('הסיסמה הנוכחית', 'dana password 1')
+    fireEvent.click(screen.getByRole('button', { name: 'החלפת הסיסמה' }))
+    expect(await screen.findByText('הסיסמה הוחלפה. הכניסות האחרות לחשבון נותקו.')).toBeTruthy()
+    expect(dana.password).toBe('a new long password')
+    expect((screen.getByLabelText('הסיסמה הנוכחית') as HTMLInputElement).value).toBe('')
+  })
+
+  it('have no password screen of their own: the bar has no link, and its old address leads home', async () => {
+    server.current = server.add('dana', 'user')
+    open('/password')
+    expect(await screen.findByRole('heading', { name: 'שלום, dana' })).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'החלפת סיסמה' })).toBeNull()
+    expect(screen.getAllByRole('link').map((link) => link.textContent)).toEqual(['מסך הבית', 'הגדרות'])
+  })
 })
 
 describe('the administration area', () => {

@@ -19,7 +19,6 @@ export function Layout() {
         {!account.must_change_password && (
           <nav>
             {account.role === 'admin' ? <NavLink to="/admin">אזור הניהול</NavLink> : <NavLink to="/" end>מסך הבית</NavLink>}
-            <NavLink to="/password">החלפת סיסמה</NavLink>
             <NavLink to="/settings">הגדרות</NavLink>
           </nav>
         )}

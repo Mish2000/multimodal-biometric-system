@@ -12,7 +12,7 @@
   <img alt=".NET Framework 4.8" src="https://img.shields.io/badge/.NET_Framework-4.8-512BD4?logo=dotnet&logoColor=white">
 </p>
 <p align="center">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-43%20server%20%C2%B7%2016%20client-2EA44F">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-43%20server%20%C2%B7%2018%20client-2EA44F">
   <img alt="Cryptography" src="https://img.shields.io/badge/crypto-AES--256--GCM%20%C2%B7%20Argon2id%20%C2%B7%20HMAC-7C3AED">
   <img alt="Build" src="https://img.shields.io/badge/build-increment%201%20of%206-F59E0B">
 </p>
@@ -189,7 +189,7 @@ python -m pytest           # 43 tests against a throwaway cluster
 cd ../client
 npm ci
 npm run dev                # the app, with the server running
-npm test                   # 16 tests
+npm test                   # 18 tests
 ```
 
 Details: [server](server/README.md) · [scanner](scanner/README.md) · [research methods](methods/README.md)
