@@ -35,8 +35,9 @@ commits stay in English.
   exact versions (NuGet, conda and npm lock files), each the newest stable
   version published at least 14 days earlier (H23).
 - Commits use the repository-local identity (Michael Sirkovich, GitHub
-  noreply) without co-author trailers; the commit-msg hook strips any. Do not
-  push until the researcher asks.
+  noreply) without co-author trailers; the commit-msg hook strips any. Push
+  each commit to GitHub as soon as it is made (the researcher, 2026-10-24),
+  after checking it for assistant traces and local paths.
 
 ## Scanner (H5, H7, H8)
 
