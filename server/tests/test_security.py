@@ -1,4 +1,5 @@
-"""National IDs, sealing, key versions, the key file's permissions and passwords (H3, H14)."""
+"""National IDs, phone numbers, sealing, key versions, the key file's permissions and passwords (H3, H14,
+H29, H30)."""
 
 from __future__ import annotations
 
@@ -8,7 +9,7 @@ import subprocess
 import pytest
 
 from mbs import keys as keyring
-from mbs import national_id, passwords
+from mbs import national_id, passwords, phones
 
 
 @pytest.mark.parametrize("text, expected", [("123456782", "123456782"), ("18", "000000018"),
@@ -71,7 +72,29 @@ def test_passwords_use_argon2id_at_rfc_9106_second_option():
     assert passwords.verify_password("ｃｏｒｒｅｃｔ horse battery staple", phc)  # the same text in NFKC
 
 
-def test_password_length_rule():
-    passwords.check_new("x" * passwords.MIN_LENGTH)
-    with pytest.raises(passwords.WeakPassword):
-        passwords.check_new("x" * (passwords.MIN_LENGTH - 1))
+@pytest.mark.parametrize("password", ["ABCDEFG1", "Abcdefg1", "Passw0rd!", "סיסמהA1x", "Ａbcdefg１",
+                                      "A1" + "x" * 30, "Two words 1"])
+def test_passwords_that_follow_the_rules(password):
+    passwords.check_new(password)
+
+
+@pytest.mark.parametrize("password", ["Abcdef1", "A1" + "x" * 31, "abcdefg1", "ABCDEFGH", "סיסמה12345", ""])
+def test_passwords_that_break_the_rules(password):
+    with pytest.raises(passwords.InvalidPassword):
+        passwords.check_new(password)
+
+
+@pytest.mark.parametrize("text, expected", [("050-123-4567", "+972501234567"), ("0501234567", "+972501234567"),
+                                            ("+972 50 123 4567", "+972501234567"), ("00972-50-1234567", "+972501234567"),
+                                            ("+972 050 123 4567", "+972501234567"), ("(054) 765.4321", "+972547654321"),
+                                            ("\u200e+972-54-765-4321", "+972547654321"), ("０５０１２３４５６７", "+972501234567"),
+                                            ("+1 415 555 0100", "+14155550100")])
+def test_valid_phone_numbers(text, expected):
+    assert phones.normalize(text) == expected
+
+
+@pytest.mark.parametrize("text", ["", "12345", "03-123-4567", "+97231234567", "+0123456789", "+1234567",
+                                  "05012345678", "+1 415 555 01000000000", "050-123-456a", "٠٥٠١٢٣٤٥٦٧"])
+def test_invalid_phone_numbers(text):
+    with pytest.raises(phones.InvalidPhone):
+        phones.normalize(text)

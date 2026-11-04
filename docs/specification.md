@@ -2,7 +2,7 @@
 
 Approved on 2026-10-20 (H11–H20 in `docs/decisions.md`),
 from the draft of 2026-10-19 as revised on 2026-10-20, and amended with his
-approval since (H24–H28). Every decision is cited by its ID; a change needs
+approval since (H24 to H32). Every decision is cited by its ID; a change needs
 the researcher's approval and a new entry in the decision record.
 
 ## 1. Purpose and scope
@@ -12,8 +12,9 @@ username and password, then uses fingerprint (the primary modality), face and
 voice, each with enrolment, 1:1 verification and 1:N identification. For each
 modality the user chooses the algorithm from short descriptions of its
 accuracy, speed and way of working, written for a simple but curious user;
-the interface is in Hebrew, and verification and identification are built as
-an impressive, interactive experience (H6).
+the interface is in English by default, with Hebrew as the other choice
+(H31), and verification and identification are built as an impressive,
+interactive experience (H6).
 
 Out of scope: liveness detection (H6), SD302 images in the system's databases
 (H6), access from other machines or the internet, mobile devices.
@@ -50,7 +51,7 @@ increments). The server listens on 127.0.0.1 only.
 ## 3. Architecture (H4)
 
 ```
-Electron client: React + TypeScript, Hebrew, right to left
+Electron client: React + TypeScript, English or Hebrew (H31)
         │  HTTP and WebSocket on 127.0.0.1, session token
 FastAPI server: Python 3.12, its own environment
         ├── accounts database (PostgreSQL): accounts, sessions, identity link, audit log
@@ -91,7 +92,7 @@ FastAPI server: Python 3.12, its own environment
 
 | Database | Tables |
 | --- | --- |
-| accounts | account (username, email, password hash, role, status, theme (H24), created), national ID HMAC (unique; user accounts only), identity link (encrypted random identifier; user accounts only), session, audit log |
+| accounts | account (username, email, mobile phone (H29), password hash, role, status, theme (H24), language (H31), created), national ID HMAC (unique; user accounts only), identity link (encrypted random identifier; user accounts only), session, password reset link (H32), audit log |
 | biometric | subject (random identifier), algorithm (method, version, threshold), enrolment (subject, modality, finger position, created, replaced), sample (a finding: one encrypted raw capture), template (one per finding and method: encrypted for fingerprints, a vector for face and voice), attempt (section 7) |
 
 The two databases share no key: only the encrypted identity link connects an
@@ -125,7 +126,11 @@ the original file, its metadata nor its name is stored.
   passes, 4 lanes, 64 MiB, 128-bit salt, 256-bit tag); `cryptography`
   documents Argon2id from version 44.0.0 (checked on 2026-10-20; it is tried
   out when the server environment is built). Repeated failed sign-ins are
-  slowed down.
+  slowed down. A new password has 8 to 32 characters with an uppercase
+  letter and a digit (H30).
+- **Password recovery (H32):** links with a random token stored only as its
+  hash, working once and for 30 minutes, with the same answer whether the
+  details belong to an account or not.
 - **Sessions (H14):** random tokens, stored only as their hashes, that expire
   after inactivity.
 - **Face and voice embeddings (H4, H14):** pgvector columns, since pgvector
@@ -242,10 +247,11 @@ SHA-256.
 
 | Screen | Content |
 | --- | --- |
-| Registration | username, email, password, national ID, with the promise that the ID is never stored; an ID already registered is refused |
-| Login | email or username, password; a user account opens the home screen, an administrator account the administration area |
+| Registration | username, email, mobile phone (H29), password with its strength meter (H30), national ID, with the promise that the ID is never stored; an ID already registered is refused; the language switch (H31) |
+| Login | email or username, password; a user account opens the home screen, an administrator account the administration area; the language switch (H31); under the button, the way to password recovery (H32) |
+| Password recovery (H32) | an SMS to the registered mobile phone or an email to the registered address, with the same answer either way; the link opens the screen of the new password, with the strength meter |
 | Home | three modality cards, fingerprint first, with each one's enrolment status |
-| Settings (H24) | the theme: light, dark, or Windows' setting (the default), saved per account and applied at once; sign-in and registration follow Windows' setting. Under security, the password's change (H28); a screen of its own only for replacing a one-time password (H12) |
+| Settings (H24) | the theme: light, dark, or Windows' setting (the default), saved per account and applied at once; sign-in and registration follow Windows' setting. The language, English or Hebrew, saved per account (H31). Under security, the password's change (H28); a screen of its own only for replacing a one-time password (H12) |
 | Modality | enrol, verify (1:1), identify (1:N); before enrolment, verify and identify lead to the message of section 5 |
 | Algorithm choice | one card per algorithm: accuracy, speed, what its template holds and how two templates are compared (H2), in two or three sentences with a small drawing, and whether its threshold is provisional; OpenCV SIFT first, then the learned pore descriptor, Pore SIFT and the fusions (H18); face and voice have one model each, shown on its card without a choice |
 | Fingerprint capture | scanner status, finger and placement guide, "lift the finger" between placements, the captured print and its checks |
@@ -367,3 +373,12 @@ and reported on its own.
   through a "more options" menu or by dragging (4, 5.2, 5.3, 6).
 - **H28** The password changed in the settings' security area; a screen of its
   own only for replacing a one-time password (6).
+- **H29** The mobile phone at registration, in E.164 form and unique (4, 6).
+- **H30** Passwords of 8 to 32 characters with an uppercase letter and a
+  digit, the strength meter with four levels, and the eye on every password
+  field (4, 6).
+- **H31** English by default and Hebrew, switched before sign-in and in the
+  settings, saved per account (1, 3, 4, 6).
+- **H32** Password recovery by SMS or email with a single-use link of 30
+  minutes, opened in the client through `mbs://`, through a local outbox
+  until a provider is chosen (4, 6).

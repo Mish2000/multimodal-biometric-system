@@ -15,6 +15,8 @@
   --ok: #1a7f37;
   --ok-bg: #e9f6ec;
   --notice-bg: #eaf1fb;
+  --weak: #c2410c;
+  --medium: #a16207;
   --radius: 8px;
   font-family: 'Segoe UI', system-ui, sans-serif;
   font-size: 15px;
@@ -37,6 +39,8 @@
     --ok: #86d29a;
     --ok-bg: #183021;
     --notice-bg: #1c2a3d;
+    --weak: #fdba74;
+    --medium: #fcd34d;
   }
 }
 
@@ -171,6 +175,172 @@ form.inline input {
 
 .choices input {
   width: auto;
+}
+
+.choices + .field {
+  margin-top: 1rem;
+}
+
+/* The eye of a password field (H30): at the end of the line in either direction, while the password itself
+   is typed left to right, so its padding follows the page's direction rather than the input's. */
+.reveal {
+  position: relative;
+}
+
+.reveal input {
+  padding-right: 2.6rem;
+}
+
+.reveal .eye {
+  position: absolute;
+  top: 50%;
+  right: 0.3rem;
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  transform: translateY(-50%);
+}
+
+.reveal .eye:hover {
+  color: var(--text);
+}
+
+.reveal svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+:root[dir='rtl'] .reveal input {
+  padding-right: 0.65rem;
+  padding-left: 2.6rem;
+}
+
+:root[dir='rtl'] .reveal .eye {
+  right: auto;
+  left: 0.3rem;
+}
+
+form.inline .reveal {
+  width: 12rem;
+}
+
+form.inline .reveal input {
+  width: 100%;
+}
+
+/* The strength meter (H30): four bars for the four levels, then the rules. */
+.strength {
+  margin-top: 0.4rem;
+  font-size: 0.88rem;
+}
+
+.meter .bars {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+
+.meter .bars span {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--line);
+}
+
+.meter p {
+  margin: 0.3rem 0 0;
+}
+
+.meter.invalid .bars span:nth-child(-n + 1) {
+  background: var(--error);
+}
+
+.meter.weak .bars span:nth-child(-n + 2) {
+  background: var(--weak);
+}
+
+.meter.medium .bars span:nth-child(-n + 3) {
+  background: var(--medium);
+}
+
+.meter.strong .bars span {
+  background: var(--ok);
+}
+
+.meter.invalid strong {
+  color: var(--error);
+}
+
+.meter.weak strong {
+  color: var(--weak);
+}
+
+.meter.medium strong {
+  color: var(--medium);
+}
+
+.meter.strong strong {
+  color: var(--ok);
+}
+
+.rules {
+  margin: 0.4rem 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+}
+
+.rules li {
+  display: flex;
+  gap: 0.45rem;
+}
+
+.rules .mark {
+  display: inline-block;
+  width: 1ch;
+  text-align: center;
+}
+
+.rules li.met {
+  color: var(--ok);
+}
+
+.rules li.missing {
+  color: var(--error);
+}
+
+/* The language switch before sign-in (H31), at the end of the first line. */
+.language-switch {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.9rem;
+  margin-bottom: 1.5rem;
+}
+
+.language-switch button.current {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text);
+  font-weight: 600;
+  cursor: default;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 /* Messages */

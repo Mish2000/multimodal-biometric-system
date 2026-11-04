@@ -1,13 +1,14 @@
 import { useState, type FormEvent } from 'react'
 import type { Account } from '../../shared/bridge'
-import { Field } from './Field'
+import { PasswordField } from './PasswordField'
 import { useSession } from './session'
 import { errorText } from './texts'
 
 // The password's replacement, shared by the settings' security area (H28) and the one-time password's own
-// screen (H12). The server signs the account's other sessions out when its password changes.
+// screen (H12), with the strength meter on the new password (H30). The server signs the account's other
+// sessions out when its password changes.
 export function PasswordForm({ oneTime, onChanged }: { oneTime: boolean; onChanged: (account: Account) => void }) {
-  const { call } = useSession()
+  const { call, t } = useSession()
   const [current, setCurrent] = useState('')
   const [next, setNext] = useState('')
   const [repeat, setRepeat] = useState('')
@@ -19,7 +20,7 @@ export function PasswordForm({ oneTime, onChanged }: { oneTime: boolean; onChang
     event.preventDefault()
     setDone(false)
     if (next !== repeat) {
-      setError('שתי הסיסמאות החדשות לא זהות.')
+      setError(t.passwordsDiffer)
       return
     }
     setBusy(true)
@@ -27,7 +28,7 @@ export function PasswordForm({ oneTime, onChanged }: { oneTime: boolean; onChang
     const changed = await call('changePassword', { current, new: next })
     if (!changed.ok) {
       setBusy(false)
-      setError(errorText(changed))
+      setError(errorText(changed, t))
       return
     }
     const me = await call<{ account: Account }>('me')
@@ -43,24 +44,14 @@ export function PasswordForm({ oneTime, onChanged }: { oneTime: boolean; onChang
 
   return (
     <form onSubmit={submit} noValidate>
-      <Field
-        label={oneTime ? 'הסיסמה החד-פעמית' : 'הסיסמה הנוכחית'}
-        type="password"
+      <PasswordField
+        label={oneTime ? t.oneTimePassword : t.currentPassword}
         value={current}
         onChange={setCurrent}
         autoComplete="current-password"
-        dir="ltr"
       />
-      <Field
-        label="סיסמה חדשה"
-        type="password"
-        value={next}
-        onChange={setNext}
-        autoComplete="new-password"
-        dir="ltr"
-        hint="לפחות 12 תווים."
-      />
-      <Field label="הסיסמה החדשה שוב" type="password" value={repeat} onChange={setRepeat} autoComplete="new-password" dir="ltr" />
+      <PasswordField label={t.newPassword} value={next} onChange={setNext} autoComplete="new-password" meter />
+      <PasswordField label={t.repeatPassword} value={repeat} onChange={setRepeat} autoComplete="new-password" />
       {error && (
         <p className="error" role="alert">
           {error}
@@ -68,11 +59,11 @@ export function PasswordForm({ oneTime, onChanged }: { oneTime: boolean; onChang
       )}
       {done && (
         <p className="ok" role="status">
-          הסיסמה הוחלפה. הכניסות האחרות לחשבון נותקו.
+          {t.passwordChanged}
         </p>
       )}
       <button type="submit" disabled={busy || !current || !next || !repeat}>
-        {busy ? 'שומרים…' : oneTime ? 'שמירה' : 'החלפת הסיסמה'}
+        {busy ? t.saving : oneTime ? t.save : t.changePassword}
       </button>
     </form>
   )

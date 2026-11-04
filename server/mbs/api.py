@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import BackgroundTasks, Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
@@ -15,6 +15,7 @@ from .accounts import AccountError, SignedIn, Throttle
 from .db import Databases
 from .keys import Keys
 from .models import ADMIN, USER
+from .outbox import Outbox
 
 PUBLIC = "public"
 
@@ -56,12 +57,30 @@ def signed_in(request: Request) -> SignedIn:
 class Registration(BaseModel):
     username: str = Field(max_length=64)
     email: str = Field(max_length=320)
+    phone: str = Field(max_length=32)
     password: str = Field(max_length=1024)
     national_id: str = Field(max_length=32)
+    language: str = Field("en", max_length=8)  # the registration screen's (H31)
 
 
 class Credentials(BaseModel):
     login: str = Field(max_length=320)
+    password: str = Field(max_length=1024)
+    language: str | None = Field(None, max_length=8)  # only when chosen on the sign-in screen (H31)
+
+
+class ResetRequest(BaseModel):
+    channel: str = Field(max_length=8)
+    destination: str = Field(max_length=320)  # the phone number or the email address
+    language: str = Field("en", max_length=8)
+
+
+class ResetLink(BaseModel):
+    token: str = Field(max_length=64)
+
+
+class NewPassword(BaseModel):
+    token: str = Field(max_length=64)
     password: str = Field(max_length=1024)
 
 
@@ -80,6 +99,10 @@ class ThemeChange(BaseModel):
     theme: str = Field(max_length=16)
 
 
+class LanguageChange(BaseModel):
+    language: str = Field(max_length=8)
+
+
 class StatusChange(BaseModel):
     password: str = Field(max_length=1024)
     status: str = Field(max_length=16)
@@ -87,10 +110,11 @@ class StatusChange(BaseModel):
 
 def account_json(account: SignedIn) -> dict:
     return {"id": str(account.id), "username": account.username, "email": account.email, "role": account.role,
-            "must_change_password": account.must_change_password, "theme": account.theme}
+            "must_change_password": account.must_change_password, "theme": account.theme,
+            "language": account.language}
 
 
-def create_app(databases: Databases, keys: Keys) -> FastAPI:
+def create_app(databases: Databases, keys: Keys, outbox: Outbox) -> FastAPI:
     # The policy runs for every route of the application, also for routes added later.
     app = FastAPI(title="Multimodal biometric system", docs_url=None, redoc_url=None, openapi_url=None,
                   dependencies=[Depends(policy)])
@@ -109,14 +133,34 @@ def create_app(databases: Databases, keys: Keys) -> FastAPI:
     @app.post("/api/register", status_code=201)
     @allow(PUBLIC)
     def register(body: Registration) -> dict:
-        account = accounts.register(databases, keys, body.username, body.email, body.password, body.national_id)
+        account = accounts.register(databases, keys, body.username, body.email, body.phone, body.password,
+                                    body.national_id, body.language)
         return {"account": account_json(account)}
 
     @app.post("/api/login")
     @allow(PUBLIC)
     def login(body: Credentials) -> dict:
-        token, account = accounts.sign_in(databases, app.state.throttle, body.login, body.password)
+        token, account = accounts.sign_in(databases, app.state.throttle, body.login, body.password, body.language)
         return {"token": token, "account": account_json(account)}
+
+    # Password recovery while signed out (H32). The request answers the same whether a message is sent
+    # or not, and the message is written after the answer, so its time tells nothing either.
+    @app.post("/api/password-reset", status_code=202)
+    @allow(PUBLIC)
+    def request_reset(body: ResetRequest, background: BackgroundTasks) -> None:
+        message = accounts.request_reset(databases, body.channel, body.destination, body.language)
+        if message is not None:
+            background.add_task(outbox.send, message)
+
+    @app.post("/api/password-reset/check", status_code=204)
+    @allow(PUBLIC)
+    def check_reset(body: ResetLink) -> None:
+        accounts.check_reset(databases, body.token)
+
+    @app.post("/api/password-reset/complete", status_code=204)
+    @allow(PUBLIC)
+    def complete_reset(body: NewPassword) -> None:
+        accounts.complete_reset(databases, app.state.throttle, body.token, body.password)
 
     @app.post("/api/logout", status_code=204)
     @allow(USER, ADMIN, during_password_change=True)
@@ -137,6 +181,11 @@ def create_app(databases: Databases, keys: Keys) -> FastAPI:
     @allow(USER, ADMIN)
     def change_theme(body: ThemeChange, account: SignedIn = Depends(signed_in)) -> None:
         accounts.set_theme(databases, account.id, body.theme)
+
+    @app.post("/api/me/language", status_code=204)
+    @allow(USER, ADMIN)
+    def change_language(body: LanguageChange, account: SignedIn = Depends(signed_in)) -> None:
+        accounts.set_language(databases, account.id, body.language)
 
     @app.get("/api/admin/accounts")
     @allow(ADMIN)

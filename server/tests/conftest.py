@@ -15,6 +15,7 @@ from mbs import keys as keyring
 from mbs import postgres
 from mbs.api import create_app
 from mbs.db import migrate, open_databases
+from mbs.outbox import Outbox
 
 
 def free_port() -> int:
@@ -71,6 +72,11 @@ def databases(cluster):
 
 
 @pytest.fixture
-def client(databases, keys):
-    with TestClient(create_app(databases, keys)) as test_client:
+def outbox(tmp_path):
+    return Outbox(tmp_path / "outbox")
+
+
+@pytest.fixture
+def client(databases, keys, outbox):
+    with TestClient(create_app(databases, keys, outbox)) as test_client:
         yield test_client

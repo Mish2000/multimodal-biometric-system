@@ -7,10 +7,11 @@ interface FieldProps {
   type?: HTMLInputTypeAttribute
   autoComplete?: string
   dir?: 'ltr' | 'rtl' | 'auto'
-  inputMode?: 'text' | 'numeric' | 'email'
+  inputMode?: 'text' | 'numeric' | 'email' | 'tel'
   hint?: string
 }
 
+// A labelled text field; passwords use PasswordField, which adds the eye (H30).
 export function Field({ label, value, onChange, type = 'text', autoComplete, dir = 'auto', inputMode, hint }: FieldProps) {
   const id = useId()
   return (
@@ -24,9 +25,14 @@ export function Field({ label, value, onChange, type = 'text', autoComplete, dir
         autoComplete={autoComplete}
         inputMode={inputMode}
         spellCheck={false}
+        aria-describedby={hint ? `${id}-hint` : undefined}
         onChange={(event) => onChange(event.target.value)}
       />
-      {hint && <p className="hint">{hint}</p>}
+      {hint && (
+        <p className="hint" id={`${id}-hint`}>
+          {hint}
+        </p>
+      )}
     </div>
   )
 }

@@ -2,11 +2,13 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 import type { Account } from '../../../shared/bridge'
 import { Field } from '../Field'
+import { LanguageSwitch } from '../LanguageSwitch'
+import { PasswordField } from '../PasswordField'
 import { useSession } from '../session'
 import { errorText } from '../texts'
 
 export function SignIn() {
-  const { call, signedIn, notice } = useSession()
+  const { call, signedIn, notice, t, chosenLanguage } = useSession()
   const [login, setLogin] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -26,11 +28,12 @@ export function SignIn() {
     event.preventDefault()
     setBusy(true)
     setError('')
-    const result = await call<{ account: Account }>('login', { login, password })
+    // A language chosen on this screen becomes the account's (H31).
+    const result = await call<{ account: Account }>('login', { login, password, language: chosenLanguage() })
     setBusy(false)
     if (result.ok) signedIn(result.data.account)
     else {
-      setError(errorText(result))
+      setError(errorText(result, t))
       setPassword('')
       if (result.error === 'server_unreachable') setServer('down')
     }
@@ -38,8 +41,9 @@ export function SignIn() {
 
   return (
     <main className="narrow">
-      <h1>מערכת הזיהוי</h1>
-      <p className="lead">כניסה עם שם משתמש או אימייל.</p>
+      <LanguageSwitch />
+      <h1>{t.appName}</h1>
+      <p className="lead">{t.signInLead}</p>
       {notice && (
         <p className="notice" role="status">
           {notice}
@@ -47,27 +51,30 @@ export function SignIn() {
       )}
       {server === 'down' && (
         <p className="error" role="alert">
-          השרת לא פועל. צריך להפעיל אותו, ואז{' '}
+          {t.serverDown.before}
           <button type="button" className="link" onClick={() => void checkServer()}>
-            לבדוק שוב
+            {t.serverDown.action}
           </button>
-          .
+          {t.serverDown.after}
         </p>
       )}
       <form onSubmit={submit} noValidate>
-        <Field label="שם משתמש או אימייל" value={login} onChange={setLogin} autoComplete="username" />
-        <Field label="סיסמה" type="password" value={password} onChange={setPassword} autoComplete="current-password" dir="ltr" />
+        <Field label={t.login} value={login} onChange={setLogin} autoComplete="username" />
+        <PasswordField label={t.password} value={password} onChange={setPassword} autoComplete="current-password" />
         {error && (
           <p className="error" role="alert">
             {error}
           </p>
         )}
         <button type="submit" disabled={busy || !login || !password}>
-          {busy ? 'נכנסים…' : 'כניסה'}
+          {busy ? t.signingIn : t.signIn}
         </button>
       </form>
       <p className="aside">
-        אין לך חשבון? <Link to="/register">להרשמה</Link>
+        <Link to="/forgot-password">{t.forgotPassword}</Link>
+      </p>
+      <p className="aside">
+        {t.noAccount} <Link to="/register">{t.toRegister}</Link>
       </p>
     </main>
   )

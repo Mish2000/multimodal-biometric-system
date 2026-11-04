@@ -430,3 +430,60 @@ present. He left the open questions to the specification.
 
 - Wording of process notes edited for publication; no decision, design or
   result changed.
+
+## 2026-11-04: sign-up, sign-in and password recovery
+
+Approved on 2026-11-04, from the supervisor's meeting of that day, before
+increment 2 starts: the sign-up and sign-in screens are brought to what a
+current product offers, and nothing else changes.
+
+- **H29** Registration asks for a mobile phone number, where the SMS of H32
+  goes. The server keeps it in E.164 form (a plus sign and 8 to 15 digits),
+  unique like the email. A number written the national way (05X-XXXXXXX) is
+  taken as an Israeli mobile, as the national ID is Israeli too (H3), and an
+  Israeli number in international form must be a mobile as well.
+  Administrator accounts have no phone (H12), and accounts registered
+  before H29 have none, so they recover their password by email only.
+- **H30** Replacing the password parameters of H23 (12 to 256 characters,
+  no composition rules): a password has 8 to 32 characters after NFKC
+  normalisation, with at least one uppercase letter and at least one digit.
+  Lowercase letters and other characters (punctuation, symbols, spaces) are
+  optional and make it stronger. Every new password (registration, the
+  settings' security area, the replacement of a one-time password and
+  recovery) shows a meter that changes with every character typed, in the
+  supervisor's four levels: invalid (a rule is broken), weak (neither
+  optional kind), medium (one of the two) and strong (both); letters without
+  case, such as Hebrew ones, count as neither. Under it the three rules and
+  the two options are listed and marked. The server checks the rules; the
+  meter is the client's alone. Every password field has an eye that shows or
+  hides what is typed. Passwords set before H30 keep working until they are
+  changed.
+- **H31** Amending section 1 of the specification, where the interface was
+  Hebrew: the client is in English by default, with Hebrew, right to left,
+  as the other choice. Before sign-in, the sign-in and registration screens
+  have a switch. Registration saves the screen's language in the account; a
+  sign-in saves a language chosen on the sign-in screen, and without one the
+  account keeps its own. Signed in, the settings change it, like the theme
+  (H24). After sign-out the screens stay in the last language, and a new
+  start of the client is in English.
+- **H32** An account that is signed out can recover its password. A line
+  under the sign-in button leads to the recovery screen, where the user
+  chooses an SMS to the registered mobile phone or an email to the
+  registered address, and types that number or address. As OWASP's Forgot
+  Password Cheat Sheet advises, the answer is the same whether the details
+  belong to an account or not; the link carries a random 256-bit token,
+  stored only as its SHA-256, that works once and for 30 minutes, and only
+  an account's newest link works; an account gets at most one message a
+  minute; the new password follows H30, with its meter; afterwards every
+  session of the account ends, and the user signs in as usual. The link is
+  the client's own type, `mbs://reset-password`, which the client registers
+  for the current Windows user, so a click opens the client at the screen
+  of the new password; the main process keeps the link's token as it keeps
+  the session's (H26). The message is in the language of the screen that
+  asked for it, and so is that screen. No SMS provider or mail server is
+  chosen yet (the researcher's choice of 2026-11-04): every message is
+  written as an HTML page to the git-ignored `local/outbox/`, and the
+  server's window names each new file. Real sending can later replace the
+  outbox without changing the screens; a link opened on a phone cannot reach
+  this system, whose server listens on 127.0.0.1 only (H11), so a real SMS
+  will need a code or a reachable address instead.

@@ -3,7 +3,8 @@ import { ServerClient } from './server'
 
 const BASE = 'http://127.0.0.1:55433'
 const ID = '0b0f6b9e-3c55-4d0e-9a51-4f0f2a7f1c11'
-const ACCOUNT = { id: ID, username: 'dana', email: 'dana@example.com', role: 'user', must_change_password: false, theme: 'system' }
+const ACCOUNT = { id: ID, username: 'dana', email: 'dana@example.com', role: 'user', must_change_password: false, theme: 'system', language: 'en' }
+const RESET_TOKEN = 'k3J9_xQ-2mZ8vB1nL0pR7sT4uW6yA5cD9eF2gH3iJ4k'
 
 function reply(status: number, body?: unknown, headers: Record<string, string> = {}): Response {
   return new Response(body === undefined ? null : JSON.stringify(body), {
@@ -81,6 +82,23 @@ describe('ServerClient', () => {
     await server.call('login', { login: 'dana', password: 'a long password' })
     expect(await server.call('logout')).toMatchObject({ ok: false, error: 'server_unreachable' })
     expect(server.signedIn).toBe(false)
+  })
+
+  it("adds a reset link's token to the reset routes, and the page learns only that the link came (H32)", async () => {
+    const { request, server } = client()
+    expect(await server.call('checkResetLink')).toEqual({ ok: false, status: 0, error: 'invalid_reset_link' })
+    expect(request).not.toHaveBeenCalled()
+    server.openLink({ token: RESET_TOKEN, language: 'he' })
+    expect(server.takeLink()).toEqual({ kind: 'reset-password', language: 'he' })
+    expect(server.takeLink()).toBeNull()
+    request.mockResolvedValueOnce(reply(204)).mockResolvedValueOnce(reply(204))
+    expect(await server.call('checkResetLink')).toEqual({ ok: true, data: null })
+    expect(sent(request, 0)).toMatchObject({ url: `${BASE}/api/password-reset/check`, body: JSON.stringify({ token: RESET_TOKEN }) })
+    await server.call('completeReset', { password: 'A new one 2027', token: 'from the page' })
+    expect(sent(request, 1).body).toBe(JSON.stringify({ password: 'A new one 2027', token: RESET_TOKEN }))
+    // A link works once: after the new password the token is gone.
+    expect(await server.call('completeReset', { password: 'A new one 2027' })).toMatchObject({ error: 'invalid_reset_link' })
+    expect(request).toHaveBeenCalledTimes(2)
   })
 
   it("passes the server's error codes on and names its own", async () => {

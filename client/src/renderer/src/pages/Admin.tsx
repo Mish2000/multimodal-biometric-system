@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Field } from '../Field'
+import { PasswordField, RevealInput } from '../PasswordField'
 import { useSession } from '../session'
-import { AUDIT_ACTIONS, errorText } from '../texts'
+import { errorText, type Texts } from '../texts'
 
 interface AccountRow {
   id: string
@@ -19,15 +20,16 @@ interface AuditRow {
   target: string
 }
 
-const when = (iso: string) => new Date(iso).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' })
+const when = (iso: string, t: Texts) =>
+  new Date(iso).toLocaleString(t.dateLocale, { dateStyle: 'short', timeStyle: 'short' })
 
 // The administration area of increment 1 (H12): accounts, new administrators, disabling, the audit log.
 // Every change asks for the administrator's own password again.
 export function Admin() {
-  const { account, call } = useSession()
+  const { account, call, t } = useSession()
   const [accounts, setAccounts] = useState<AccountRow[] | null>(null)
   const [audit, setAudit] = useState<AuditRow[] | null>(null)
-  const [error, setError] = useState('')
+  const [error, setError] = useState<Parameters<typeof errorText>[0] | null>(null)
 
   const load = useCallback(async () => {
     const [list, log] = await Promise.all([
@@ -35,7 +37,7 @@ export function Admin() {
       call<{ entries: AuditRow[] }>('audit'),
     ])
     if (list.ok) setAccounts(list.data.accounts)
-    else setError(errorText(list))
+    else setError(list)
     if (log.ok) setAudit(log.data.entries)
   }, [call])
 
@@ -45,25 +47,25 @@ export function Admin() {
 
   return (
     <section>
-      <h1>אזור הניהול</h1>
+      <h1>{t.administration}</h1>
       {error && (
         <p className="error" role="alert">
-          {error}
+          {errorText(error, t)}
         </p>
       )}
-      <h2>חשבונות</h2>
+      <h2>{t.accounts}</h2>
       {accounts === null ? (
-        <p className="aside">טוען…</p>
+        <p className="aside">{t.loading}</p>
       ) : (
         <table>
           <thead>
             <tr>
-              <th>שם משתמש</th>
-              <th>אימייל</th>
-              <th>תפקיד</th>
-              <th>מצב</th>
-              <th>נוצר</th>
-              <th>פעולה</th>
+              <th>{t.username}</th>
+              <th>{t.email}</th>
+              <th>{t.role}</th>
+              <th>{t.status}</th>
+              <th>{t.created}</th>
+              <th>{t.action}</th>
             </tr>
           </thead>
           <tbody>
@@ -74,27 +76,27 @@ export function Admin() {
         </table>
       )}
       <NewAdministrator created={load} />
-      <h2>יומן הביקורת</h2>
+      <h2>{t.auditLog}</h2>
       {audit === null ? (
-        <p className="aside">טוען…</p>
+        <p className="aside">{t.loading}</p>
       ) : (
         <table>
           <thead>
             <tr>
-              <th>מתי</th>
-              <th>מנהל</th>
-              <th>פעולה</th>
-              <th>על מה</th>
+              <th>{t.when}</th>
+              <th>{t.administrator}</th>
+              <th>{t.action}</th>
+              <th>{t.target}</th>
             </tr>
           </thead>
           <tbody>
             {audit.map((entry, index) => (
               <tr key={index}>
-                <td>{when(entry.at)}</td>
+                <td>{when(entry.at, t)}</td>
                 <td>
                   <bdi>{entry.administrator}</bdi>
                 </td>
-                <td>{AUDIT_ACTIONS[entry.action] ?? entry.action}</td>
+                <td>{t.auditActions[entry.action] ?? entry.action}</td>
                 <td>
                   <bdi>{entry.target}</bdi>
                 </td>
@@ -108,7 +110,7 @@ export function Admin() {
 }
 
 function AccountLine({ row, self, changed }: { row: AccountRow; self: boolean; changed(): Promise<void> }) {
-  const { call } = useSession()
+  const { call, t } = useSession()
   const [asking, setAsking] = useState(false)
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -122,7 +124,7 @@ function AccountLine({ row, self, changed }: { row: AccountRow; self: boolean; c
     if (result.ok) {
       setAsking(false)
       await changed()
-    } else setError(errorText(result))
+    } else setError(errorText(result, t))
   }
 
   return (
@@ -131,27 +133,26 @@ function AccountLine({ row, self, changed }: { row: AccountRow; self: boolean; c
         <bdi>{row.username}</bdi>
       </td>
       <td dir="ltr">{row.email}</td>
-      <td>{row.role === 'admin' ? 'מנהל' : 'משתמש'}</td>
-      <td>{row.status === 'active' ? 'פעיל' : 'מושבת'}</td>
-      <td>{when(row.created_at)}</td>
+      <td>{t.roles[row.role]}</td>
+      <td>{t.statuses[row.status]}</td>
+      <td>{when(row.created_at, t)}</td>
       <td>
         {self ? (
-          <span className="aside">החשבון שלך</span>
+          <span className="aside">{t.yourAccount}</span>
         ) : asking ? (
           <form className="inline" onSubmit={apply} noValidate>
-            <input
-              type="password"
-              dir="ltr"
-              aria-label="הסיסמה שלך, לאישור"
-              placeholder="הסיסמה שלך"
+            <RevealInput
+              label={t.confirmPassword}
+              placeholder={t.yourPassword}
               value={password}
-              onChange={(event) => setPassword(event.target.value)}
+              onChange={setPassword}
+              autoComplete="current-password"
             />
             <button type="submit" disabled={!password}>
-              {next === 'disabled' ? 'השבתה' : 'הפעלה'}
+              {next === 'disabled' ? t.disable : t.enable}
             </button>
             <button type="button" className="link" onClick={() => setAsking(false)}>
-              ביטול
+              {t.cancel}
             </button>
             {error && (
               <span className="error" role="alert">
@@ -161,7 +162,7 @@ function AccountLine({ row, self, changed }: { row: AccountRow; self: boolean; c
           </form>
         ) : (
           <button type="button" className="secondary" onClick={() => setAsking(true)}>
-            {next === 'disabled' ? 'השבתה…' : 'הפעלה…'}
+            {next === 'disabled' ? t.disableAsk : t.enableAsk}
           </button>
         )}
       </td>
@@ -170,7 +171,7 @@ function AccountLine({ row, self, changed }: { row: AccountRow; self: boolean; c
 }
 
 function NewAdministrator({ created }: { created(): Promise<void> }) {
-  const { call } = useSession()
+  const { call, t } = useSession()
   const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -187,7 +188,7 @@ function NewAdministrator({ created }: { created(): Promise<void> }) {
     })
     setPassword('')
     if (!result.ok) {
-      setError(errorText(result))
+      setError(errorText(result, t))
       return
     }
     setOneTime({ username: result.data.account.username, password: result.data.one_time_password })
@@ -198,19 +199,22 @@ function NewAdministrator({ created }: { created(): Promise<void> }) {
 
   return (
     <>
-      <h2>מנהל חדש</h2>
+      <h2>{t.newAdministrator}</h2>
       {oneTime && (
         <p className="ok" role="status">
-          נוצר המנהל <bdi>{oneTime.username}</bdi>. הסיסמה החד-פעמית שלו, שמוצגת רק עכשיו:{' '}
-          <code dir="ltr">{oneTime.password}</code>. בכניסה הראשונה הוא יבחר סיסמה משלו.
+          {t.administratorCreated.before}
+          <bdi>{oneTime.username}</bdi>
+          {t.administratorCreated.middle}
+          <code dir="ltr">{oneTime.password}</code>
+          {t.administratorCreated.after}
         </p>
       )}
       <form className="row" onSubmit={submit} noValidate>
-        <Field label="שם משתמש" value={username} onChange={setUsername} autoComplete="off" />
-        <Field label="אימייל" type="email" value={email} onChange={setEmail} autoComplete="off" dir="ltr" />
-        <Field label="הסיסמה שלך, לאישור" type="password" value={password} onChange={setPassword} autoComplete="current-password" dir="ltr" />
+        <Field label={t.username} value={username} onChange={setUsername} autoComplete="off" />
+        <Field label={t.email} type="email" value={email} onChange={setEmail} autoComplete="off" dir="ltr" />
+        <PasswordField label={t.confirmPassword} value={password} onChange={setPassword} autoComplete="current-password" />
         <button type="submit" disabled={!username || !email || !password}>
-          יצירה
+          {t.create}
         </button>
       </form>
       {error && (

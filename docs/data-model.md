@@ -4,7 +4,8 @@ Approved on 2026-10-21 (H25 in `docs/decisions.md`): the
 exact tables of the two databases of `docs/specification.md` (section 4),
 with every column, type, key and sealed value, and how one person holds many
 findings. Types are PostgreSQL 16's; every `uuid` is random (version 4). The
-accounts database, with the account's `theme` column (H24, H26), and the
+accounts database, with the account's `theme` column (H24, H26), its `phone`
+and `language` columns and the `password_reset` table (H29, H31, H32), and the
 biometric `subject` table exist (H23); the other biometric tables are built
 in increments 2 to 6 (H20).
 
@@ -40,6 +41,7 @@ in increments 2 to 6 (H20).
 erDiagram
     account ||--o| identity_link : "user accounts only"
     account ||--o{ session : "signs in"
+    account ||--o{ password_reset : "recovers its password"
     account ||--o{ audit_log : "administrator"
     account {
         uuid id PK
@@ -47,11 +49,13 @@ erDiagram
         varchar username_key UK
         varchar email
         varchar email_key UK
+        varchar phone UK "E.164, user accounts only"
         varchar password_hash "Argon2id"
         varchar role "user or admin"
         varchar status "active or disabled"
         boolean must_change_password
         varchar theme "system, light or dark"
+        varchar language "en or he"
         timestamptz created_at
     }
     identity_link {
@@ -64,6 +68,13 @@ erDiagram
         uuid account_id FK
         timestamptz created_at
         timestamptz last_seen_at
+        timestamptz expires_at
+    }
+    password_reset {
+        bytea token_hash PK
+        uuid account_id FK
+        varchar channel "sms or email"
+        timestamptz created_at
         timestamptz expires_at
     }
     audit_log {
@@ -84,11 +95,13 @@ erDiagram
 | `username_key` | `varchar(32)` | unique: the case-folded username, used to sign in |
 | `email` | `varchar(254)` | as typed |
 | `email_key` | `varchar(254)` | unique: the case-folded email |
+| `phone` | `varchar(16)` | unique when present: the mobile phone in E.164 form, a plus sign and 8 to 15 digits (H29); empty for administrators and for accounts registered before H29 |
 | `password_hash` | `varchar(200)` | Argon2id as a PHC string (H14) |
 | `role` | `varchar(8)` | `user` or `admin` |
 | `status` | `varchar(8)` | `active` or `disabled`; a disabled account cannot sign in and leaves the 1:N gallery |
 | `must_change_password` | `boolean` | true while an administrator's one-time password is unchanged |
 | `theme` | `varchar(8)` | `system` (the default, Windows' setting), `light` or `dark` (H24) |
+| `language` | `varchar(2)` | `en` (the default) or `he` (H31) |
 | `created_at` | `timestamptz` | |
 
 ### `identity_link`: user accounts only (H3)
@@ -108,6 +121,16 @@ erDiagram
 | `created_at` | `timestamptz` | |
 | `last_seen_at` | `timestamptz` | the session ends 30 minutes after it (H23) |
 | `expires_at` | `timestamptz` | 12 hours after `created_at`; the session ends then at the latest |
+
+### `password_reset`: a link to choose a new password (H32)
+
+| Column | Type | Rules |
+| --- | --- | --- |
+| `token_hash` | `bytea` (32) | primary key: SHA-256 of the link's random token, which is never stored |
+| `account_id` | `uuid` | references `account.id`, deleted with it; indexed |
+| `channel` | `varchar(8)` | `sms` or `email`: where the link was sent |
+| `created_at` | `timestamptz` | an account gets at most one link a minute, and a new one replaces the older |
+| `expires_at` | `timestamptz` | 30 minutes after `created_at`; the row is deleted once the link is used |
 
 ### `audit_log`: administrative changes (H12)
 

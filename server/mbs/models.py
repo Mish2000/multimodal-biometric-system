@@ -17,6 +17,8 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 USER, ADMIN = "user", "admin"
 ACTIVE, DISABLED = "active", "disabled"
 THEMES = ("system", "light", "dark")  # the account's look: Windows' setting, light or dark (H24)
+LANGUAGES = ("en", "he")  # the client's language: English, the default, or Hebrew (H31)
+SMS, EMAIL = "sms", "email"  # where a link to reset a password is sent (H32)
 
 
 class AccountsBase(DeclarativeBase):
@@ -35,6 +37,7 @@ class Account(AccountsBase):
         CheckConstraint("role IN ('user', 'admin')", name="account_role"),
         CheckConstraint("status IN ('active', 'disabled')", name="account_status"),
         CheckConstraint("theme IN ('system', 'light', 'dark')", name="account_theme"),
+        CheckConstraint("language IN ('en', 'he')", name="account_language"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
@@ -42,11 +45,13 @@ class Account(AccountsBase):
     username_key: Mapped[str] = mapped_column(String(32), unique=True)  # case-folded, for uniqueness and sign-in
     email: Mapped[str] = mapped_column(String(254))
     email_key: Mapped[str] = mapped_column(String(254), unique=True)
+    phone: Mapped[str | None] = mapped_column(String(16), unique=True)  # E.164; user accounts only (H29)
     password_hash: Mapped[str] = mapped_column(String(200))  # Argon2id, PHC string
     role: Mapped[str] = mapped_column(String(8))
     status: Mapped[str] = mapped_column(String(8))
     must_change_password: Mapped[bool] = mapped_column(Boolean)
     theme: Mapped[str] = mapped_column(String(8), server_default="system")
+    language: Mapped[str] = mapped_column(String(2), server_default="en")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
@@ -69,6 +74,20 @@ class Session(AccountsBase):
     account_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("account.id", ondelete="CASCADE"), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class PasswordReset(AccountsBase):
+    """A link that lets a signed-out account choose a new password (H32). As with sessions, only the
+    token's SHA-256 is stored; a link works once, for 30 minutes, and only an account's newest one works."""
+
+    __tablename__ = "password_reset"
+    __table_args__ = (CheckConstraint("channel IN ('sms', 'email')", name="password_reset_channel"),)
+
+    token_hash: Mapped[bytes] = mapped_column(LargeBinary(32), primary_key=True)
+    account_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("account.id", ondelete="CASCADE"), index=True)
+    channel: Mapped[str] = mapped_column(String(8))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 

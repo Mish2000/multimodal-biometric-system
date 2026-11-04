@@ -8,11 +8,11 @@ import unicodedata
 from cryptography.exceptions import InvalidKey
 from cryptography.hazmat.primitives.kdf.argon2 import Argon2id
 
-MIN_LENGTH = 12
-MAX_LENGTH = 256
+MIN_LENGTH = 8
+MAX_LENGTH = 32
 
 
-class WeakPassword(ValueError):
+class InvalidPassword(ValueError):
     pass
 
 
@@ -34,9 +34,13 @@ def verify_password(password: str, phc: str) -> bool:
 
 
 def check_new(password: str) -> None:
-    """Length only, with no composition rules: a long passphrase is the strongest choice."""
-    if not MIN_LENGTH <= len(password) <= MAX_LENGTH:
-        raise WeakPassword(f"a password has {MIN_LENGTH} to {MAX_LENGTH} characters")
+    """The rules of H30, counted after NFKC normalisation like the hash: 8 to 32 characters, at least one
+    uppercase letter and at least one digit. Lowercase letters and other characters are optional; the
+    client's meter counts them as strength, the server does not require them."""
+    text = unicodedata.normalize("NFKC", password)
+    categories = {unicodedata.category(c) for c in text}
+    if not (MIN_LENGTH <= len(text) <= MAX_LENGTH and "Lu" in categories and "Nd" in categories):
+        raise InvalidPassword(f"a password has {MIN_LENGTH} to {MAX_LENGTH} characters, an uppercase letter and a digit")
 
 
 def one_time() -> str:

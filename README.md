@@ -12,13 +12,13 @@
   <img alt=".NET Framework 4.8" src="https://img.shields.io/badge/.NET_Framework-4.8-512BD4?logo=dotnet&logoColor=white">
 </p>
 <p align="center">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-43%20server%20%C2%B7%2018%20client-2EA44F">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-87%20server%20%C2%B7%2047%20client-2EA44F">
   <img alt="Cryptography" src="https://img.shields.io/badge/crypto-AES--256--GCM%20%C2%B7%20Argon2id%20%C2%B7%20HMAC-7C3AED">
   <img alt="Build" src="https://img.shields.io/badge/build-increment%201%20of%206-F59E0B">
 </p>
 
 A desktop system that recognises a person by **fingerprint, face and voice**: enrolment once, then
-**1:1 verification** or **1:N identification**, in a Hebrew, right-to-left client. It is Stage B of
+**1:1 verification** or **1:N identification**, in an English or Hebrew client. It is Stage B of
 [fingerprint-level3-recognition-research](https://github.com/Mish2000/fingerprint-level3-recognition-research),
 an academic research project on level-3 fingerprint features such as sweat pores: the research's own
 matching methods run inside the system, on native 1000 ppi captures.
@@ -96,7 +96,7 @@ checked 1000 ppi images.
 <td valign="top">
 
 **📜 Every decision on record**<br>
-Each design choice is numbered (H1 to H28), dated, and cited in the code and the commits.
+Each design choice is numbered (H1 to H32), dated, and cited in the code and the commits.
 
 </td>
 <td valign="top">
@@ -125,7 +125,7 @@ none of 405 different-finger pairs within one session; across two sessions, resu
 
 ```mermaid
 flowchart LR
-  subgraph client["Electron client · React + TypeScript · Hebrew RTL"]
+  subgraph client["Electron client · React + TypeScript · English or Hebrew"]
     page["Sandboxed page"] -- "preload bridge<br/>fixed list of routes" --> main["Main process<br/>keeps the session token"]
   end
   main -- "HTTP on 127.0.0.1" --> api["FastAPI server<br/>role check on every route"]
@@ -147,6 +147,8 @@ flowchart LR
   name people by that identifier alone.
 - 🔑 **Accounts**: Argon2id passwords, throttled sign-ins, session tokens stored only as hashes, and an
   insert-only audit log of every administrative action.
+- 🔁 **Password recovery**: a single-use link by SMS or email that works for 30 minutes, stored only as a
+  hash, with the same answer whether the details belong to an account or not.
 - 🚪 **Deny by default**: each API route declares its roles and is checked on every request; the client's
   page has no Node.js and never sees the session token.
 
@@ -183,13 +185,13 @@ conda activate multimodal-server
 cd server
 python -m mbs setup        # key file, local settings, cluster and databases
 python -m mbs serve        # the API on 127.0.0.1:55433
-python -m pytest           # 43 tests against a throwaway cluster
+python -m pytest           # 87 tests against a throwaway cluster
 
 # The client, from its lock file
 cd ../client
 npm ci
 npm run dev                # the app, with the server running
-npm test                   # 18 tests
+npm test                   # 47 tests
 ```
 
 Details: [server](server/README.md) · [scanner](scanner/README.md) · [research methods](methods/README.md)

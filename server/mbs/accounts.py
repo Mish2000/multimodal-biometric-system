@@ -1,7 +1,8 @@
-"""Accounts: registration with the national ID, sign-in, sessions and administration (H3, H12, H14).
+"""Accounts: registration with the national ID, sign-in, sessions, password recovery and administration
+(H3, H12, H14, H29-H32).
 
-Errors carry a short code for the client, which shows its own Hebrew text; nothing here logs a national
-ID, a password or a token.
+Errors carry a short code for the client, which shows its own text in the account's language; nothing
+here logs a national ID, a password or a token.
 """
 
 from __future__ import annotations
@@ -17,18 +18,21 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from email_validator import EmailNotValidError, validate_email
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DbSession
 
 from . import keys as keyring
-from . import national_id, passwords
+from . import national_id, outbox, passwords, phones
 from .db import Databases
 from .keys import Keys
-from .models import ACTIVE, ADMIN, DISABLED, THEMES, USER, Account, AuditEntry, IdentityLink, Session, Subject
+from .models import (ACTIVE, ADMIN, DISABLED, EMAIL, LANGUAGES, SMS, THEMES, USER, Account, AuditEntry,
+                     IdentityLink, PasswordReset, Session, Subject)
 
 SESSION_IDLE = timedelta(minutes=30)
 SESSION_LONGEST = timedelta(hours=12)
+RESET_VALID = timedelta(minutes=30)  # how long a link to reset a password works (H32)
+RESET_PAUSE = timedelta(minutes=1)  # at most one message per account in this time, against flooding
 USERNAME = re.compile(r"[^\W_][\w.\-]{1,30}[^\W_]")  # 3-32 letters (any script) or digits, with . _ - inside
 MODALITIES = ("fingerprint", "face", "voice")
 
@@ -49,6 +53,7 @@ class SignedIn:
     role: str
     must_change_password: bool
     theme: str
+    language: str
 
 
 def now() -> datetime:
@@ -78,40 +83,58 @@ def _email(text: str) -> tuple[str, str]:
     return email, email.casefold()
 
 
+def _phone(text: str) -> str:
+    try:
+        return phones.normalize(text)
+    except phones.InvalidPhone:
+        raise AccountError("invalid_phone") from None
+
+
 def _password(text: str) -> str:
     try:
         passwords.check_new(text)
-    except passwords.WeakPassword:
-        raise AccountError("weak_password") from None
+    except passwords.InvalidPassword:
+        raise AccountError("invalid_password") from None
     return text
 
 
-def _taken(db: DbSession, username: str, email: str) -> None:
+def _language(text: str) -> str:
+    if text not in LANGUAGES:
+        raise AccountError("invalid_language")
+    return text
+
+
+def _taken(db: DbSession, username: str, email: str, phone: str | None = None) -> None:
     if db.scalar(select(Account.id).where(Account.username_key == username)):
         raise AccountError("username_taken", 409)
     if db.scalar(select(Account.id).where(Account.email_key == email)):
         raise AccountError("email_taken", 409)
+    if phone is not None and db.scalar(select(Account.id).where(Account.phone == phone)):
+        raise AccountError("phone_taken", 409)
 
 
-def _new_account(username: str, email: str, password: str, role: str, must_change: bool) -> Account:
+def _new_account(username: str, email: str, password: str, role: str, must_change: bool,
+                 phone: str | None = None, language: str = "en") -> Account:
     (name, name_key), (mail, mail_key) = _username(username), _email(email)
     return Account(id=uuid.uuid4(), username=name, username_key=name_key, email=mail, email_key=mail_key,
-                   password_hash=passwords.hash_password(password), role=role, status=ACTIVE,
-                   must_change_password=must_change, theme="system", created_at=now())
+                   phone=phone, password_hash=passwords.hash_password(password), role=role, status=ACTIVE,
+                   must_change_password=must_change, theme="system", language=language, created_at=now())
 
 
-def register(databases: Databases, keys: Keys, username: str, email: str, password: str, national_id_text: str) -> SignedIn:
+def register(databases: Databases, keys: Keys, username: str, email: str, phone: str, password: str,
+             national_id_text: str, language: str = "en") -> SignedIn:
     """A user account (H3): the national ID is checked, turned into its HMAC and forgotten. A new random
-    subject is created in the biometric database, and only its sealed identifier links it to the account."""
+    subject is created in the biometric database, and only its sealed identifier links it to the account.
+    The mobile phone (H29) and the language of the registration screen (H31) are kept with the account."""
     try:
         normalized = national_id.normalize(national_id_text)
     except national_id.InvalidNationalId:
         raise AccountError("invalid_national_id") from None
-    account = _new_account(username, email, _password(password), USER, False)
+    account = _new_account(username, email, _password(password), USER, False, _phone(phone), _language(language))
     id_hmac = keyring.national_id_hmac(keys, normalized)
     del normalized
     with _db(databases.accounts) as db:
-        _taken(db, account.username_key, account.email_key)
+        _taken(db, account.username_key, account.email_key, account.phone)
         if db.scalar(select(IdentityLink.account_id).where(IdentityLink.national_id_hmac == id_hmac)):
             raise AccountError("national_id_registered", 409)
     subject = uuid.uuid4()
@@ -170,8 +193,12 @@ class Throttle:
             self._failures.pop(key, None)
 
 
-def sign_in(databases: Databases, throttle: Throttle, login: str, password: str) -> tuple[str, SignedIn]:
-    """Email or username with the password; the same answer whether the name exists or not."""
+def sign_in(databases: Databases, throttle: Throttle, login: str, password: str,
+            language: str | None = None) -> tuple[str, SignedIn]:
+    """Email or username with the password; the same answer whether the name exists or not. A language
+    chosen on the sign-in screen becomes the account's (H31); without one the account keeps its own."""
+    if language is not None:
+        _language(language)
     key = username_key(login.strip())
     wait = throttle.wait(key)
     if wait > 0:
@@ -188,6 +215,8 @@ def sign_in(databases: Databases, throttle: Throttle, login: str, password: str)
         if account.status != ACTIVE:
             raise AccountError("account_disabled", 403)
         throttle.succeeded(key)
+        if language is not None:
+            account.language = language
         token = secrets.token_urlsafe(32)
         moment = now()
         db.add(Session(token_hash=_token_hash(token), account_id=account.id, created_at=moment,
@@ -236,6 +265,77 @@ def set_theme(databases: Databases, account_id: uuid.UUID, theme: str) -> None:
         raise AccountError("invalid_theme")
     with _db(databases.accounts) as db, db.begin():
         db.get(Account, account_id).theme = theme
+
+
+def set_language(databases: Databases, account_id: uuid.UUID, language: str) -> None:
+    """The client's language for the account (H31): English or Hebrew."""
+    _language(language)
+    with _db(databases.accounts) as db, db.begin():
+        db.get(Account, account_id).language = language
+
+
+# Password recovery while signed out (H32), as OWASP's Forgot Password Cheat Sheet advises: the same answer
+# whether the details belong to an account or not, a random single-use token stored only as its hash, a
+# short lifetime, every session signed out after the change, and no sign-in by the link itself.
+
+def request_reset(databases: Databases, channel: str, destination: str, language: str) -> outbox.Message | None:
+    """The message to send for a request by SMS (the account's mobile phone) or email, or None when
+    nothing is sent: no active account has these details, or one was sent to it within RESET_PAUSE. The
+    caller answers the same in every case; only a malformed number or address is refused."""
+    _language(language)
+    if channel == SMS:
+        found = Account.phone == _phone(destination)
+    elif channel == EMAIL:
+        found = Account.email_key == _email(destination)[1]
+    else:
+        raise AccountError("invalid_channel")
+    moment = now()
+    with _db(databases.accounts) as db, db.begin():
+        db.execute(delete(PasswordReset).where(PasswordReset.expires_at < moment))
+        account = db.scalar(select(Account).where(found))
+        if account is None or account.status != ACTIVE:
+            return None
+        latest = db.scalar(select(func.max(PasswordReset.created_at)).where(PasswordReset.account_id == account.id))
+        if latest is not None and moment - latest < RESET_PAUSE:
+            return None
+        db.execute(delete(PasswordReset).where(PasswordReset.account_id == account.id))  # only the newest works
+        token = secrets.token_urlsafe(32)
+        db.add(PasswordReset(token_hash=_token_hash(token), account_id=account.id, channel=channel,
+                             created_at=moment, expires_at=moment + RESET_VALID))
+    to = account.phone if channel == SMS else account.email
+    return outbox.password_reset(channel, to, account.username, token, language, int(RESET_VALID.total_seconds() // 60))
+
+
+def _reset_account(db: DbSession, token: str, lock: bool = False) -> Account:
+    """The active account whose link this is, or the one answer for an unknown, used or expired link.
+    `lock` holds the link's row, so two uses at the same moment cannot both pass."""
+    reset = db.get(PasswordReset, _token_hash(token), with_for_update=lock) if token.isascii() else None
+    account = None if reset is None or now() > reset.expires_at else db.get(Account, reset.account_id)
+    if account is None or account.status != ACTIVE:
+        raise AccountError("invalid_reset_link")
+    return account
+
+
+def check_reset(databases: Databases, token: str) -> None:
+    """Whether a link still works, so the screen can say so before a new password is typed."""
+    with _db(databases.accounts) as db:
+        _reset_account(db, token)
+
+
+def complete_reset(databases: Databases, throttle: Throttle, token: str, new: str) -> None:
+    """The new password, under the rules of H30. The link and every other link of the account stop
+    working, every session of the account ends, and its failed sign-ins are forgotten."""
+    _password(new)
+    with _db(databases.accounts) as db, db.begin():
+        account = _reset_account(db, token, lock=True)
+        if passwords.verify_password(new, account.password_hash):
+            raise AccountError("same_password")
+        account.password_hash = passwords.hash_password(new)
+        account.must_change_password = False
+        db.execute(delete(PasswordReset).where(PasswordReset.account_id == account.id))
+        db.execute(delete(Session).where(Session.account_id == account.id))
+    throttle.succeeded(account.username_key)
+    throttle.succeeded(account.email_key)
 
 
 def modalities(databases: Databases, keys: Keys, account: SignedIn) -> dict[str, dict[str, bool]] | None:
@@ -325,7 +425,7 @@ def audit_log(databases: Databases) -> list[dict]:
 
 def _signed_in(account: Account) -> SignedIn:
     return SignedIn(account.id, account.username, account.email, account.role, account.must_change_password,
-                    account.theme)
+                    account.theme, account.language)
 
 
 def _token_hash(token: str) -> bytes:

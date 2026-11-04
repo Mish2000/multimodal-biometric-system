@@ -1,12 +1,17 @@
 // Requests to the local server on behalf of the page (H11, H26). The session token is kept here and is
-// never handed to the page, so a script running in the page cannot read or send it elsewhere.
-import { ROUTES, type ApiResult, type RouteName } from '../shared/bridge'
+// never handed to the page, so a script running in the page cannot read or send it elsewhere. The token of
+// a link that opened the client to reset a password stays here in the same way (H32).
+import { ROUTES, type ApiResult, type OpenedLink, type RouteName } from '../shared/bridge'
+import type { ResetLink } from './links'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const TIMEOUT_MS = 15_000
+const WITH_RESET_TOKEN: readonly RouteName[] = ['checkResetLink', 'completeReset']
 
 export class ServerClient {
   private token: string | null = null
+  private resetToken: string | null = null
+  private opened: OpenedLink | null = null
 
   constructor(
     private readonly base: string,
@@ -17,6 +22,19 @@ export class ServerClient {
     return this.token !== null
   }
 
+  // A reset link that opened the client: its token waits here for the two reset routes, and the page
+  // learns only that the link came, with its language. A newer link replaces an older one.
+  openLink(link: ResetLink): void {
+    this.resetToken = link.token
+    this.opened = { kind: 'reset-password', language: link.language }
+  }
+
+  takeLink(): OpenedLink | null {
+    const opened = this.opened
+    this.opened = null
+    return opened
+  }
+
   async call(route: unknown, body?: unknown, id?: unknown): Promise<ApiResult> {
     if (typeof route !== 'string' || !Object.hasOwn(ROUTES, route)) return refused('unknown_route')
     const [method, template] = ROUTES[route as RouteName]
@@ -24,6 +42,13 @@ export class ServerClient {
     if (template.includes('{id}')) {
       if (typeof id !== 'string' || !UUID.test(id)) return refused('unknown_route')
       path = template.replace('{id}', id)
+    }
+    if (WITH_RESET_TOKEN.includes(route as RouteName)) {
+      if (this.resetToken === null) return refused('invalid_reset_link')
+      const sent = { ...(typeof body === 'object' && body !== null ? body : {}), token: this.resetToken }
+      const result = await this.send(method, path, sent, null)
+      if (result.ok && route === 'completeReset') this.resetToken = null
+      return result
     }
     if (route === 'logout') {
       // Signing out ends the session here even when the server is gone or the session already expired.

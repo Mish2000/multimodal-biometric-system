@@ -3,7 +3,8 @@
     python -m mbs setup                                    key file, local/server.toml, cluster, databases
     python -m mbs db start | stop | status
     python -m mbs create-admin --username NAME --email ADDRESS     prints a one-time password (H12)
-    python -m mbs serve                                    the API on 127.0.0.1 (H11), after bringing the tables up to date
+    python -m mbs serve                                    the API on 127.0.0.1 (H11), after bringing the tables up to date;
+                                                           messages to users go to local/outbox/ (H32)
 """
 
 from __future__ import annotations
@@ -73,6 +74,7 @@ def serve(_args) -> None:
     import uvicorn
 
     from .api import create_app
+    from .outbox import Outbox
 
     config = settings.load()
     keys = keyring.load(config.key_file)
@@ -80,7 +82,8 @@ def serve(_args) -> None:
     databases = open_databases(config, keys)
     try:
         migrate(databases)  # a newer version of the server brings its tables up to date before it answers
-        uvicorn.run(create_app(databases, keys), host="127.0.0.1", port=config.server_port, log_level="info")
+        uvicorn.run(create_app(databases, keys, Outbox()), host="127.0.0.1", port=config.server_port,
+                    log_level="info")
     finally:
         databases.dispose()
         if started:

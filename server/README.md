@@ -1,7 +1,8 @@
 # Server (increment 1 of H20)
 
 The FastAPI server of the system: the local PostgreSQL cluster, the key file, registration with the
-national ID, sign-in, roles and the accounts part of the administration (H3, H11, H12, H14, H19).
+national ID and the mobile phone, sign-in, password recovery, roles and the accounts part of the
+administration (H3, H11, H12, H14, H19, H29 to H32).
 It runs with the `multimodal-server` environment and starts PostgreSQL from the
 `multimodal-postgres` environment (`environments/`).
 
@@ -14,7 +15,7 @@ $python = '<conda envs>\multimodal-server\python.exe'
 & $python -m mbs create-admin --username <name> --email <address>   # prints a one-time password
 & $python -m mbs serve        # the API on 127.0.0.1; starts and stops PostgreSQL with it
 & $python -m mbs db status    # or start / stop
-& $python -m pytest           # 42 tests against a throwaway cluster, about a minute
+& $python -m pytest           # 87 tests against a throwaway cluster, about a minute
 ```
 
 ## Machine settings
@@ -44,8 +45,17 @@ $python = '<conda envs>\multimodal-server\python.exe'
   link is the subject identifier sealed with AES-256-GCM under a key derived by HKDF-SHA256 from the
   current master secret, a random salt per record and the label `mbs/identity-link/v1`. Each sealed
   value records its key version and is bound to its account as associated data.
-- **Passwords** (H14): Argon2id (3 passes, 4 lanes, 64 MiB, 128-bit salt, 256-bit tag) as PHC
-  strings, after NFKC normalisation; 12 to 256 characters, no composition rules.
+- **Passwords** (H14, H30): Argon2id (3 passes, 4 lanes, 64 MiB, 128-bit salt, 256-bit tag) as PHC
+  strings, after NFKC normalisation; 8 to 32 characters with at least one uppercase letter and one
+  digit. Passwords set before H30 keep working until they are changed.
+- **Mobile phone** (H29): kept in E.164 form and unique; 05X-XXXXXXX is read as an Israeli mobile.
+- **Language** (H31): `en` (the default) or `he` per account, from registration, a sign-in that names
+  one, or the settings.
+- **Password recovery** (H32): a link by SMS or email, with a random token stored only as SHA-256,
+  working once and for 30 minutes; the same answer whether the details belong to an account or not,
+  at most one message per account a minute, and every session signed out after the change. Until a
+  provider is chosen, each message is an HTML page in the git-ignored `local/outbox/`; the server's
+  window names the new file, whose `mbs://` link opens the client.
 - **Sessions** (H14): random tokens, stored only as SHA-256; they end after 30 minutes without use
   and 12 hours at most. Changing a password signs the account's other sessions out.
 - **Sign-in** (H14): email or username, the same answer for an unknown name and a wrong password.
@@ -71,10 +81,13 @@ $python = '<conda envs>\multimodal-server\python.exe'
 | `POST /api/register` | anyone | a user account |
 | `POST /api/login`, `POST /api/logout` | anyone, signed in | a session (`Authorization: Bearer <token>`) |
 | `GET /api/me`, `POST /api/me/password` | signed in | the account and its enrolments; a new password |
+| `POST /api/me/theme`, `POST /api/me/language` | signed in | the account's theme (H24) and language (H31) |
+| `POST /api/password-reset` | anyone | a recovery link by SMS or email (H32), answered 202 either way |
+| `POST /api/password-reset/check`, `POST /api/password-reset/complete` | anyone with a link | whether the link works; the new password |
 | `GET /api/admin/accounts`, `POST /api/admin/accounts/{id}/status` | administrator | accounts; disable or enable |
 | `POST /api/admin/administrators`, `GET /api/admin/audit` | administrator | a new administrator; the audit log |
 
-Errors answer `{"error": "<code>"}`; the client turns codes into Hebrew text.
+Errors answer `{"error": "<code>"}`; the client turns codes into English or Hebrew text.
 
 ## Known limits
 
