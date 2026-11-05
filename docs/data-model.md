@@ -6,8 +6,8 @@ with every column, type, key and sealed value, and how one person holds many
 findings. Types are PostgreSQL 16's; every `uuid` is random (version 4). The
 accounts database, with the account's `theme` column (H24, H26), its `phone`
 and `language` columns and the `password_reset` table (H29, H31, H32), and the
-biometric `subject` table exist (H23); the other biometric tables are built
-in increments 2 to 6 (H20).
+biometric `subject`, `algorithm`, `enrolment`, `sample` and `template` tables
+exist (H23, H33); `attempt` is built with verification (H20).
 
 ## Principles
 
@@ -238,7 +238,7 @@ erDiagram
 | `threshold_origin` | `varchar(120)` | where the value comes from, shown with it |
 | `threshold_changed_at` | `timestamptz` | null until an administrator changes the value; who changed it is in the audit log |
 
-The first rows:
+The first rows (the fingerprint ones exist since H33; face and voice join when their models are pinned):
 
 | `code` | `threshold` | Provisional | Origin |
 | --- | --- | --- | --- |
@@ -261,7 +261,7 @@ method ("above"), only that exact value is decided differently.
 | `modality` | `varchar(12)` | `fingerprint`, `face` or `voice` |
 | `finger` | `smallint` | fingerprints only, otherwise null: the ANSI/NIST-ITL finger position, as in ScannerCapture: 1 right thumb, 2 right index, 3 right middle, 4 right ring, 5 right little, 6 to 10 the left hand in the same order |
 | `created_at` | `timestamptz` | |
-| `replaced_at` | `timestamptz` | null while current; set when the same finger, the face or the voice is enrolled again, so the old findings and the attempts that used them stay |
+| `replaced_at` | `timestamptz` | null while current; set when the same finger, the face or the voice is enrolled again, so the old findings and the attempts that used them stay. When the user deletes a finger's enrolment, it and the enrolments it replaced are erased with their findings and templates (H34) |
 
 One current enrolment per subject, modality and finger: a unique index over
 (`subject_id`, `modality`, `finger`) `NULLS NOT DISTINCT`, where
@@ -279,7 +279,7 @@ One current enrolment per subject, modality and finger: a unique index over
 | `width`, `height` | `smallint` | images only |
 | `ppi` | `smallint` | fingerprints only: 1000 (H7) |
 | `duration_ms` | `integer` | voices only |
-| `checks` | `jsonb` | fingerprints only: H7's four checks, each with its measured value and whether it passed |
+| `checks` | `jsonb` | fingerprints only: H7's four checks, each with its measured value and whether it passed, then NFIQ 2's quality score against its minimum (H33) |
 | `data` | `bytea` | the sealed file |
 
 An enrolment keeps the three captures that pass its checks: H7's for every

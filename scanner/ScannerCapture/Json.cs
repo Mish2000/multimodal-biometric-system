@@ -21,12 +21,20 @@ namespace ScannerCapture
         public string ToJson()
         {
             var sb = new StringBuilder();
-            Write(sb, this, 0);
+            Write(sb, this, 0, false);
             sb.Append('\n');
             return sb.ToString();
         }
 
-        static void Write(StringBuilder sb, object value, int depth)
+        /// <summary>The same JSON on one line, without the final newline: one message of the acquisition mode (H33).</summary>
+        public string ToJsonLine()
+        {
+            var sb = new StringBuilder();
+            Write(sb, this, 0, true);
+            return sb.ToString();
+        }
+
+        static void Write(StringBuilder sb, object value, int depth, bool compact)
         {
             switch (value)
             {
@@ -53,30 +61,32 @@ namespace ScannerCapture
                     break;
                 case JsonObject obj:
                     if (obj._items.Count == 0) { sb.Append("{}"); break; }
-                    sb.Append("{\n");
+                    sb.Append(compact ? "{" : "{\n");
                     for (int i = 0; i < obj._items.Count; i++)
                     {
-                        Indent(sb, depth + 1);
+                        if (!compact) Indent(sb, depth + 1);
                         WriteString(sb, obj._items[i].Key);
-                        sb.Append(": ");
-                        Write(sb, obj._items[i].Value, depth + 1);
-                        sb.Append(i + 1 < obj._items.Count ? ",\n" : "\n");
+                        sb.Append(compact ? ":" : ": ");
+                        Write(sb, obj._items[i].Value, depth + 1, compact);
+                        if (compact) { if (i + 1 < obj._items.Count) sb.Append(','); }
+                        else sb.Append(i + 1 < obj._items.Count ? ",\n" : "\n");
                     }
-                    Indent(sb, depth);
+                    if (!compact) Indent(sb, depth);
                     sb.Append('}');
                     break;
                 case IEnumerable list:
                     var items = new List<object>();
                     foreach (var item in list) items.Add(item);
                     if (items.Count == 0) { sb.Append("[]"); break; }
-                    sb.Append("[\n");
+                    sb.Append(compact ? "[" : "[\n");
                     for (int i = 0; i < items.Count; i++)
                     {
-                        Indent(sb, depth + 1);
-                        Write(sb, items[i], depth + 1);
-                        sb.Append(i + 1 < items.Count ? ",\n" : "\n");
+                        if (!compact) Indent(sb, depth + 1);
+                        Write(sb, items[i], depth + 1, compact);
+                        if (compact) { if (i + 1 < items.Count) sb.Append(','); }
+                        else sb.Append(i + 1 < items.Count ? ",\n" : "\n");
                     }
-                    Indent(sb, depth);
+                    if (!compact) Indent(sb, depth);
                     sb.Append(']');
                     break;
                 default:

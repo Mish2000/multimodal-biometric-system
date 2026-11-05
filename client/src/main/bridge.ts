@@ -21,5 +21,16 @@ export function registerBridge(serverUrl: string): ServerClient {
   })
   // The page asks when it starts and whenever the main process says that a link came ('mbs:link').
   ipcMain.handle('mbs:take-link', (event) => (fromTopFrame(event) ? server.takeLink() : null))
+  // A fingerprint enrolment (H33): its events go back to the page that started it, one by one.
+  ipcMain.handle('mbs:enrol', (event, finger: unknown) => {
+    if (!fromTopFrame(event)) return { ok: false, status: 0, error: 'unknown_route' }
+    const page = event.sender
+    return server.enrol(finger, (enrolmentEvent) => {
+      if (!page.isDestroyed()) page.send('mbs:enrolment', enrolmentEvent)
+    })
+  })
+  ipcMain.on('mbs:enrol-cancel', (event) => {
+    if (fromTopFrame(event)) server.cancelEnrolment()
+  })
   return server
 }

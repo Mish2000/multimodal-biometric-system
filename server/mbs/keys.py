@@ -28,6 +28,8 @@ HEADER_BYTES = len(MAGIC) + 2 + SALT_BYTES + NONCE_BYTES
 
 # A label names what a derived key is for, so a key derived for one use never opens another's data.
 IDENTITY_LINK = "mbs/identity-link/v1"
+SAMPLE = "mbs/sample/v1"  # a raw capture of an enrolment (H25)
+TEMPLATE = "mbs/template/v1"  # a fingerprint template (H25)
 
 DATABASE_ROLES = ("postgres", "accounts", "biometric")
 

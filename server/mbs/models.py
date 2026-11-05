@@ -10,15 +10,30 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import (BigInteger, Boolean, CheckConstraint, DateTime, ForeignKey, Identity, LargeBinary,
-                        String, Uuid)
+from sqlalchemy import (BigInteger, Boolean, CheckConstraint, DateTime, Double, ForeignKey, Identity, Index, Integer,
+                        LargeBinary, SmallInteger, String, UniqueConstraint, Uuid, text)
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql.base import ischema_names
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.types import UserDefinedType
 
 USER, ADMIN = "user", "admin"
 ACTIVE, DISABLED = "active", "disabled"
 THEMES = ("system", "light", "dark")  # the account's look: Windows' setting, light or dark (H24)
 LANGUAGES = ("en", "he")  # the client's language: English, the default, or Hebrew (H31)
 SMS, EMAIL = "sms", "email"  # where a link to reset a password is sent (H32)
+
+
+class Vector(UserDefinedType):
+    """pgvector's `vector`, of any length (face and voice embeddings, H14); no Python package is needed for it."""
+
+    cache_ok = True
+
+    def get_col_spec(self, **kw) -> str:
+        return "vector"
+
+
+ischema_names["vector"] = Vector  # so that reading the schema back knows the type too
 
 
 class AccountsBase(DeclarativeBase):
@@ -110,3 +125,85 @@ class Subject(BiometricBase):
     __tablename__ = "subject"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
+
+
+class Algorithm(BiometricBase):
+    """A method and its threshold (H16): a comparison is accepted when its score is above the threshold."""
+
+    __tablename__ = "algorithm"
+    __table_args__ = (
+        CheckConstraint("modality IN ('fingerprint', 'face', 'voice')", name="algorithm_modality"),
+        CheckConstraint("threshold IS NOT NULL OR code = 'fusion'", name="algorithm_threshold"),
+    )
+
+    code: Mapped[str] = mapped_column(String(32), primary_key=True)
+    modality: Mapped[str] = mapped_column(String(12))
+    version: Mapped[str] = mapped_column(String(64))
+    threshold: Mapped[float | None] = mapped_column(Double)
+    threshold_provisional: Mapped[bool] = mapped_column(Boolean)
+    threshold_origin: Mapped[str] = mapped_column(String(120))
+    threshold_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Enrolment(BiometricBase):
+    """One finger, the face or the voice of one subject (H6, H15). A new enrolment of the same finger replaces
+    the old one, which stays with its findings (replaced_at)."""
+
+    __tablename__ = "enrolment"
+    __table_args__ = (
+        CheckConstraint("modality IN ('fingerprint', 'face', 'voice')", name="enrolment_modality"),
+        CheckConstraint("(modality = 'fingerprint') = (finger IS NOT NULL) AND (finger IS NULL OR finger BETWEEN 1 AND 10)",
+                        name="enrolment_finger"),
+        # One current enrolment per subject, modality and finger; face and voice have no finger.
+        Index("enrolment_current", "subject_id", "modality", "finger", unique=True,
+              postgresql_where=text("replaced_at IS NULL"), postgresql_nulls_not_distinct=True),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
+    subject_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("subject.id"), index=True)
+    modality: Mapped[str] = mapped_column(String(12))
+    finger: Mapped[int | None] = mapped_column(SmallInteger)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    replaced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Sample(BiometricBase):
+    """A finding: one raw capture, sealed (label mbs/sample/v1, bound to the sample and its subject, H25)."""
+
+    __tablename__ = "sample"
+    __table_args__ = (
+        UniqueConstraint("enrolment_id", "placement", name="sample_placement"),
+        CheckConstraint("placement >= 1", name="sample_placement_from_1"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
+    enrolment_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("enrolment.id"))
+    placement: Mapped[int] = mapped_column(SmallInteger)
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    media_type: Mapped[str] = mapped_column(String(16))
+    width: Mapped[int | None] = mapped_column(SmallInteger)
+    height: Mapped[int | None] = mapped_column(SmallInteger)
+    ppi: Mapped[int | None] = mapped_column(SmallInteger)
+    duration_ms: Mapped[int | None] = mapped_column(Integer)
+    checks: Mapped[list | None] = mapped_column(JSONB)
+    data: Mapped[bytes] = mapped_column(LargeBinary)
+
+
+class Template(BiometricBase):
+    """What one method made of one finding (H6). Fingerprint templates are sealed (label mbs/template/v1,
+    bound to the template, its subject and its algorithm, H25); face and voice keep an unsealed `embedding`
+    (increments 4 and 5). Exactly one of the two is set."""
+
+    __tablename__ = "template"
+    __table_args__ = (
+        UniqueConstraint("sample_id", "algorithm", name="template_per_algorithm"),
+        CheckConstraint("num_nonnulls(data, embedding) = 1", name="template_one_value"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
+    sample_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("sample.id"))
+    algorithm: Mapped[str] = mapped_column(ForeignKey("algorithm.code"))
+    version: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    data: Mapped[bytes | None] = mapped_column(LargeBinary)
+    embedding: Mapped[object | None] = mapped_column(Vector)

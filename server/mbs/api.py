@@ -5,14 +5,18 @@ client shows (H12)."""
 from __future__ import annotations
 
 import uuid
+from typing import Annotated
 
 from fastapi import BackgroundTasks, Depends, FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi import Path as PathParameter
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
-from . import accounts
+from . import accounts, fingerprint
 from .accounts import AccountError, SignedIn, Throttle
 from .db import Databases
+from .fingerprint import FingerprintService
 from .keys import Keys
 from .models import ADMIN, USER
 from .outbox import Outbox
@@ -108,17 +112,22 @@ class StatusChange(BaseModel):
     status: str = Field(max_length=16)
 
 
+class FingerprintEnrolment(BaseModel):
+    finger: int = Field(ge=1, le=10)  # ANSI/NIST-ITL position, as in ScannerCapture
+
+
 def account_json(account: SignedIn) -> dict:
     return {"id": str(account.id), "username": account.username, "email": account.email, "role": account.role,
             "must_change_password": account.must_change_password, "theme": account.theme,
             "language": account.language}
 
 
-def create_app(databases: Databases, keys: Keys, outbox: Outbox) -> FastAPI:
+def create_app(databases: Databases, keys: Keys, outbox: Outbox, fingerprints: FingerprintService | None = None) -> FastAPI:
     # The policy runs for every route of the application, also for routes added later.
     app = FastAPI(title="Multimodal biometric system", docs_url=None, redoc_url=None, openapi_url=None,
                   dependencies=[Depends(policy)])
     app.state.databases, app.state.keys, app.state.throttle = databases, keys, Throttle()
+    app.state.fingerprints = fingerprints
 
     @app.exception_handler(AccountError)
     def account_error(request: Request, error: AccountError) -> JSONResponse:
@@ -186,6 +195,28 @@ def create_app(databases: Databases, keys: Keys, outbox: Outbox) -> FastAPI:
     @allow(USER, ADMIN)
     def change_language(body: LanguageChange, account: SignedIn = Depends(signed_in)) -> None:
         accounts.set_language(databases, account.id, body.language)
+
+    # Fingerprint enrolment (H15, H33): the answer is a stream of JSON lines, one per event, so the client can
+    # show the scanner's progress live; it ends with `saved` or `failed`. Closing the connection cancels it.
+    @app.post("/api/fingerprint/enrolments")
+    @allow(USER)
+    async def enrol_fingerprint(body: FingerprintEnrolment, account: SignedIn = Depends(signed_in)) -> StreamingResponse:
+        service = app.state.fingerprints
+        if service is None:
+            raise AccountError("fingerprint_unavailable", 503)
+        subject = await run_in_threadpool(accounts.subject_of, databases, keys, account.id)
+        events = fingerprint.enrol(service, databases, keys, subject, body.finger)
+        return StreamingResponse(fingerprint.ndjson(events), media_type="application/x-ndjson",
+                                 headers={"Cache-Control": "no-store"})
+
+    # The user deletes a finger's enrolment (H34): its captures and templates are erased, and the finger can be
+    # enrolled again later, or not at all.
+    @app.delete("/api/fingerprint/fingers/{finger}", status_code=204)
+    @allow(USER)
+    def delete_fingerprint(finger: Annotated[int, PathParameter(ge=1, le=10)], account: SignedIn = Depends(signed_in)) -> None:
+        subject = accounts.subject_of(databases, keys, account.id)
+        if not fingerprint.delete_finger(databases, subject, finger):
+            raise AccountError("not_enrolled", 404)
 
     @app.get("/api/admin/accounts")
     @allow(ADMIN)

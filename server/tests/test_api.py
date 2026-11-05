@@ -58,7 +58,8 @@ def test_register_then_sign_in_with_username_or_email(client):
     for login in ("michael", "MICHAEL", "Michael@Example.org"):
         me = client.get("/api/me", headers=auth(sign_in(client, login)))
         assert me.status_code == 200
-        assert me.json()["modalities"] == {m: {"enrolled": False} for m in ("fingerprint", "face", "voice")}
+        assert me.json()["modalities"] == {"fingerprint": {"enrolled": False, "fingers": []},
+                                           "face": {"enrolled": False}, "voice": {"enrolled": False}}
 
 
 def test_the_national_id_is_checked_and_registered_once(client):

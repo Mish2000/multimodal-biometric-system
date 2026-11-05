@@ -27,6 +27,9 @@ dotnet build scanner/ScannerCapture -c Release --no-restore -p:RestoreLockedMode
 # Second capture set (H9): ten fingers, three separate placements each, guided.
 & $scannerExe oem-guided --driver-dir $driverDirectory --session live002 --fingers 1-10 --placements 3
 
+# The server's acquisition mode (H33): one checked image, or the moment the finger is lifted.
+& $scannerExe oem-acquire --driver-dir $driverDirectory --wait finger --timeout-s 60
+
 # Independently read back and check the accepted PNG files.
 & $scannerExe check captures/live002
 ```
@@ -67,6 +70,13 @@ Optional native capture settings: `--settle-ms 1500`, `--initial-delay-s 0`,
 allows a further 15 seconds before terminating a stuck worker. Exit codes:
 0 requested work completed, 1 invalid arguments, 2 runtime/device error or
 watchdog timeout, 3 the requested accepted-frame count was not reached.
+
+`oem-acquire` (H33) is the server's acquisition mode: one run waits either
+for a placed finger and returns its checked image (`--wait finger`), or for
+the finger to be lifted (`--wait lift`: two frames in a row without ridge
+texture). It writes one line of JSON per event to standard output (`ready`,
+`frame`, then `image`, `lifted` or `timeout`), an image's PNG bytes right
+after its line, and no file; the server is its watchdog. Exit codes as above.
 
 The older `probe`, `capture` and `save-settings` commands retain their TWAIN
 behavior. They do not use the OEM route. See

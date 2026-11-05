@@ -34,7 +34,11 @@ Commands:
                  and keep one checked image per placement through the oem-capture worker; resumes.
                  --driver-dir DIR --session ID [--fingers 1-10] [--placements 3]
                  [--out captures] [--timeout-s 30 per placement] [--settle-ms 1500]
-  probe          List TWAIN sources, describe the scanner's capabilities and try 1000 ppi;
+  oem-acquire    H33: the server's acquisition mode (H13). Wait for a placed finger and return one
+                 checked image, or wait until the finger is lifted; JSON lines on standard output,
+                 an image's PNG bytes right after its line; no file is written.
+                 --driver-dir DIR [--wait finger|lift] [--timeout-s 30] [--settle-ms 1500]
+  probe         List TWAIN sources, describe the scanner's capabilities and try 1000 ppi;
                  every setting is returned to the driver's default at the end.
                  [--source NAME] [--resolution 1000] [--report local\scanner-probe.json]
                  [--scan-custom yes]  also ask the custom capability numbers 0x8000-0x81FF
@@ -67,6 +71,7 @@ Exit codes: 0 done, 1 usage or unexpected error, 2 scanner or fallback not avail
                     case "oem-probe":
                     case "oem-capture": return OemCommands.RunIsolated(args);
                     case "oem-guided": return OemCommands.RunGuided(args);
+                    case "oem-acquire": return OemAcquire.Run(options);
                     case "_oem-probe":
                     case "_oem-capture": return OemCommands.RunWorker(options);
                     case "probe": return TwainHost.Run(host => Probe(host, options));

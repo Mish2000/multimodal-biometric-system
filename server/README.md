@@ -1,8 +1,8 @@
-# Server (increment 1 of H20)
+# Server (increments 1 and 2 of H20)
 
 The FastAPI server of the system: the local PostgreSQL cluster, the key file, registration with the
 national ID and the mobile phone, sign-in, password recovery, roles and the accounts part of the
-administration (H3, H11, H12, H14, H19, H29 to H32).
+administration (H3, H11, H12, H14, H19, H29 to H32), and fingerprint enrolment (H33).
 It runs with the `multimodal-server` environment and starts PostgreSQL from the
 `multimodal-postgres` environment (`environments/`).
 
@@ -15,7 +15,7 @@ $python = '<conda envs>\multimodal-server\python.exe'
 & $python -m mbs create-admin --username <name> --email <address>   # prints a one-time password
 & $python -m mbs serve        # the API on 127.0.0.1; starts and stops PostgreSQL with it
 & $python -m mbs db status    # or start / stop
-& $python -m pytest           # 87 tests against a throwaway cluster, about a minute
+& $python -m pytest           # 101 tests against a throwaway cluster, about a minute (one is a local check)
 ```
 
 ## Machine settings
@@ -29,6 +29,13 @@ $python = '<conda envs>\multimodal-server\python.exe'
 | `database_port` | 55432, on localhost only |
 | `key_file` | `%LOCALAPPDATA%\multimodal-biometric-system\keys.json` |
 | `server_port` | 55433, on 127.0.0.1 only |
+| `scanner_driver_dir` | none: the supplied `fx_hs_windows_10_driver_v3.3` folder (H8), for fingerprint enrolment |
+| `scanner_exe` | `scanner/ScannerCapture/bin/Release/net48/ScannerCapture.exe`, built from `scanner/` |
+| `nfiq2_bin` | `local/nfiq2/2.3.0-fix/bin` when it holds `Nfiq2Api.dll`: the NFIQ 2 build of `engines/README.md` |
+
+Fingerprint enrolment also needs the research project environment of `local/research.toml` (H10),
+which runs the engines (`engines/`). Without any of these the server runs as before, says at its start
+what is missing, and answers enrolment requests with `fingerprint_unavailable`.
 
 ## Keys and data
 
@@ -58,6 +65,11 @@ $python = '<conda envs>\multimodal-server\python.exe'
   window names the new file, whose `mbs://` link opens the client.
 - **Sessions** (H14): random tokens, stored only as SHA-256; they end after 30 minutes without use
   and 12 hours at most. Changing a password signs the account's other sessions out.
+- **Fingerprint enrolment** (H15, H25, H33): the three kept captures of a finger are sealed in
+  `sample` under the label `mbs/sample/v1`, bound to the sample and its subject, and their OpenCV SIFT
+  templates in `template` under `mbs/template/v1`, bound to the template, its subject and its
+  algorithm. Only the engines read templates; the template screen gets its data once, from memory,
+  before sealing. A new enrolment of the same finger replaces the old one, which stays.
 - **Sign-in** (H14): email or username, the same answer for an unknown name and a wrong password.
   After five failures for one name, each further try waits 2, 4, 8 ... seconds, at most five
   minutes (in memory: one server process on one PC, H11).
@@ -84,6 +96,8 @@ $python = '<conda envs>\multimodal-server\python.exe'
 | `POST /api/me/theme`, `POST /api/me/language` | signed in | the account's theme (H24) and language (H31) |
 | `POST /api/password-reset` | anyone | a recovery link by SMS or email (H32), answered 202 either way |
 | `POST /api/password-reset/check`, `POST /api/password-reset/complete` | anyone with a link | whether the link works; the new password |
+| `POST /api/fingerprint/enrolments` | user | enrol a finger (`{"finger": 1-10}`); the answer is a stream of JSON lines, one event each (`started`, `place`, `kept`, `rejected`, `lift`, `another_placement`, then `saved` or `failed`); closing it cancels the enrolment (H33) |
+| `DELETE /api/fingerprint/fingers/{finger}` | user | delete a finger's enrolment with the ones it replaced, their captures and templates (H34); 404 when it is not enrolled |
 | `GET /api/admin/accounts`, `POST /api/admin/accounts/{id}/status` | administrator | accounts; disable or enable |
 | `POST /api/admin/administrators`, `GET /api/admin/audit` | administrator | a new administrator; the audit log |
 

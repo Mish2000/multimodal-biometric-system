@@ -499,3 +499,395 @@ th {
   font-size: 0.9rem;
   font-weight: 600;
 }
+
+/* Fingerprint enrolment and the stored template (H33), in the same neutral look. */
+a.button {
+  display: inline-block;
+  padding: 0.45rem 1rem;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--accent-text);
+  text-decoration: none;
+}
+
+.hands {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  margin: 1.25rem 0;
+}
+
+.hand {
+  display: flex;
+  gap: 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem 1rem;
+  background: var(--surface);
+}
+
+.hand legend {
+  padding: 0 0.35rem;
+  color: var(--muted);
+}
+
+button.finger {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 5.5rem;
+  gap: 0.15rem;
+}
+
+button.finger.current {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.badge {
+  font-size: 0.75rem;
+  color: var(--ok);
+}
+
+button.finger.current .badge {
+  color: inherit;
+}
+
+.prompt {
+  font-size: 1.05rem;
+}
+
+.placements {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0;
+  margin: 0.25rem 0 1rem;
+  list-style: none;
+}
+
+.placements li {
+  width: 2.25rem;
+  height: 0.45rem;
+  border-radius: 1rem;
+  background: var(--line);
+  transition: background-color 200ms ease-out;
+}
+
+.placements li.kept {
+  background: var(--ok);
+}
+
+.placements li.now {
+  background: var(--accent);
+}
+
+.beside {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 1.5rem;
+  margin: 1rem 0;
+}
+
+img.capture,
+.thumbs img {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+}
+
+.checks {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.checks li {
+  margin: 0.2rem 0;
+}
+
+.checks .mark {
+  display: inline-block;
+  width: 1.2rem;
+}
+
+.checks li.met .mark,
+.pairs li.met strong {
+  color: var(--ok);
+}
+
+.checks li.missing .mark,
+.pairs li.missing strong {
+  color: var(--error);
+}
+
+.thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding: 0;
+  list-style: none;
+}
+
+.thumbs li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.pairs {
+  padding: 0;
+  list-style: none;
+  max-width: 40rem;
+}
+
+.pairs li {
+  display: grid;
+  grid-template-columns: 6rem 1fr 3.5rem auto;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.4rem 0;
+}
+
+.pairs .bar {
+  position: relative;
+  height: 0.6rem;
+  border-radius: 1rem;
+  background: var(--line);
+}
+
+.pairs .fill {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  border-radius: 1rem;
+  background: var(--accent);
+}
+
+.pairs .mark {
+  position: absolute;
+  inset-block: -0.25rem;
+  width: 2px;
+  background: var(--text);
+}
+
+.journey .steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  padding: 0;
+  margin: 1rem 0 0.25rem;
+  list-style: none;
+  counter-reset: step;
+}
+
+.journey .steps li {
+  counter-increment: step;
+}
+
+.journey .steps li::before {
+  content: counter(step) '. ';
+  color: var(--muted);
+}
+
+.journey .steps li.current button {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.journey .step {
+  animation: step-in 180ms ease-out;
+}
+
+@keyframes step-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .journey .step {
+    animation: none;
+  }
+
+  .placements li {
+    transition: none;
+  }
+}
+
+.tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+}
+
+.tabs button.current {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.print {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: #fff;
+}
+
+.print img,
+.print canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.print canvas {
+  cursor: crosshair;
+}
+
+.vector {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  max-width: 22rem;
+}
+
+canvas.compasses {
+  width: 256px;
+  height: 256px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.strip {
+  display: flex;
+  height: 1.4rem;
+  border: 1px solid var(--line);
+}
+
+.strip span {
+  flex: 1;
+  background: var(--accent);
+}
+
+table.numbers td {
+  padding: 0.1rem 0.35rem;
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.85rem;
+}
+
+canvas.heatmap {
+  width: 384px;
+  height: 360px;
+  image-rendering: pixelated;
+  border: 1px solid var(--line);
+  background: #000;
+}
+
+table.row th {
+  width: 8rem;
+  text-align: start;
+  color: var(--muted);
+  font-weight: normal;
+}
+
+.sealed {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1rem 0;
+  font-family: Consolas, 'Cascadia Mono', monospace;
+  font-size: 0.8rem;
+}
+
+.sealed .part {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  max-width: 100%;
+}
+
+.sealed .hex {
+  word-break: break-all;
+}
+
+.sealed .label {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  color: var(--muted);
+}
+
+.sealed .magic { background: var(--notice-bg); }
+.sealed .version { background: var(--ok-bg); }
+.sealed .salt { background: var(--error-bg); }
+.sealed .nonce { background: var(--notice-bg); }
+.sealed .ciphertext { background: var(--surface); }
+.sealed .tag { background: var(--ok-bg); }
+
+.structure {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.structure .samples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.structure .sample {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.structure .box {
+  padding: 0.35rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.structure .box.filled {
+  border-color: var(--accent);
+}
+
+.structure .box.pending {
+  border-style: dashed;
+  color: var(--muted);
+}
+
+.actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+/* Deleting a finger's enrolment (H34): a confirmation before anything is erased. */
+.confirm {
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--error);
+  border-radius: var(--radius);
+  background: var(--error-bg);
+}
+
+.confirm p {
+  margin: 0;
+}
+
+.confirm .actions {
+  margin-top: 0.75rem;
+}
+
+button.danger {
+  border-color: var(--error);
+  background: var(--error);
+  color: var(--surface);
+}

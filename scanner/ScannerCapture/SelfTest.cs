@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Text;
 using ScannerCapture.Imaging;
 using ScannerCapture.Oem;
 
@@ -27,6 +28,8 @@ namespace ScannerCapture
                 Test("native capture outputs stay in ignored folders (H8)", NativeOutputPaths),
                 Test("native transfer rows are stored top-down (H8)", NativeRowOrder),
                 Test("guided capture resumes after the kept placements (H9)", GuidedResume),
+                Test("a PNG in memory keeps pixels and 1000 ppi (H33)", PngInMemory),
+                Test("acquisition messages: one JSON line, then the image bytes (H33)", AcquisitionMessages),
             };
             int failed = 0;
             foreach (var t in tests)
@@ -282,6 +285,39 @@ namespace ScannerCapture
             finally
             {
                 Directory.Delete(folder, true);
+            }
+        }
+
+        // H33: the acquisition mode hands its PNG to the server from memory.
+        static void PngInMemory()
+        {
+            var image = Ridges(64, 5);
+            byte[] png = ImageFiles.EncodePng(image, 1000);
+            Assert(png.Length > 8 && png[1] == (byte)'P' && png[2] == (byte)'N' && png[3] == (byte)'G', "not a PNG");
+            using (var stream = new MemoryStream(png))
+            {
+                var back = ImageFiles.Load(stream, out double dpiX, out double dpiY, out string format);
+                Assert(format == "Gray8", "PNG pixel format is " + format);
+                Assert(back.Pixels.SequenceEqual(image.Pixels), "pixels changed");
+                Assert(Math.Abs(dpiX - 1000) < 0.01 && Math.Abs(dpiY - 1000) < 0.01, "resolution read back as " + dpiX + " x " + dpiY);
+            }
+        }
+
+        // H33: each message is one line of JSON (newlines in values stay escaped), and an image's bytes follow it.
+        static void AcquisitionMessages()
+        {
+            var payload = new byte[] { 0, 10, 13, 255, 10 };
+            using (var stream = new MemoryStream())
+            {
+                OemAcquire.Write(stream, new JsonObject { { "event", "ready" }, { "note", "a\nb" } }, null);
+                OemAcquire.Write(stream, new JsonObject { { "event", "image" }, { "length", payload.Length } }, payload);
+                byte[] all = stream.ToArray();
+                string text = Encoding.UTF8.GetString(all, 0, all.Length - payload.Length);
+                var lines = text.Split('\n');
+                Assert(lines.Length == 3 && lines[2] == "", "two lines expected, got " + (lines.Length - 1));
+                Assert(lines[0] == "{\"event\":\"ready\",\"note\":\"a\\nb\"}", "first line " + lines[0]);
+                Assert(lines[1] == "{\"event\":\"image\",\"length\":5}", "second line " + lines[1]);
+                Assert(all.Skip(all.Length - payload.Length).SequenceEqual(payload), "payload changed");
             }
         }
     }

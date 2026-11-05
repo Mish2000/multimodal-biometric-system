@@ -14,6 +14,15 @@ const bridge: MbsBridge = {
       ipcRenderer.removeListener('mbs:link', notify)
     }
   },
+  enrolFingerprint: (finger) => ipcRenderer.invoke('mbs:enrol', finger),
+  cancelEnrolment: () => ipcRenderer.send('mbs:enrol-cancel'),
+  onEnrolment: (listener) => {
+    const pass = (_event: unknown, enrolmentEvent: Parameters<typeof listener>[0]) => listener(enrolmentEvent)
+    ipcRenderer.on('mbs:enrolment', pass)
+    return () => {
+      ipcRenderer.removeListener('mbs:enrolment', pass)
+    }
+  },
 }
 
 contextBridge.exposeInMainWorld('mbs', bridge)

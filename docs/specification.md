@@ -2,7 +2,7 @@
 
 Approved on 2026-10-20 (H11–H20 in `docs/decisions.md`),
 from the draft of 2026-10-19 as revised on 2026-10-20, and amended with his
-approval since (H24 to H32). Every decision is cited by its ID; a change needs
+approval since (H24 to H34). Every decision is cited by its ID; a change needs
 the researcher's approval and a new entry in the decision record.
 
 ## 1. Purpose and scope
@@ -52,14 +52,16 @@ increments). The server listens on 127.0.0.1 only.
 
 ```
 Electron client: React + TypeScript, English or Hebrew (H31)
-        │  HTTP and WebSocket on 127.0.0.1, session token
+        │  HTTP on 127.0.0.1, session token; live progress as streamed JSON lines (H33)
 FastAPI server: Python 3.12, its own environment
         ├── accounts database (PostgreSQL): accounts, sessions, identity link, audit log
         ├── biometric database (PostgreSQL + pgvector): keyed only by random identifiers
-        ├── scanner: ScannerCapture (C#, x86; OEM route H8, guided placements H9)
+        ├── scanner: ScannerCapture (C#, x86; OEM route H8, guided placements H9,
+        │            acquisition mode for the server H33)
         └── engines, one process per method in its own environment (H4):
               fingerprint: OpenCV SIFT, Pore SIFT, learned pore descriptor
-                           (research code through the pinned link, H10)
+                           (research code through the pinned link, H10),
+                           and NFIQ 2's quality score of every capture (H33)
               face: YuNet detection + SFace recognition
               voice: SpeechBrain ECAPA-TDNN
 ```
@@ -71,8 +73,11 @@ FastAPI server: Python 3.12, its own environment
 - The client's main process is its only network client and keeps the
   session token; the page, sandboxed and without Node.js, reaches it only
   through a preload bridge that offers a fixed list of routes (H26).
-- WebSocket messages carry live progress during capture (scanner light on,
-  placement kept, "lift the finger") and during 1:N searches.
+- Live progress during capture (place the finger, placement kept, "lift the
+  finger") comes as a streamed HTTP answer of JSON lines, one event each
+  (H33, amending this section's WebSocket messages); closing the connection
+  cancels the enrolment and stops the scanner. The 1:N search's progress
+  follows in increment 3.
 - The engines are long-running child processes of the server (H13). Each
   message on their standard input and output is a JSON header followed by
   its binary data (images, templates), since one template can take several
@@ -81,10 +86,11 @@ FastAPI server: Python 3.12, its own environment
   CPU engines compare in parallel worker processes. Engines need only the
   standard library beyond their method, so the research environments get no
   new packages.
-- A new acquisition mode of ScannerCapture returns the image and its checks
-  to the server on standard output and writes no file, so a raw sample exists
-  on disk only encrypted (H13). The OEM worker, its checks and the guided
-  placements stay as they are.
+- The acquisition mode of ScannerCapture (`oem-acquire`, H33) returns the
+  image and its checks to the server on standard output and writes no file,
+  so a raw sample exists on disk only encrypted (H13); it also reports when
+  the finger is lifted. The OEM worker, its checks and the guided placements
+  stay as they are.
 
 ## 4. Data and security (H3, H4, H14)
 
@@ -155,6 +161,9 @@ flow of 2026-10-18).
 - **Capture:** HiScan PRO at native 1000 ppi through the OEM route (H8), each
   image checked by H7's four checks. A run that fails with OEM status 110 (2
   of 32 runs in H9, each followed by a successful retry) is retried once.
+  Every capture then gets NIST's NFIQ 2.3 quality score, computed on a 500
+  ppi copy in memory; below the provisional minimum of 35 it is not kept and
+  the finger is placed again (H33).
 - **Enrolment:** the user chooses the finger; it is captured in three
   separate placements, the finger lifted between them (H6, H9). Templates are
   made for every algorithm from every capture (H6), so a change of algorithm
@@ -162,6 +171,12 @@ flow of 2026-10-18).
   when every pair of its three captures matches with OpenCV SIFT at its
   threshold; otherwise one more placement is asked for. In H10, OpenCV SIFT
   matched 28 of 30 such pairs and none of 405 different-finger pairs.
+  OpenCV SIFT is the fixed referee, the later capture as the probe; of more
+  than three kept captures, the three whose lowest pair score is highest are
+  kept, and after 6 kept placements or 12 captures the enrolment ends unsaved
+  (H33). At its end the client shows how the template is stored (section 6).
+  A user can also delete a finger's enrolment, which erases it and the
+  enrolments it replaced with their findings and templates (H34).
 - **Algorithms:** from the research, unchanged, through the pinned link
   (H10): OpenCV SIFT, Pore SIFT and the learned pore descriptor (its second
   training, H6); fusions with the research's weights or with user weights that
@@ -252,9 +267,10 @@ SHA-256.
 | Password recovery (H32) | an SMS to the registered mobile phone or an email to the registered address, with the same answer either way; the link opens the screen of the new password, with the strength meter |
 | Home | three modality cards, fingerprint first, with each one's enrolment status |
 | Settings (H24) | the theme: light, dark, or Windows' setting (the default), saved per account and applied at once; sign-in and registration follow Windows' setting. The language, English or Hebrew, saved per account (H31). Under security, the password's change (H28); a screen of its own only for replacing a one-time password (H12) |
-| Modality | enrol, verify (1:1), identify (1:N); before enrolment, verify and identify lead to the message of section 5 |
+| Modality | enrol, verify (1:1), identify (1:N); before enrolment, verify and identify lead to the message of section 5; an enrolled finger can be enrolled again or its enrolment deleted, after a confirmation (H34) |
 | Algorithm choice | one card per algorithm: accuracy, speed, what its template holds and how two templates are compared (H2), in two or three sentences with a small drawing, and whether its threshold is provisional; OpenCV SIFT first, then the learned pore descriptor, Pore SIFT and the fusions (H18); face and voice have one model each, shown on its card without a choice |
-| Fingerprint capture | scanner status, finger and placement guide, "lift the finger" between placements, the captured print and its checks |
+| Fingerprint capture | scanner status, finger and placement guide, "lift the finger" between placements, the captured print and its checks with its NFIQ 2 score (H33), the pair scores of the kept placements |
+| Stored template (H33) | after an enrolment, once: the captures with their checks, OpenCV SIFT's points, one point's 128 numbers in SIFT's 4 x 4 x 8 layout, the whole template as a picture, its row with the sealed value's parts, and the pair scores against the threshold; sent from the server's memory before sealing, kept by the page only while the screen is open |
 | Face capture | live camera view with the detected face box |
 | Voice capture | the sentence to read, a level meter and a timer |
 | 1:1 result | the new print beside the enrolled one with lines between matched points or pores, a score gauge marked with the threshold, the decision and the time it took |
@@ -300,7 +316,7 @@ threshold changed).
 ```
 client/    Electron + React + TypeScript (npm, lock file)
 server/    FastAPI application
-engines/   engine processes: fingerprint (through methods/), face, voice
+engines/   engine processes: fingerprint (through methods/) and NFIQ 2 (H33), later face and voice
 methods/   pinned research link (H10)
 scanner/   ScannerCapture (H7–H9) and its acquisition mode for the server
 docs/      this specification, decisions, validations
@@ -382,3 +398,9 @@ and reported on its own.
 - **H32** Password recovery by SMS or email with a single-use link of 30
   minutes, opened in the client through `mbs://`, through a local outbox
   until a provider is chosen (4, 6).
+- **H33** The generic fingerprint enrolment with OpenCV SIFT as the fixed
+  referee, NFIQ 2.3's quality minimum on every capture (built from NIST's
+  source with its fix), the scanner's acquisition mode, live progress as a
+  streamed HTTP answer, and the screen of the stored template (3, 5.1, 6).
+- **H34** Deleting a finger's enrolment, with the enrolments it replaced and
+  their findings and templates, without a new enrolment (5.1, 6).

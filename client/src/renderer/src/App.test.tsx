@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import type { Account, ApiResult, Language, MbsBridge, OpenedLink, RouteName, Theme } from '../../shared/bridge'
+import type { Account, ApiResult, EnrolmentEvent, Language, MbsBridge, OpenedLink, RouteName, Theme } from '../../shared/bridge'
 import { App } from './App'
 import { SessionProvider } from './session'
 
@@ -25,6 +25,12 @@ class FakeServer implements MbsBridge {
   opened: OpenedLink | null = null
   linked: Stored | null = null
   private listeners = new Set<() => void>()
+  // Fingerprint enrolment (H33): the events the next enrolment sends, the enrolled fingers, and what was asked.
+  enrolment: EnrolmentEvent[] = []
+  fingers: number[] = []
+  enrolments: number[] = []
+  cancelled = 0
+  private enrolmentListeners = new Set<(event: EnrolmentEvent) => void>()
 
   add(username: string, role: Account['role'], extra: Partial<Stored> = {}): Stored {
     const account: Stored = {
@@ -68,6 +74,31 @@ class FakeServer implements MbsBridge {
     }
   }
 
+  enrolFingerprint = async (finger: number): Promise<ApiResult<null>> => {
+    this.enrolments.push(finger)
+    for (const event of this.enrolment) {
+      await Promise.resolve()
+      this.emitEnrolment(event)
+      if (event.type === 'saved' && !this.fingers.includes(finger)) this.fingers.push(finger)
+    }
+    return { ok: true, data: null }
+  }
+
+  emitEnrolment(event: EnrolmentEvent): void {
+    for (const listener of this.enrolmentListeners) listener(event)
+  }
+
+  cancelEnrolment = (): void => {
+    this.cancelled++
+  }
+
+  onEnrolment = (listener: (event: EnrolmentEvent) => void): (() => void) => {
+    this.enrolmentListeners.add(listener)
+    return () => {
+      this.enrolmentListeners.delete(listener)
+    }
+  }
+
   call = async <T,>(route: RouteName, body?: unknown, id?: string): Promise<ApiResult<T>> =>
     this.answer(route, (body ?? {}) as Record<string, string>, id) as ApiResult<T>
 
@@ -76,6 +107,12 @@ class FakeServer implements MbsBridge {
     const no = (status: number, error: string): ApiResult => ({ ok: false, status, error })
     if (!this.up) return no(0, 'server_unreachable')
     switch (route) {
+      case 'deleteFingerprint': {
+        const finger = Number(id)
+        if (!this.fingers.includes(finger)) return no(404, 'not_enrolled')
+        this.fingers = this.fingers.filter((f) => f !== finger)
+        return ok()
+      }
       case 'health':
         return ok({ status: 'ok' })
       case 'register': {
@@ -114,7 +151,8 @@ class FakeServer implements MbsBridge {
     if (me === null) return no(401, 'not_signed_in')
     switch (route) {
       case 'me': {
-        const modalities = { fingerprint: { enrolled: false }, face: { enrolled: false }, voice: { enrolled: false } }
+        const fingerprint = { enrolled: this.fingers.length > 0, fingers: [...this.fingers].sort((a, b) => a - b) }
+        const modalities = { fingerprint, face: { enrolled: false }, voice: { enrolled: false } }
         return ok({ account: view(me), modalities: me.role === 'user' ? modalities : null })
       }
       case 'changePassword':
@@ -436,7 +474,8 @@ describe('the settings', () => {
     open('/password')
     expect(await screen.findByRole('heading', { name: 'Hello, dana' })).toBeTruthy()
     expect(screen.queryByRole('link', { name: 'Change the password' })).toBeNull()
-    expect(screen.getAllByRole('link').map((link) => link.textContent)).toEqual(['Home', 'Settings'])
+    const bar = screen.getByRole('navigation')
+    expect(within(bar).getAllByRole('link').map((link) => link.textContent)).toEqual(['Home', 'Settings'])
   })
 })
 
@@ -469,5 +508,183 @@ describe('the administration area', () => {
     fireEvent.click(create)
     expect((await screen.findByRole('status')).textContent).toContain('one-time-Kq7xW2')
     expect(await screen.findByRole('row', { name: /rotem/ })).toBeTruthy()
+  })
+})
+
+// Fingerprint enrolment (H33). The images are placeholders and the arrays are tiny; the canvases do not draw
+// in jsdom, so these tests follow the texts and the flow.
+const CHECKS = [
+  { name: 'size', passed: true, detail: '1000x1000 (expected 1000x1000)' },
+  { name: 'resolution', passed: true, detail: '1000x1000 ppi (expected 1000)' },
+  { name: 'ridge texture', passed: true, detail: 'centre spread 61.2 gray levels (at least 20)' },
+  { name: 'fine detail', passed: true, detail: 'a 500 ppi round trip keeps 0.180 (at most 0.40)' },
+  { name: 'quality', passed: true, detail: 'NFIQ 2 score 64 (at least 35)', score: 64 },
+]
+
+function b64(bytes: Uint8Array): string {
+  let text = ''
+  for (const b of bytes) text += String.fromCharCode(b)
+  return btoa(text)
+}
+
+function template(placement: number) {
+  return {
+    id: `10000000-0000-4000-8000-00000000000${placement}`,
+    sample_id: `20000000-0000-4000-8000-00000000000${placement}`,
+    placement,
+    algorithm: 'opencv-sift',
+    version: '606c8d33a7a27570b5bb55cca8248259b9b6ba8a',
+    created_at: '2026-11-06T10:00:00+00:00',
+    keypoints: 3,
+    points: b64(new Uint8Array(new Float32Array([100, 200, 400, 500, 800, 900]).buffer)),
+    descriptors: b64(new Uint8Array(3 * 128).map((_, i) => i % 256)),
+    template_length: 4_300_000,
+    sealed: { length: 4_300_066, head: b64(new Uint8Array(98)), tag: b64(new Uint8Array(16)), magic: 4, version: 2, salt: 32, nonce: 12, ciphertext: 4_300_000, tag_bytes: 16 },
+  }
+}
+
+function kept(placement: number, pairs: Array<[number, number, number]>): EnrolmentEvent {
+  return {
+    type: 'kept', placement, image: 'AAAA', checks: CHECKS, keypoints: 3,
+    pairs: pairs.map(([probe, reference, score]) => ({ probe, reference, score, accepted: score > 57 })),
+  }
+}
+
+const STARTED: EnrolmentEvent = { type: 'started', finger: 7, placements: 3, quality_minimum: 35, threshold: 57, most_kept: 6 }
+
+const SAVED: EnrolmentEvent = {
+  type: 'saved',
+  enrolment: { id: '30000000-0000-4000-8000-000000000001', finger: 7, created_at: '2026-11-06T10:00:00+00:00', replaced_previous: false },
+  samples: [1, 2, 3].map((placement) => ({ id: `20000000-0000-4000-8000-00000000000${placement}`, placement, captured_at: '2026-11-06T10:00:00+00:00', media_type: 'image/png', sealed_length: 330_066, quality: 64 })),
+  templates: [template(1), template(2), template(3)],
+  pairs: [
+    { probe: 2, reference: 1, score: 601, accepted: true },
+    { probe: 3, reference: 1, score: 384, accepted: true },
+    { probe: 3, reference: 2, score: 562, accepted: true },
+  ],
+  threshold: 57,
+  pending_methods: ['pore-sift', 'learned-pore'],
+  not_kept: [],
+}
+
+async function openFingerprint() {
+  server.add('dana', 'user')
+  open('/sign-in')
+  await signIn('dana', 'dana password 1')
+  fireEvent.click(await screen.findByRole('link', { name: 'Open' }))
+  await screen.findByRole('heading', { name: 'Fingerprint' })
+}
+
+describe('fingerprint enrolment (H33)', () => {
+  it('enrols the chosen finger with live guidance, then shows how its template is stored', async () => {
+    server.enrolment = [
+      STARTED,
+      { type: 'place', placement: 1, kept: 0 }, kept(1, []), { type: 'lift' },
+      { type: 'place', placement: 2, kept: 1 }, kept(2, [[2, 1, 601]]), { type: 'lift' },
+      { type: 'place', placement: 3, kept: 2 }, kept(3, [[3, 1, 384], [3, 2, 562]]),
+      SAVED,
+    ]
+    await openFingerprint()
+    const left = screen.getByRole('group', { name: 'Left hand' })
+    fireEvent.click(within(left).getByRole('button', { name: 'Index' }))
+    expect(screen.getByText('left index')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Enrol this finger' }))
+    await screen.findByRole('heading', { name: 'How your fingerprint is stored' })
+    expect(server.enrolments).toEqual([7])
+    expect(screen.getByText(/Shown once, now/)).toBeTruthy()
+    expect(screen.getByText('Quality (NFIQ 2)')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    expect(screen.getByText(/OpenCV SIFT finds 3 distinctive points/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    expect(screen.getByText('Move the pointer over the print to choose a point.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    expect(screen.getByText(/a table of 3 rows \(points\) by 128 columns/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    expect(screen.getByText('opencv-sift')).toBeTruthy()
+    expect(screen.getByText('MBS1 header: 4 bytes')).toBeTruthy()
+    expect(screen.getByText('tag: 16 bytes')).toBeTruthy()
+    expect(screen.getAllByText('Pore SIFT')).toHaveLength(3)
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    expect(screen.getByText('601')).toBeTruthy()
+    expect(screen.getAllByText('above 57: match')).toHaveLength(3)
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }))
+    await screen.findByText('enrolled')
+    expect(screen.getByRole('button', { name: 'Enrol this finger again' })).toBeTruthy()
+    expect(screen.getByText('A new enrolment replaces the earlier one; the earlier one stays stored.')).toBeTruthy()
+  })
+
+  it('says why a capture was not kept, words a failure, and tries again', async () => {
+    server.enrolment = [
+      STARTED,
+      { type: 'place', placement: 1, kept: 0 },
+      { type: 'rejected', reason: 'quality', image: 'AAAA', checks: [...CHECKS.slice(0, 4), { name: 'quality', passed: false, detail: 'NFIQ 2 score 20 (at least 35)', score: 20 }], score: 20, minimum: 35 },
+      { type: 'lift' },
+    ]
+    await openFingerprint()
+    fireEvent.click(within(screen.getByRole('group', { name: 'Right hand' })).getByRole('button', { name: 'Thumb' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Enrol this finger' }))
+    expect(await screen.findByText(/The quality is 20, below the minimum of 35/)).toBeTruthy()
+    expect(screen.getByText('Lift the finger off the glass.')).toBeTruthy()
+    act(() => server.emitEnrolment({ type: 'failed', error: 'no_finger' }))
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'No finger was placed within a minute.')
+    server.enrolment = [STARTED, { type: 'place', placement: 1, kept: 0 }]
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(await screen.findByText('Place the finger on the scanner and hold it still until it is kept.')).toBeTruthy()
+    expect(server.enrolments).toEqual([1, 1])
+  })
+
+  it('stops the scanner when the enrolment is cancelled or left', async () => {
+    server.enrolment = [STARTED, { type: 'place', placement: 1, kept: 0 }]
+    await openFingerprint()
+    fireEvent.click(within(screen.getByRole('group', { name: 'Left hand' })).getByRole('button', { name: 'Ring' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Enrol this finger' }))
+    await screen.findByText('Place the finger on the scanner and hold it still until it is kept.')
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(server.cancelled).toBe(1)
+    act(() => server.emitEnrolment({ type: 'failed', error: 'cancelled' }))
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'The enrolment was cancelled.')
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    await screen.findByText('Place the finger on the scanner and hold it still until it is kept.')
+    fireEvent.click(screen.getByRole('link', { name: 'Home' }))
+    await screen.findByRole('heading', { name: /Hello/ })
+    expect(server.cancelled).toBe(2)
+  })
+
+  it('shows the screens in Hebrew too', async () => {
+    server.add('noa', 'user', { language: 'he' })
+    open('/sign-in')
+    await signIn('noa', 'noa password 1')
+    fireEvent.click(await screen.findByRole('link', { name: 'פתיחה' }))
+    expect(await screen.findByRole('heading', { name: 'טביעת אצבע' })).toBeTruthy()
+    expect(screen.getByRole('group', { name: 'יד שמאל' })).toBeTruthy()
+  })
+})
+
+describe('deleting a finger’s enrolment (H34)', () => {
+  it('asks first, then deletes it without a new enrolment', async () => {
+    server.fingers = [2, 7]
+    await openFingerprint()
+    const left = screen.getByRole('group', { name: 'Left hand' })
+    expect(within(left).getByRole('button', { name: /Index/ }).textContent).toContain('enrolled')
+    fireEvent.click(within(left).getByRole('button', { name: /Index/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete this finger’s enrolment' }))
+    expect(screen.getByRole('alertdialog').textContent).toContain('Delete the enrolment of the left index?')
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(server.fingers).toEqual([2, 7])
+    fireEvent.click(screen.getByRole('button', { name: 'Delete this finger’s enrolment' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    expect(await screen.findByText(/The enrolment of the left index was deleted/)).toBeTruthy()
+    expect(server.fingers).toEqual([2])
+    await waitFor(() => expect(within(left).getByRole('button', { name: 'Index' }).textContent).toBe('Index'))
+    expect(screen.getByRole('button', { name: 'Enrol this finger' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Delete this finger’s enrolment' })).toBeNull()
+    expect(server.enrolments).toEqual([])
+  })
+
+  it('offers no deletion for a finger that is not enrolled', async () => {
+    await openFingerprint()
+    fireEvent.click(within(screen.getByRole('group', { name: 'Right hand' })).getByRole('button', { name: 'Thumb' }))
+    expect(screen.getByRole('button', { name: 'Enrol this finger' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Delete this finger’s enrolment' })).toBeNull()
   })
 })

@@ -5,6 +5,7 @@ import { ROUTES, type ApiResult, type OpenedLink, type RouteName } from '../shar
 import type { ResetLink } from './links'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const FINGER = /^(?:[1-9]|10)$/ // a finger's position (H34)
 const TIMEOUT_MS = 15_000
 const WITH_RESET_TOKEN: readonly RouteName[] = ['checkResetLink', 'completeReset']
 
@@ -12,6 +13,7 @@ export class ServerClient {
   private token: string | null = null
   private resetToken: string | null = null
   private opened: OpenedLink | null = null
+  private enrolment: AbortController | null = null
 
   constructor(
     private readonly base: string,
@@ -43,6 +45,10 @@ export class ServerClient {
       if (typeof id !== 'string' || !UUID.test(id)) return refused('unknown_route')
       path = template.replace('{id}', id)
     }
+    if (template.includes('{finger}')) {
+      if (typeof id !== 'string' || !FINGER.test(id)) return refused('unknown_route')
+      path = template.replace('{finger}', id)
+    }
     if (WITH_RESET_TOKEN.includes(route as RouteName)) {
       if (this.resetToken === null) return refused('invalid_reset_link')
       const sent = { ...(typeof body === 'object' && body !== null ? body : {}), token: this.resetToken }
@@ -54,6 +60,7 @@ export class ServerClient {
       // Signing out ends the session here even when the server is gone or the session already expired.
       const token = this.token
       this.token = null
+      this.cancelEnrolment()
       if (token === null) return { ok: true, data: null }
       return this.send(method, path, undefined, token)
     }
@@ -65,6 +72,55 @@ export class ServerClient {
       return { ok: true, data: { account } }
     }
     return result
+  }
+
+  // A fingerprint enrolment (H33): the server's answer is a stream of JSON lines, passed on one event at a
+  // time as they come. It has no overall time limit, since the scanner waits for the finger (the server
+  // bounds every wait); cancelling closes the connection, and the server then stops the scanner.
+  async enrol(finger: unknown, emit: (event: unknown) => void): Promise<ApiResult> {
+    if (typeof finger !== 'number' || !Number.isInteger(finger) || finger < 1 || finger > 10) return refused('invalid_request')
+    if (this.enrolment !== null) return { ok: false, status: 409, error: 'scanner_busy' }
+    const controller = new AbortController()
+    this.enrolment = controller
+    let ended = false
+    const pass = (event: { type?: unknown; error?: unknown }) => {
+      if (event.type === 'saved' || event.type === 'failed') ended = true
+      emit(event)
+    }
+    try {
+      const headers: Record<string, string> = { 'content-type': 'application/json' }
+      if (this.token !== null) headers.authorization = `Bearer ${this.token}`
+      let response: Response
+      try {
+        response = await this.request(this.base + ENROLMENTS, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ finger }),
+          signal: controller.signal,
+        })
+      } catch {
+        return controller.signal.aborted ? { ok: true, data: null } : refused('server_unreachable')
+      }
+      if (!response.ok) {
+        const data: unknown = await response.json().catch(() => null)
+        if (response.status === 401) this.token = null
+        const code = (data as { error?: unknown } | null)?.error
+        return { ok: false, status: response.status, error: typeof code === 'string' ? code : response.status === 422 ? 'invalid_request' : 'unexpected' }
+      }
+      try {
+        await readLines(response, (line) => pass(JSON.parse(line) as { type?: unknown }))
+      } catch {
+        // A cut connection or a broken line: the page hears below that the enrolment did not finish.
+      }
+      if (!ended) pass({ type: 'failed', error: controller.signal.aborted ? 'cancelled' : 'server_unreachable' })
+      return { ok: true, data: null }
+    } finally {
+      this.enrolment = null
+    }
+  }
+
+  cancelEnrolment(): void {
+    this.enrolment?.abort()
   }
 
   private async send(method: string, path: string, body: unknown, token: string | null): Promise<ApiResult> {
@@ -93,4 +149,28 @@ export class ServerClient {
 
 function refused(error: string): ApiResult {
   return { ok: false, status: 0, error }
+}
+
+const ENROLMENTS = '/api/fingerprint/enrolments'
+
+// Lines of a streamed answer, each without its newline; an event with a whole template's view is several
+// megabytes, so a line may arrive in many pieces.
+async function readLines(response: Response, line: (text: string) => void): Promise<void> {
+  if (response.body === null) return
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let pending = ''
+  for (;;) {
+    const { value, done } = await reader.read()
+    pending += done ? decoder.decode() : decoder.decode(value, { stream: true })
+    let end = pending.indexOf('\n')
+    while (end >= 0) {
+      const text = pending.slice(0, end)
+      pending = pending.slice(end + 1)
+      if (text.trim() !== '') line(text)
+      end = pending.indexOf('\n')
+    }
+    if (done) break
+  }
+  if (pending.trim() !== '') line(pending)
 }

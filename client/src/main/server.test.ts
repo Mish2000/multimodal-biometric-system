@@ -115,3 +115,78 @@ describe('ServerClient', () => {
     expect(await server.call('health')).toEqual({ ok: false, status: 0, error: 'server_unreachable' })
   })
 })
+
+// The enrolment's stream of JSON lines (H33), as the server sends it: in pieces that need not end at a line.
+function streamed(pieces: string[], status = 200): Response {
+  const encoder = new TextEncoder()
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const piece of pieces) controller.enqueue(encoder.encode(piece))
+      controller.close()
+    },
+  })
+  return new Response(body, { status, headers: { 'content-type': 'application/x-ndjson' } })
+}
+
+describe('ServerClient fingerprint enrolment (H33)', () => {
+  async function signedIn() {
+    const { request, server } = client()
+    request.mockResolvedValueOnce(reply(200, { token: 'session-token', account: ACCOUNT }))
+    await server.call('login', { login: 'dana', password: 'a long password' })
+    return { request, server }
+  }
+
+  it('passes on every event as it comes, with the session token, and ends with the last one', async () => {
+    const { request, server } = await signedIn()
+    const big = 'x'.repeat(200_000)
+    request.mockResolvedValueOnce(
+      streamed(['{"type":"started","finger":7}\n{"type":"pla', 'ce","placement":1}\n', `{"type":"saved","view":"${big.slice(0, 100_000)}`, `${big.slice(100_000)}"}\n`]),
+    )
+    const events: Array<{ type: string }> = []
+    expect(await server.enrol(7, (event) => events.push(event as { type: string }))).toEqual({ ok: true, data: null })
+    expect(events.map((e) => e.type)).toEqual(['started', 'place', 'saved'])
+    expect((events[2] as unknown as { view: string }).view).toHaveLength(200_000)
+    const { url, method, headers, body } = sent(request, 1)
+    expect([url, method, body]).toEqual([`${BASE}/api/fingerprint/enrolments`, 'POST', '{"finger":7}'])
+    expect(headers.authorization).toBe('Bearer session-token')
+  })
+
+  it("returns the server's refusal before any event, and checks the finger first", async () => {
+    const { request, server } = await signedIn()
+    const events: unknown[] = []
+    for (const finger of [0, 11, 2.5, '7', undefined]) {
+      expect(await server.enrol(finger, (e) => events.push(e))).toEqual({ ok: false, status: 0, error: 'invalid_request' })
+    }
+    request.mockResolvedValueOnce(reply(503, { error: 'fingerprint_unavailable' }))
+    expect(await server.enrol(7, (e) => events.push(e))).toEqual({ ok: false, status: 503, error: 'fingerprint_unavailable' })
+    expect(events).toEqual([])
+  })
+
+  it('tells the page when the stream ends early or is cancelled', async () => {
+    const { request, server } = await signedIn()
+    request.mockResolvedValueOnce(streamed(['{"type":"started","finger":7}\n']))
+    const events: Array<{ type: string; error?: string }> = []
+    await server.enrol(7, (e) => events.push(e as { type: string }))
+    expect(events.at(-1)).toEqual({ type: 'failed', error: 'server_unreachable' })
+    request.mockImplementationOnce((_url, init) => new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
+    }))
+    const running = server.enrol(7, (e) => events.push(e as { type: string }))
+    expect(await server.enrol(7, () => undefined)).toEqual({ ok: false, status: 409, error: 'scanner_busy' })
+    server.cancelEnrolment()
+    expect(await running).toEqual({ ok: true, data: null })
+  })
+})
+
+describe('ServerClient finger routes (H34)', () => {
+  it('puts a finger position, 1 to 10, into the path and nothing else', async () => {
+    const { request, server } = client()
+    for (const id of ['0', '11', 'x', '7/../../admin', '07', undefined]) {
+      expect(await server.call('deleteFingerprint', undefined, id)).toEqual({ ok: false, status: 0, error: 'unknown_route' })
+    }
+    expect(request).not.toHaveBeenCalled()
+    request.mockResolvedValueOnce(reply(204))
+    expect(await server.call('deleteFingerprint', undefined, '10')).toEqual({ ok: true, data: null })
+    expect(sent(request, 0)).toMatchObject({ url: `${BASE}/api/fingerprint/fingers/10`, method: 'DELETE' })
+  })
+})

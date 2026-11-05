@@ -487,3 +487,95 @@ current product offers, and nothing else changes.
   outbox without changing the screens; a link opened on a phone cannot reach
   this system, whose server listens on 127.0.0.1 only (H11), so a real SMS
   will need a code or a reachable address instead.
+
+## 2026-11-05: fingerprint enrolment and its quality check
+
+Approved on 2026-11-05: the first step of increment 2 is the enrolment alone;
+verification (1:1) follows as its own step.
+
+- **H33** A fingerprint enrolment is generic, as H6 asks: it keeps the three
+  raw captures of the finger, sealed, and every method makes its templates
+  from them, so a method added later needs no new enrolment. In this step
+  only OpenCV SIFT makes templates; Pore SIFT and the learned descriptor make
+  theirs from the same captures in increment 3.
+  - **The same finger (H15):** OpenCV SIFT is the fixed referee, not a choice
+    of the user, since its threshold is the only one on the HiScan PRO that
+    is not provisional (H16) and it did best there (H10). Every pair of the
+    three captures must score above its threshold, the later capture as the
+    probe and the earlier as the reference, as in H10. When no three of the
+    captures kept so far do, one more placement is asked for, and the three
+    whose lowest pair score is highest are kept. After 6 kept placements or
+    12 captures without three that match, the enrolment ends unsaved.
+  - **Quality:** every capture that passes H7's checks is scored with NIST's
+    NFIQ 2.3.0, the reference implementation of ISO/IEC 29794-4, from 0 to
+    100. NFIQ 2 is defined for 500 ppi, so the score is computed on a copy
+    reduced by the mean of every 2 x 2 block, in memory and for the score
+    only; the methods keep the native 1000 ppi capture (the research's D1).
+    A capture scoring below 35, or one NFIQ 2 cannot score, is not kept, and
+    the finger is placed again. The minimum is provisional: the researcher's
+    40 captures scored 39 to 91 (median 64.5), so none falls below it, while
+    synthetic damage to copies of them put 4 of 40 blurred copies and 11 of
+    39 partial ones below it, and one partial copy got no score. The score
+    is kept with H7's checks in the sample's `checks`.
+  - **NFIQ 2's build:** the released 2.3.0 C interface cannot load the 2.3
+    model (a stale checksum, NIST's issue 409, fixed in its source on
+    2026-09-30 without a release), and the released command-line tool reads
+    only files, which H13 rules out. The system therefore uses NIST's v2.3.0
+    source with only that fix (commit 6ebcd52, one line), built as a library
+    without the command-line tool, so of the tag's components only OpenCV
+    4.10.0, FingerJet FX OSE and digestpp are needed (`engines/README.md`).
+    Nothing is installed into Windows. From memory the build gave exactly the
+    released tool's scores on all 40 captures and on the damaged copies.
+  - **Acquisition (H13):** `ScannerCapture oem-acquire` waits either for a
+    placed finger, returning its checked image, or for the finger to be
+    lifted, which it reports after two frames in a row without ridge
+    texture, since a new connection's first frame can be blank (H8). It
+    writes JSON lines to standard output, an image's PNG right after its
+    line, and no file. The server is its watchdog, stops it when an
+    enrolment is cancelled, and retries a run that fails with OEM status 110
+    once (H9).
+  - **Engines (H10, H13):** `engines/opencv_sift.py` runs the research's
+    OpenCV SIFT through the pinned link, its comparison and seeding
+    unchanged. The research's extraction reads a file, so the engine decodes
+    the PNG in memory and makes the same OpenCV call; a test shows equal
+    points and descriptors, and on the second set (H9) the engine gave H10's
+    scores on all 435 pairs. `engines/nfiq2_quality.py` runs NFIQ 2. Both run
+    in the research project environment, which has numpy, and add nothing to
+    it; the server's environment does not change.
+  - **Live progress:** amending section 3 of the specification, an
+    enrolment's progress comes as a streamed HTTP answer of JSON lines, not
+    WebSocket messages: once started, the flow goes one way, and the session
+    token and the route's role check stay those of every other request
+    (H12, H26). Closing the connection cancels the enrolment and stops the
+    scanner.
+  - **The stored template:** at the end of an enrolment the client shows how
+    it is stored, in six steps: the captures with their checks; OpenCV SIFT's
+    points; one point's 128 numbers in SIFT's own layout (4 x 4 cells of 8
+    orientation bins), as a strip and as numbers; the whole template as a
+    picture; the template's row with its sealed value split into its parts;
+    and the pair scores against the threshold. The server sends this once,
+    from its memory before sealing, only to the user who enrolled; no stored
+    template is opened for it, as only engines read templates (H14), and the
+    page keeps it only while the screen is open. Showing it again later
+    would need a decision of its own.
+  - **Tables (H25):** `algorithm` (the four fingerprint rows with H16's
+    values; face and voice join when their models are pinned), `enrolment`,
+    `sample` and `template` are built as in `docs/data-model.md`; `attempt`
+    comes with verification. A new enrolment of the same finger replaces the
+    old one, which stays with its findings. Administrator accounts cannot
+    enrol (H12).
+
+## 2026-11-05: deleting a fingerprint enrolment
+
+Approved on 2026-11-05.
+
+- **H34** On the fingerprint screen, a user who chooses an enrolled finger
+  can delete its enrolment as well as enrol it again, and is not made to
+  enrol it again. After a confirmation, every enrolment of that finger of
+  the user, the current one and those it replaced (H33), is erased from the
+  biometric database with its sealed captures and templates, so nothing of
+  that finger stays; the finger counts as not enrolled until it is enrolled
+  again. Other fingers and other people are untouched. The route is
+  `DELETE /api/fingerprint/fingers/{finger}`, for user accounts only (H12).
+  Attempts do not exist yet; verification will settle what an attempt keeps
+  when its enrolment is deleted.

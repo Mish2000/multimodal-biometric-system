@@ -12,7 +12,7 @@
   <img alt=".NET Framework 4.8" src="https://img.shields.io/badge/.NET_Framework-4.8-512BD4?logo=dotnet&logoColor=white">
 </p>
 <p align="center">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-87%20server%20%C2%B7%2047%20client-2EA44F">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-101%20server%20%C2%B7%2061%20client%20%C2%B7%2014%20scanner%20%C2%B7%206%20engines-2EA44F">
   <img alt="Cryptography" src="https://img.shields.io/badge/crypto-AES--256--GCM%20%C2%B7%20Argon2id%20%C2%B7%20HMAC-7C3AED">
   <img alt="Build" src="https://img.shields.io/badge/build-increment%201%20of%206-F59E0B">
 </p>
@@ -25,7 +25,8 @@ matching methods run inside the system, on native 1000 ppi captures.
 
 > [!NOTE]
 > Built in six approved increments. The first, accounts, roles and the client's skeleton, is being
-> completed while the client's visual direction is chosen with the academic supervisor.
+> completed while the client's visual direction is chosen with the academic supervisor; the second has
+> begun with fingerprint enrolment.
 
 ## Screenshots
 
@@ -157,7 +158,7 @@ flowchart LR
 | | Increment | |
 | --- | --- | --- |
 | 🟡 | **1 · Foundation** | environments, local PostgreSQL + pgvector, accounts, roles, administration, the client's skeleton |
-| ⚪ | **2 · Fingerprint, 1:1** | enrolment and verification with OpenCV SIFT, encrypted storage, attempt history |
+| 🟡 | **2 · Fingerprint, 1:1** | enrolment with an NFIQ 2 quality check, sealed captures and templates, and a screen of the stored template (built); verification with OpenCV SIFT and the attempt history (next) |
 | ⚪ | **3 · Fingerprint, complete** | all methods, the method choice, 1:N and the match drawings |
 | ⚪ | **4 · Face** | enrolment, 1:1 and 1:N |
 | ⚪ | **5 · Voice** | enrolment, 1:1 and 1:N |
@@ -169,6 +170,7 @@ flowchart LR
 client/        Electron + React + TypeScript client
 server/        FastAPI server, accounts, keys and the local PostgreSQL cluster
 scanner/       ScannerCapture: native 1000 ppi capture (C#, .NET Framework 4.8, x86)
+engines/       engine processes: the research's OpenCV SIFT and NIST's NFIQ 2 quality score
 methods/       pinned link to the research methods and their evaluation on the scanner
 docs/          specification, data model, decision record and validations
 environments/  locked conda environments of the server and the database

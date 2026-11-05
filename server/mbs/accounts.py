@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session as DbSession
 from . import keys as keyring
 from . import national_id, outbox, passwords, phones
 from .db import Databases
+from .fingerprint import enrolled_fingers
 from .keys import Keys
 from .models import (ACTIVE, ADMIN, DISABLED, EMAIL, LANGUAGES, SMS, THEMES, USER, Account, AuditEntry,
                      IdentityLink, PasswordReset, Session, Subject)
@@ -338,13 +339,15 @@ def complete_reset(databases: Databases, throttle: Throttle, token: str, new: st
     throttle.succeeded(account.email_key)
 
 
-def modalities(databases: Databases, keys: Keys, account: SignedIn) -> dict[str, dict[str, bool]] | None:
-    """Enrolment per modality for the home screen (H15); administrator accounts have none (H12).
-    Enrolments arrive with increment 2, so every modality is still unenrolled."""
+def modalities(databases: Databases, keys: Keys, account: SignedIn) -> dict[str, dict] | None:
+    """Enrolment per modality for the home screen (H15), with the enrolled fingers (H33); administrator
+    accounts have none (H12). Face and voice arrive with increments 4 and 5."""
     if account.role != USER:
         return None
-    subject_of(databases, keys, account.id)  # the link must open; enrolments will be looked up by it
-    return {modality: {"enrolled": False} for modality in MODALITIES}
+    fingers = enrolled_fingers(databases, subject_of(databases, keys, account.id))
+    states: dict[str, dict] = {modality: {"enrolled": False} for modality in MODALITIES}
+    states["fingerprint"] = {"enrolled": bool(fingers), "fingers": fingers}
+    return states
 
 
 # Administration (H12): each change asks for the administrator's password again and is audited.
