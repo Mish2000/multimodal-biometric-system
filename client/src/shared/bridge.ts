@@ -163,7 +163,7 @@ export type VerificationEvent =
 export interface IdentificationResult {
   attempt_id: string
   at: string
-  algorithm: 'opencv-sift'
+  algorithm: FingerprintAlgorithm
   score: number
   threshold: number
   threshold_origin: string
@@ -177,7 +177,8 @@ export interface IdentificationResult {
 }
 
 export type IdentificationEvent =
-  | { type: 'started'; algorithm: 'opencv-sift'; threshold: number; quality_minimum: number; gallery_size: number; enrolments: number }
+  | { type: 'started'; algorithm: FingerprintAlgorithm; threshold: number; quality_minimum: number; gallery_size: number; enrolments: number }
+  | { type: 'preparing_templates'; algorithm: FingerprintAlgorithm; completed: number; total: number }
   | { type: 'place'; capture: number; maximum: number }
   | { type: 'checking' | 'lift' | 'extracting' | 'saving' }
   | { type: 'rejected'; image: string; checks: Check[]; score: number | null; minimum: number }
@@ -201,7 +202,7 @@ export interface MbsBridge {
   verifyFingerprint(finger: number, runId: string, algorithm?: FingerprintAlgorithm): Promise<ApiResult<null>>
   cancelVerification(runId: string): void
   onVerification(runId: string, listener: (event: VerificationEvent) => void): () => void
-  identifyFingerprint(runId: string): Promise<ApiResult<null>>
+  identifyFingerprint(runId: string, algorithm?: FingerprintAlgorithm): Promise<ApiResult<null>>
   cancelIdentification(runId: string): void
   onIdentification(runId: string, listener: (event: IdentificationEvent) => void): () => void
 }

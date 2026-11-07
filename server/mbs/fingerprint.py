@@ -75,13 +75,18 @@ class FingerprintService:
     pore: Engine | None = None  # H38: the research's separate Pore SIFT runtime
     learned: Engine | None = None  # H39: the second trained descriptor, in its research runtime
     _busy: threading.Lock = field(default_factory=threading.Lock)
-    _search_peers: list[Engine] = field(default_factory=list)
+    _search_peers: dict[str, list[Engine]] = field(default_factory=dict)
 
-    def search_engines(self) -> list[Engine]:
-        """H41: at most four independent comparisons, requested under the shared capture lock."""
-        if not self._search_peers:
-            self._search_peers = [self.sift.peer() for _ in range(3)]
-        return [self.sift, *self._search_peers]
+    def search_engines(self, algorithm: str = OPENCV_SIFT) -> list[Engine]:
+        """H41, H42: four CPU workers or one GPU runtime, under the shared capture lock."""
+        engine = engine_for(self, algorithm)
+        if engine is None:
+            raise EngineError("method is unavailable")
+        if algorithm == LEARNED_PORE:
+            return [engine]
+        if algorithm not in self._search_peers:
+            self._search_peers[algorithm] = [engine.peer() for _ in range(3)]
+        return [engine, *self._search_peers[algorithm]]
 
     def warm_up(self) -> None:
         """Start both engines in the background, so the first enrolment does not wait for them."""
@@ -100,8 +105,9 @@ class FingerprintService:
             self.pore.close()
         if self.learned is not None:
             self.learned.close()
-        for engine in self._search_peers:
-            engine.close()
+        for peers in self._search_peers.values():
+            for engine in peers:
+                engine.close()
 
 
 def from_config(config: Config) -> tuple[FingerprintService | None, str]:
@@ -199,8 +205,10 @@ def delete_finger(databases: Databases, subject: uuid.UUID, finger: int) -> bool
     """H34: the user deletes a finger's enrolment. Every enrolment of that finger, the current one and those
     it replaced, is erased with its sealed captures and templates; False when the finger is not enrolled."""
     with _db(databases.biometric) as db, db.begin():
+        # H42: preparation holds the enrolment before writing templates. Take the same lock before deleting samples.
         rows = db.execute(select(Enrolment.id, Enrolment.replaced_at).where(
-            Enrolment.subject_id == subject, Enrolment.modality == FINGERPRINT, Enrolment.finger == finger)).all()
+            Enrolment.subject_id == subject, Enrolment.modality == FINGERPRINT, Enrolment.finger == finger
+        ).order_by(Enrolment.id).with_for_update()).all()
         if not any(replaced_at is None for _, replaced_at in rows):
             return False
         enrolments = [enrolment_id for enrolment_id, _ in rows]

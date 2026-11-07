@@ -8,7 +8,7 @@ accounts database, with the account's `theme` column (H24, H26), its `phone`
 and `language` columns and the `password_reset` table (H29, H31, H32), and the
 biometric `subject`, `algorithm`, `enrolment`, `sample` and `template` tables
 exist (H23, H33); `attempt` exists for fingerprint verification (H35) and
-OpenCV SIFT identification (H41).
+fingerprint identification (H41, H42).
 
 H38 and H39 use these tables for OpenCV SIFT, Pore SIFT and the learned pore
 descriptor. Each new finding gets one sealed template per available method.
@@ -350,8 +350,9 @@ equals `score > threshold`, and another keeps a fingerprint source to `device`.
 Deleting a finger erases the attempts and probes of its current and replaced
 enrolments. Re-enrolment retains the old enrolment and its attempts.
 
-H41 uses `mode = identify`, `algorithm = opencv-sift`, `enrolment_id = null`
-and the number of compared templates in `gallery_size`. It stores the
+Identification uses `mode = identify`, `enrolment_id = null` and the number
+of compared templates in `gallery_size` (H41). The selected method is
+`opencv-sift`, `pore-sift` or `learned-pore` (H42). It stores the
 leading enrolment even below the threshold. Equal leaders use deterministic
 UUID ordering, and the client marks the tie. Migration `biometric_0004`
 changes the leading-enrolment foreign key to `ON DELETE SET NULL`, keeping

@@ -2,7 +2,7 @@
 
 Approved on 2026-10-20 (H11–H20 in `docs/decisions.md`),
 from the draft of 2026-10-19 as revised on 2026-10-20, and amended with his
-approval since (H24 to H41). Every decision is cited by its ID; a change needs
+approval since (H24 to H42). Every decision is cited by its ID; a change needs
 the researcher's approval and a new entry in the decision record.
 
 ## 1. Purpose and scope
@@ -218,6 +218,12 @@ flow of 2026-10-18).
   their scores and the total gallery size. Equal leaders are marked as a
   tie, with deterministic ordering for storage. Results identify the caller's
   own fingers and keep other candidates anonymous (H18).
+  H42 extends identification to Pore SIFT and the learned pore descriptor.
+  The user chooses the method before starting. Missing templates are prepared
+  from sealed captures before the scanner is requested and commit together
+  for each enrolled finger. The client reports progress and allows cancellation.
+  Completed preparations are reused on retry. Pore SIFT compares in bounded
+  CPU groups, and the learned descriptor uses one comparison runtime.
 - **Thresholds (H16):** settings per algorithm, kept in the biometric
   database; a comparison is accepted when its score is above its threshold.
   Administrators can change them in the client, each change enters the audit
@@ -341,8 +347,9 @@ failures create no comparison record. Its processing time covers quality,
 extraction and the three comparisons, excluding the wait for the finger and
 database storage. The administrative history screen follows in increment 6.
 
-OpenCV SIFT identification follows the same quality and attempt-storage rules
-(H41), with processing time through all gallery comparisons. Deleting a
+Fingerprint identification follows the same quality and attempt-storage rules
+(H41, H42), with the selected method and processing time from receipt of the
+accepted scan through all gallery comparisons. Deleting a
 leading enrolment sets `top_enrolment_id` to null and retains the attempt,
 its score and its sealed probe. This includes identification attempts made
 by other users. Re-enrolment retains the previous enrolment and its history.
@@ -467,3 +474,6 @@ themes during that work.
 - **H41** OpenCV SIFT identification over current active enrolments, bounded
   parallel comparison, anonymous ranked results and retention of identification
   attempts after deletion of the leading enrolment (3, 5.1, 7).
+- **H42** Pore SIFT and learned pore identification, method selection before
+  capture and preparation of missing gallery templates from sealed captures
+  (5.1, 7).

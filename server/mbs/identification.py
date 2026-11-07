@@ -1,4 +1,4 @@
-"""Fingerprint 1:N with OpenCV SIFT (H13, H15, H18, H25, H41).
+"""Fingerprint 1:N with the selected research method (H13, H15, H18, H25, H41, H42).
 
 A gallery snapshots current enrolments of active user accounts. Only metadata spans the full gallery.
 At most four encrypted references are opened and compared at once, each in its own engine process.
@@ -55,9 +55,9 @@ class Reference:
     enrolment_id: uuid.UUID
     sample_id: uuid.UUID
     placement: int
-    template_id: uuid.UUID
-    version: str
-    size: int
+    template_id: uuid.UUID | None
+    version: str | None
+    size: int | None
 
 
 @dataclass
@@ -69,17 +69,25 @@ class Gallery:
     origin: str
     provisional: bool
     version: str
+    algorithm: str = fp.OPENCV_SIFT
 
 
-def _reference_rows(db: Session, enrolments: list[uuid.UUID]) -> list[Reference]:
+def _reference_rows(db: Session, enrolments: list[uuid.UUID], algorithm: str = fp.OPENCV_SIFT) -> list[Reference]:
     rows = db.execute(select(Sample.enrolment_id, Sample.id, Sample.placement, Template.id,
                              Template.version, func.octet_length(Template.data)).outerjoin(
-        Template, (Template.sample_id == Sample.id) & (Template.algorithm == fp.OPENCV_SIFT)).where(
+        Template, (Template.sample_id == Sample.id) & (Template.algorithm == algorithm)).where(
         Sample.enrolment_id.in_(enrolments)).order_by(Sample.enrolment_id, Sample.placement)).all()
     return [Reference(*row) for row in rows]
 
 
-def _load_gallery(databases: Databases, keys: Keys, subject: uuid.UUID) -> Gallery:
+def _validate_reference(reference: Reference, version: str) -> None:
+    if reference.version != version:
+        raise IdentificationError("template_version_mismatch")
+    if reference.size is None or reference.size <= keyring.HEADER_BYTES + 16 or reference.size > MAX_DATA:
+        raise IdentificationError("stored_template_unreadable")
+
+
+def _load_gallery(databases: Databases, keys: Keys, subject: uuid.UUID, code: str = fp.OPENCV_SIFT) -> Gallery:
     with Session(databases.accounts) as db:
         rows = db.execute(select(Account.id, IdentityLink.subject).join(IdentityLink).where(
             Account.role == USER, Account.status == ACTIVE).order_by(Account.id)).all()
@@ -91,36 +99,87 @@ def _load_gallery(databases: Databases, keys: Keys, subject: uuid.UUID) -> Galle
             Enrolment.subject_id.in_([owner.subject_id for owner in owners])).order_by(Enrolment.id))]
         if not any(candidate.subject_id == subject for candidate in candidates):
             raise IdentificationError("not_enrolled")
-        algorithm = db.get(Algorithm, fp.OPENCV_SIFT)
-        references = _reference_rows(db, [candidate.id for candidate in candidates])
+        algorithm = db.get(Algorithm, code)
+        references = _reference_rows(db, [candidate.id for candidate in candidates], code)
         counts = dict.fromkeys((candidate.id for candidate in candidates), 0)
         for reference in references:
             counts[reference.enrolment_id] += 1
-            if reference.template_id is None or reference.size is None:
-                raise IdentificationError("gallery_templates_unavailable")
-            if reference.version != algorithm.version:
-                raise IdentificationError("template_version_mismatch")
-            if reference.size <= keyring.HEADER_BYTES + 16 or reference.size > MAX_DATA:
-                raise IdentificationError("stored_template_unreadable")
+            if reference.template_id is None:
+                if code == fp.OPENCV_SIFT:
+                    raise IdentificationError("gallery_templates_unavailable")
+            else:
+                _validate_reference(reference, algorithm.version)
         if any(count != fp.PLACEMENTS for count in counts.values()):
             raise IdentificationError("gallery_templates_unavailable")
         participating = {candidate.subject_id for candidate in candidates}
         return Gallery([owner for owner in owners if owner.subject_id in participating], candidates, references,
-                       algorithm.threshold, algorithm.threshold_origin, algorithm.threshold_provisional, algorithm.version)
+                       algorithm.threshold, algorithm.threshold_origin, algorithm.threshold_provisional, algorithm.version, code)
 
 
-def _open_reference(databases: Databases, keys: Keys, candidate: Candidate, reference: Reference) -> bytes:
+def _open_reference(databases: Databases, keys: Keys, candidate: Candidate, reference: Reference,
+                    algorithm: str = fp.OPENCV_SIFT) -> bytes:
     with Session(databases.biometric) as db:
         row = db.execute(select(Template.data, Template.version).join(Sample).join(Enrolment).where(
             Template.id == reference.template_id, Template.sample_id == reference.sample_id,
-            Template.algorithm == fp.OPENCV_SIFT, Sample.enrolment_id == candidate.id,
+            Template.algorithm == algorithm, Sample.enrolment_id == candidate.id,
             Enrolment.subject_id == candidate.subject_id, Enrolment.replaced_at.is_(None))).first()
         if row is None:
             raise IdentificationError("gallery_changed")
         if row.version != reference.version or len(row.data) != reference.size:
             raise IdentificationError("gallery_changed")
     return keyring.open_sealed(keys, keyring.TEMPLATE,
-        reference.template_id.bytes + candidate.subject_id.bytes + fp.OPENCV_SIFT.encode("ascii"), row.data)
+        reference.template_id.bytes + candidate.subject_id.bytes + algorithm.encode("ascii"), row.data)
+
+
+def _preparation_source(databases: Databases, keys: Keys, candidate: Candidate, reference: Reference,
+                         gallery: Gallery) -> tuple[bytes, bytes | None]:
+    """H42: open one sealed capture, reusing its pinned pore coordinates when available."""
+    with Session(databases.biometric) as db:
+        sample = db.scalar(select(Sample).join(Enrolment).where(
+            Sample.id == reference.sample_id, Sample.enrolment_id == candidate.id,
+            Sample.placement == reference.placement, Enrolment.subject_id == candidate.subject_id,
+            Enrolment.replaced_at.is_(None)))
+        if sample is None:
+            raise IdentificationError("gallery_changed")
+        png = keyring.open_sealed(keys, keyring.SAMPLE, sample.id.bytes + candidate.subject_id.bytes, sample.data)
+        pores = None
+        if gallery.algorithm == fp.LEARNED_PORE:
+            stored = db.scalar(select(Template).where(Template.sample_id == sample.id, Template.algorithm == fp.PORE_SIFT))
+            if stored is not None:
+                if stored.version != gallery.version:
+                    raise IdentificationError("template_version_mismatch")
+                if stored.data is None:
+                    raise keyring.KeysError("missing pore template")
+                pores = keyring.open_sealed(keys, keyring.TEMPLATE,
+                    stored.id.bytes + candidate.subject_id.bytes + fp.PORE_SIFT.encode("ascii"), stored.data)
+        return png, pores
+
+
+def _store_prepared(databases: Databases, keys: Keys, candidate: Candidate, gallery: Gallery,
+                    references: list[Reference], generated: dict[uuid.UUID, bytes]) -> list[Reference]:
+    """H42: commit missing templates per enrolment, reusing a concurrent complete preparation."""
+    with Session(databases.biometric) as db, db.begin():
+        enrolment = db.scalar(select(Enrolment).where(
+            Enrolment.id == candidate.id, Enrolment.subject_id == candidate.subject_id).with_for_update())
+        if enrolment is None or enrolment.replaced_at is not None:
+            raise IdentificationError("gallery_changed")
+        current = _reference_rows(db, [candidate.id], gallery.algorithm)
+        if [(r.sample_id, r.placement) for r in current] != [(r.sample_id, r.placement) for r in references]:
+            raise IdentificationError("gallery_changed")
+        for expected, actual in zip(references, current):
+            if expected.template_id is not None:
+                if actual != expected:
+                    raise IdentificationError("gallery_changed")
+            elif actual.template_id is None:
+                stored = Template(id=uuid.uuid4(), sample_id=actual.sample_id, algorithm=gallery.algorithm,
+                                  version=gallery.version, created_at=datetime.now(timezone.utc))
+                stored.data = keyring.seal(keys, keyring.TEMPLATE,
+                    stored.id.bytes + candidate.subject_id.bytes + gallery.algorithm.encode("ascii"), generated[actual.sample_id])
+                db.add(stored)
+            else:
+                _validate_reference(actual, gallery.version)
+        db.flush()
+        return _reference_rows(db, [candidate.id], gallery.algorithm)
 
 
 async def _engine_call(engine: Engine, work: Callable):
@@ -149,12 +208,13 @@ async def _engine_call(engine: Engine, work: Callable):
 
 
 async def _compare_batch(engines: list[Engine], databases: Databases, keys: Keys,
-                         candidates: dict[uuid.UUID, Candidate], references: list[Reference], probe: bytes) -> list[int]:
+                         candidates: dict[uuid.UUID, Candidate], references: list[Reference], probe: bytes,
+                         algorithm: str = fp.OPENCV_SIFT) -> list[int]:
     results: list[int | Exception | None] = [None] * len(references)
 
     async def compare(index: int, engine: Engine, reference: Reference):
         try:
-            native = await run_in_threadpool(_open_reference, databases, keys, candidates[reference.enrolment_id], reference)
+            native = await run_in_threadpool(_open_reference, databases, keys, candidates[reference.enrolment_id], reference, algorithm)
             if len(probe) + len(native) > MAX_DATA:
                 raise EngineError("comparison exceeds the engine message limit")
             result, _ = await _engine_call(engine, lambda: engine.request({"op": "compare"}, [probe, native]))
@@ -174,7 +234,7 @@ async def _compare_batch(engines: list[Engine], databases: Databases, keys: Keys
 def _save(databases: Databases, keys: Keys, subject: uuid.UUID, gallery: Gallery,
           best: Candidate, score: int, png: bytes, at: datetime, duration_ms: int) -> Attempt:
     attempt = Attempt(id=uuid.uuid4(), at=at, subject_id=subject, modality=fp.FINGERPRINT, mode="identify",
-                      algorithm=fp.OPENCV_SIFT, top_enrolment_id=best.id, gallery_size=len(gallery.references),
+                      algorithm=gallery.algorithm, top_enrolment_id=best.id, gallery_size=len(gallery.references),
                       score=score, threshold=gallery.threshold, accepted=score > gallery.threshold,
                       duration_ms=duration_ms, source="device")
     attempt.probe = keyring.seal(keys, keyring.PROBE, attempt.id.bytes + subject.bytes, png)
@@ -192,20 +252,20 @@ def _save(databases: Databases, keys: Keys, subject: uuid.UUID, gallery: Gallery
                 Enrolment.id.in_(ids)).order_by(Enrolment.id).with_for_update()).all()
             if list(current) != [(candidate.id, candidate.subject_id, candidate.finger, None) for candidate in gallery.candidates]:
                 raise IdentificationError("gallery_changed")
-            if _reference_rows(db, ids) != gallery.references:
+            if _reference_rows(db, ids, gallery.algorithm) != gallery.references:
                 raise IdentificationError("gallery_changed")
             db.add(attempt)
     return attempt
 
 
 async def identify(service: fp.FingerprintService, databases: Databases, keys: Keys,
-                   subject: uuid.UUID) -> AsyncIterator[dict]:
+                   subject: uuid.UUID, algorithm: str = fp.OPENCV_SIFT) -> AsyncIterator[dict]:
     if not service._busy.acquire(blocking=False):
         yield {"type": "failed", "error": "scanner_busy"}
         return
     run = ScannerRun()
     try:
-        async for event in _identify(service, databases, keys, subject, run):
+        async for event in _identify(service, databases, keys, subject, run, algorithm):
             yield event
     except IdentificationError as error:
         yield {"type": "failed", "error": str(error)}
@@ -223,17 +283,58 @@ async def identify(service: fp.FingerprintService, databases: Databases, keys: K
         service._busy.release()
 
 
-async def _identify(service, databases, keys, subject, run) -> AsyncIterator[dict]:
-    gallery = await run_in_threadpool(_load_gallery, databases, keys, subject)
+async def _extract(service: fp.FingerprintService, algorithm: str, png: bytes, pores: bytes | None = None) -> bytes:
+    engine = fp.engine_for(service, algorithm)
+    if algorithm == fp.LEARNED_PORE and pores is None:
+        _, detected = await _engine_call(service.pore, lambda: service.pore.request({"op": "detect"}, [png]))
+        if not detected or not detected[0]:
+            raise EngineError("missing pore coordinates")
+        pores = detected[0]
+    return await _engine_call(engine, lambda: fp.extract_native(service, algorithm, png, pores))
+
+
+async def _prepare_gallery(service, databases, keys, gallery: Gallery) -> AsyncIterator[dict]:
+    missing = sum(reference.template_id is None for reference in gallery.references)
+    if not missing:
+        return
+    yield {"type": "preparing_templates", "algorithm": gallery.algorithm, "completed": 0, "total": missing}
+    by_enrolment = {candidate.id: [] for candidate in gallery.candidates}
+    for reference in gallery.references:
+        by_enrolment[reference.enrolment_id].append(reference)
+    completed = 0
+    for candidate in gallery.candidates:
+        references = by_enrolment[candidate.id]
+        generated = {}
+        for reference in references:
+            if reference.template_id is None:
+                png, pores = await run_in_threadpool(_preparation_source, databases, keys, candidate, reference, gallery)
+                generated[reference.sample_id] = await _extract(service, gallery.algorithm, png, pores)
+                completed += 1
+                yield {"type": "preparing_templates", "algorithm": gallery.algorithm, "completed": completed, "total": missing}
+        if generated:
+            by_enrolment[candidate.id] = await run_in_threadpool(
+                _store_prepared, databases, keys, candidate, gallery, references, generated)
+    gallery.references = [reference for candidate in gallery.candidates for reference in by_enrolment[candidate.id]]
+
+
+async def _identify(service, databases, keys, subject, run, algorithm) -> AsyncIterator[dict]:
+    if algorithm not in (fp.OPENCV_SIFT, fp.PORE_SIFT, fp.LEARNED_PORE):
+        raise IdentificationError("unknown_method")
+    if fp.engine_for(service, algorithm) is None:
+        raise IdentificationError("method_unavailable")
+    gallery = await run_in_threadpool(_load_gallery, databases, keys, subject, algorithm)
     total = len(gallery.references)
-    yield {"type": "started", "algorithm": fp.OPENCV_SIFT, "threshold": gallery.threshold,
+    yield {"type": "started", "algorithm": algorithm, "threshold": gallery.threshold,
            "quality_minimum": service.quality_minimum, "gallery_size": total, "enrolments": len(gallery.candidates)}
-    engines = service.search_engines()[:min(total, 4)]
-    for engine in engines:
+    engines = service.search_engines(algorithm)[:total]
+    startup = [*engines, service.pore] if algorithm == fp.LEARNED_PORE else engines
+    for engine in startup:
         ready = await _engine_call(engine, engine.start)
         if ready["version"] != gallery.version:
             raise IdentificationError("template_version_mismatch")
     await _engine_call(service.quality, service.quality.start)
+    async for event in _prepare_gallery(service, databases, keys, gallery):
+        yield event
     for capture in range(1, fp.MOST_CAPTURES + 1):
         yield {"type": "place", "capture": capture, "maximum": fp.MOST_CAPTURES}
         header, png = await fp.acquire(service, "finger", run)
@@ -251,13 +352,13 @@ async def _identify(service, databases, keys, subject, run) -> AsyncIterator[dic
 
     yield {"type": "captured", "image": image, "checks": checks}
     yield {"type": "extracting"}
-    probe = await _engine_call(service.sift, lambda: fp.extract_native(service, fp.OPENCV_SIFT, png))
+    probe = await _extract(service, algorithm, png)
     candidates = {candidate.id: candidate for candidate in gallery.candidates}
     scores = dict.fromkeys(candidates, 0)
     yield {"type": "searching", "completed": 0, "total": total}
     for offset in range(0, total, len(engines)):
         batch = gallery.references[offset:offset + len(engines)]
-        results = await _compare_batch(engines, databases, keys, candidates, batch, probe)
+        results = await _compare_batch(engines, databases, keys, candidates, batch, probe, algorithm)
         for reference, value in zip(batch, results):
             scores[reference.enrolment_id] = max(scores[reference.enrolment_id], value)
         yield {"type": "searching", "completed": offset + len(batch), "total": total}
@@ -268,7 +369,7 @@ async def _identify(service, databases, keys, subject, run) -> AsyncIterator[dic
     yield {"type": "saving"}
     attempt = await run_in_threadpool(_save, databases, keys, subject, gallery, best, score, png, at, duration_ms)
     yield {"type": "identified", "attempt_id": str(attempt.id), "at": attempt.at.isoformat(),
-           "algorithm": fp.OPENCV_SIFT, "score": score, "threshold": attempt.threshold,
+           "algorithm": algorithm, "score": score, "threshold": attempt.threshold,
            "threshold_origin": gallery.origin, "threshold_provisional": gallery.provisional,
            "accepted": attempt.accepted, "duration_ms": duration_ms, "gallery_size": total,
            "enrolments": len(ranked), "tied_leaders": sum(scores[c.id] == score for c in ranked),

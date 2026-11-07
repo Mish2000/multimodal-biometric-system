@@ -89,9 +89,10 @@ export class ServerClient {
     return this.scan(VERIFICATIONS, { finger, ...(algorithm === undefined ? {} : { algorithm }) }, runId, emit)
   }
 
-  async identify(runId: unknown, emit: (event: unknown) => void): Promise<ApiResult> {
+  async identify(runId: unknown, emit: (event: unknown) => void, algorithm: unknown = 'opencv-sift'): Promise<ApiResult> {
     if (typeof runId !== 'string' || !UUID.test(runId)) return refused('invalid_request')
-    return this.scan(IDENTIFICATIONS, { algorithm: 'opencv-sift' }, runId, emit)
+    if (!FINGERPRINT_ALGORITHMS.includes(algorithm as FingerprintAlgorithm)) return refused('invalid_request')
+    return this.scan(IDENTIFICATIONS, { algorithm }, runId, emit)
   }
 
   private async scan(path: string, body: object, runId: string | null, emit: (event: unknown) => void): Promise<ApiResult> {

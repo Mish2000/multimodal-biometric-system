@@ -5,6 +5,7 @@ import type { Check, EnrolmentEvent, Pair, SavedEnrolment, FingerprintAlgorithm,
 import { Checks, Journey, Pairs, type Captured } from '../fingerprint/Journey'
 import { Verification } from '../fingerprint/Verification'
 import { Identification } from '../fingerprint/Identification'
+import { MethodChoices } from '../fingerprint/MethodChoices'
 import { errorText, type Texts } from '../texts'
 import { useSession } from '../session'
 
@@ -69,7 +70,8 @@ export function Fingerprint() {
   useEffect(() => { if (choosingMethod) methodHeading.current?.focus() }, [choosingMethod])
 
   if (identifying)
-    return <Identification enrolled={(enrolled?.length ?? 0) > 0} onLeave={() => {
+    return <Identification enrolled={(enrolled?.length ?? 0) > 0} methods={methods}
+      methodError={methodError} onReloadMethods={loadMethods} onLeave={() => {
       setIdentifying(false)
       load()
     }} />
@@ -80,30 +82,8 @@ export function Fingerprint() {
         <h1 ref={methodHeading} tabIndex={-1}>{f.verification.title}</h1>
         <p className="lead"><bdi>{f.fingers[chosen]}</bdi></p>
         <p>{f.methodLead}</p>
-        <fieldset className="method-choices">
-          <legend>{f.methodChoice}</legend>
-          {methods.map((method) => (
-            <label key={method.code} className="method-choice">
-              <input type="radio" name="fingerprint-method" value={method.code} checked={algorithm === method.code}
-                aria-labelledby={`method-${method.code}`} aria-describedby={`method-${method.code}-description`}
-                disabled={!method.available} onChange={() => setAlgorithm(method.code)} />
-              <span>
-                <strong id={`method-${method.code}`}>{f.methodNames[method.code]}</strong>
-                <span className="method-description" id={`method-${method.code}-description`}>{f.methodDescriptions[method.code]}</span>
-                <span className="method-description aside">{f.methodAccuracy[method.code]}</span>
-                <span className="method-description aside">{f.methodSpeed[method.code]}</span>
-                <span className="method-description">{f.verification.threshold(method.threshold)}{method.threshold_provisional ? ` · ${f.provisional}` : ''}</span>
-                {!method.available && <span className="method-description error">{f.methodUnavailable}</span>}
-              </span>
-            </label>
-          ))}
-          {methodError ? (
-            <div>
-              <p className="error" role="alert">{methodError}</p>
-              <button type="button" className="secondary" onClick={loadMethods}>{f.tryAgain}</button>
-            </div>
-          ) : methods.length === 0 && <p className="aside">{t.loading}</p>}
-        </fieldset>
+        <MethodChoices methods={methods} algorithm={algorithm} onChoose={setAlgorithm}
+          error={methodError} onRetry={loadMethods} />
         <div className="actions">
           <button type="button" disabled={!selectedMethod?.available} onClick={() => {
             setChoosingMethod(false)

@@ -138,7 +138,7 @@ class FingerprintVerification(FingerprintEnrolment):
 
 class FingerprintIdentification(BaseModel):
     model_config = {"extra": "forbid"}
-    algorithm: Literal["opencv-sift"] = "opencv-sift"  # H41: first complete 1:N path
+    algorithm: Literal["opencv-sift", "pore-sift", "learned-pore"] = "opencv-sift"  # H41, H42
 
 
 def account_json(account: SignedIn) -> dict:
@@ -265,7 +265,7 @@ def create_app(databases: Databases, keys: Keys, outbox: Outbox, fingerprints: F
         if service is None:
             raise AccountError("fingerprint_unavailable", 503)
         subject = await run_in_threadpool(accounts.subject_of, databases, keys, account.id)
-        return FingerprintResponse(identification.identify(service, databases, keys, subject))
+        return FingerprintResponse(identification.identify(service, databases, keys, subject, body.algorithm))
 
     @app.get("/api/admin/accounts")
     @allow(ADMIN)

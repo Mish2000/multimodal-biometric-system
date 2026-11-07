@@ -40,11 +40,13 @@ class FakeServer implements MbsBridge {
   private verificationListeners = new Map<string, (event: VerificationEvent) => void>()
   identification: IdentificationEvent[] = []
   identifications: string[] = []
+  identificationMethods: FingerprintAlgorithm[] = []
   identificationCancels: string[] = []
   private identificationListeners = new Map<string, (event: IdentificationEvent) => void>()
 
-  identifyFingerprint = async (runId: string): Promise<ApiResult<null>> => {
+  identifyFingerprint = async (runId: string, algorithm: FingerprintAlgorithm = 'opencv-sift'): Promise<ApiResult<null>> => {
     this.identifications.push(runId)
+    this.identificationMethods.push(algorithm)
     for (const event of this.identification) {
       await Promise.resolve()
       this.emitIdentification(event, runId)
@@ -1090,6 +1092,75 @@ describe('fingerprint identification (H41)', () => {
     server.identification = [{ type: 'failed', error: 'gallery_changed' }]
     fireEvent.click(screen.getByRole('button', { name: 'Identify again' }))
     expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'A searched enrolment or account changed. Start a new search to use the current registrations.')
+    expect(screen.queryByRole('meter')).toBeNull()
+  })
+})
+
+describe('pore-method identification (H42)', () => {
+  it.each([
+    ['pore-sift', 'en'], ['learned-pore', 'en'], ['pore-sift', 'he'], ['learned-pore', 'he'],
+  ] as const)('chooses %s in %s, prepares templates and changes method before a fresh scan', async (algorithm, language) => {
+    const he = language === 'he'
+    const name = algorithm === 'pore-sift' ? 'Pore SIFT' : he ? 'המתאר הנלמד' : 'Learned pore descriptor'
+    const threshold = algorithm === 'pore-sift' ? 37 : 21
+    const score = algorithm === 'pore-sift' ? 45 : 30
+    server.current = server.add('dana', 'user', { language })
+    server.fingers = [7]
+    server.identification = [
+      { type: 'started', algorithm, threshold, quality_minimum: 35, gallery_size: 6, enrolments: 2 },
+      { type: 'preparing_templates', algorithm, completed: 1, total: 3 },
+    ]
+    open('/fingerprint', true)
+    fireEvent.click(await screen.findByRole('button', { name: he ? 'זיהוי טביעת אצבע (1:N)' : 'Identify a fingerprint (1:N)' }))
+    expect(screen.getByRole('radio', { name: 'OpenCV SIFT' })).toHaveProperty('checked', true)
+    fireEvent.click(screen.getByRole('radio', { name }))
+    expect(server.identifications).toEqual([])
+    fireEvent.click(screen.getByRole('button', { name: he ? 'התחלת הזיהוי' : 'Start identification' }))
+    await waitFor(() => expect(server.identificationMethods).toEqual([algorithm]))
+    expect(await screen.findByText(he ? `יוצרים תבניות ${name} (1 מתוך 3)…` : `Creating ${name} templates (1 of 3)…`)).toBeTruthy()
+    expect(screen.getByRole('progressbar')).toHaveProperty('value', 1)
+    expect(screen.getByRole('progressbar')).toHaveProperty('max', 3)
+    const previous = server.identifications[0]!
+    act(() => server.emitIdentification({ ...IDENTIFIED, algorithm, threshold, score, threshold_provisional: true }))
+    expect(await screen.findByRole('meter', { name: he ? 'נקבוביות תואמות' : 'Matching pores' })).toHaveProperty('value', score)
+    expect(screen.getByText(he ? /הסף הזה זמני בסורק HiScan PRO/ : /This threshold is provisional on the HiScan PRO/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: he ? 'החלפת שיטה' : 'Change method' }))
+    expect(screen.getByRole('radio', { name })).toHaveProperty('checked', true)
+    expect(server.identifications).toHaveLength(1)
+    expect(server.identificationCancels).toEqual([])
+    fireEvent.click(screen.getByRole('radio', { name: 'OpenCV SIFT' }))
+    server.identification = [{ type: 'place', capture: 1, maximum: 12 }]
+    fireEvent.click(screen.getByRole('button', { name: he ? 'התחלת הזיהוי' : 'Start identification' }))
+    await waitFor(() => expect(server.identificationMethods).toEqual([algorithm, 'opencv-sift']))
+    expect(server.identifications[1]).not.toBe(previous)
+    act(() => server.emitIdentification(IDENTIFIED, previous))
+    expect(screen.queryByRole('meter')).toBeNull()
+  })
+
+  it('shows unavailable pore runtimes disabled while OpenCV SIFT stays selectable', async () => {
+    server.fingers = [7]
+    server.poreAvailable = server.learnedAvailable = false
+    await openFingerprint()
+    fireEvent.click(screen.getByRole('button', { name: 'Identify a fingerprint (1:N)' }))
+    expect(screen.getByRole('radio', { name: 'Pore SIFT' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('radio', { name: 'Learned pore descriptor' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('radio', { name: 'OpenCV SIFT' })).toHaveProperty('checked', true)
+    expect(screen.getByRole('button', { name: 'Start identification' })).toHaveProperty('disabled', false)
+    expect(server.identifications).toEqual([])
+  })
+
+  it('cancels gallery preparation and retries with the same method', async () => {
+    server.fingers = [7]
+    server.identification = [{ type: 'preparing_templates', algorithm: 'learned-pore', completed: 2, total: 6 }]
+    await openFingerprint()
+    fireEvent.click(screen.getByRole('button', { name: 'Identify a fingerprint (1:N)' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Learned pore descriptor' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start identification' }))
+    await screen.findByText('Creating Learned pore descriptor templates (2 of 6)…')
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await screen.findByText('Identification cancelled.')
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    await waitFor(() => expect(server.identificationMethods).toEqual(['learned-pore', 'learned-pore']))
     expect(screen.queryByRole('meter')).toBeNull()
   })
 })

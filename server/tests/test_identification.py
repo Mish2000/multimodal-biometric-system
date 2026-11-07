@@ -78,7 +78,7 @@ def test_role_input_and_own_enrolment_are_enforced_before_capture(fp_client, cli
     plan(script, finger("q60:A4"))
     assert identify(fp_client, token)[-1]["error"] == "not_enrolled"
     assert len(json.loads(script.read_text())) == 1
-    for body in ({"algorithm": "pore-sift"}, {"algorithm": "learned-pore"}, {"finger": 7}, {"subject": str(uuid.uuid4())}):
+    for body in ({"algorithm": "fusion"}, {"algorithm": "unsupported"}, {"finger": 7}, {"subject": str(uuid.uuid4())}):
         assert fp_client.post(route, json=body, headers=auth(token)).status_code == 422
     assert error(client.post(route, json={}, headers=auth(token))) == (503, "fingerprint_unavailable")
 

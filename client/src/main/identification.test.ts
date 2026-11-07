@@ -5,7 +5,7 @@ const BASE = 'http://127.0.0.1:55433'
 const RUN = '00000000-0000-4000-8000-000000000001'
 
 describe('identification transport (H41)', () => {
-  it('sends the fixed method with authentication and finishes on identified before EOF', async () => {
+  it.each(['opencv-sift', 'pore-sift', 'learned-pore'])('sends %s with authentication and finishes on identified before EOF', async (algorithm) => {
     const cancel = vi.fn()
     const stream = new ReadableStream({
       start(controller) { controller.enqueue(new TextEncoder().encode('{"type":"identified","score":90}\n')) },
@@ -17,9 +17,9 @@ describe('identification transport (H41)', () => {
     const server = new ServerClient(BASE, request)
     await server.call('login')
     const events: unknown[] = []
-    expect(await server.identify(RUN, (event) => events.push(event))).toEqual({ ok: true, data: null })
+    expect(await server.identify(RUN, (event) => events.push(event), algorithm)).toEqual({ ok: true, data: null })
     expect(request.mock.calls[1]).toEqual([`${BASE}/api/fingerprint/identifications`, expect.objectContaining({
-      method: 'POST', body: '{"algorithm":"opencv-sift"}',
+      method: 'POST', body: JSON.stringify({ algorithm }),
       headers: { 'content-type': 'application/json', authorization: 'Bearer private-token' },
     })])
     expect(events).toEqual([{ type: 'identified', score: 90 }])
@@ -32,6 +32,7 @@ describe('identification transport (H41)', () => {
     }))
     const server = new ServerClient(BASE, request)
     expect(await server.identify('../bad', () => undefined)).toMatchObject({ error: 'invalid_request' })
+    expect(await server.identify(RUN, () => undefined, 'fusion')).toMatchObject({ error: 'invalid_request' })
     expect(request).not.toHaveBeenCalled()
     const events: unknown[] = []
     const pending = server.identify(RUN, (event) => events.push(event))

@@ -33,6 +33,10 @@ def quality(_header, parts):
 
 
 def extract(_header, parts):
+    hang = f"--hang-{_header['op']}"
+    if hang in sys.argv:
+        Path(sys.argv[sys.argv.index(hang) + 1]).write_text("extracting", encoding="utf-8")
+        time.sleep(120)
     _, name = label(parts[0])
     if PORE:
         return {"keypoints": KEYPOINTS}, b"PORE:" + name.encode()

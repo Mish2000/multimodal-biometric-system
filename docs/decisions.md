@@ -856,3 +856,47 @@ with the scanner follows separately.
 
 The OpenCV SIFT 1:N identification flow (H41) passed a manual check on the
 connected HiScan PRO.
+
+## 2026-11-07: fingerprint identification with pore methods
+
+Approved on 2026-11-07. Extend H41 identification to Pore SIFT and the
+learned pore descriptor, including method selection and preparation of
+missing gallery templates from sealed captures.
+
+- **H42** The identification screen lists the available methods before an
+  explicit capture start. It uses the same method catalog as verification.
+  Its accuracy figures describe SD302 pair comparisons. The time estimates
+  describe extraction and one comparison from H10. OpenCV SIFT is the default.
+  The result uses the selected method's score label and threshold, including
+  the provisional status of the pore thresholds. Changing the method returns
+  to the choice screen and requires an explicit start for the next attempt.
+- The search fixes its gallery and selected threshold at the start. When
+  selected pore templates are missing, the server opens the enrolment's
+  sealed captures in memory before requesting a new scan. Learned templates
+  reuse pinned Pore SIFT coordinates when present. Otherwise the pinned
+  detector produces the coordinates. The new templates keep the research
+  format and are sealed to their row, subject and method (H39).
+- Preparation reports progress across the gallery. It commits missing
+  templates together for each enrolled finger. Cancellation or failure leaves
+  completed enrolments available to the next search. A changed or removed
+  enrolment invalidates preparation for that finger. Deletion and template
+  storage lock the enrolment before writing or deleting related rows.
+- OpenCV SIFT and Pore SIFT compare bounded groups with up to four CPU
+  processes. The learned descriptor uses one runtime for comparison and the
+  shared detector for extraction. Identification compares the selected
+  method's templates and records that method and its threshold. Acceptance
+  remains strictly above the snapshotted threshold (H16). H41 applies to
+  ranking, anonymity, timing, consistency checks and attempt retention.
+
+The full server run passed 197 tests with existing captures. Prepared pore
+templates matched the H10 reference templates, and the tested rankings matched
+serial comparisons. A concurrent deletion test reproduced a database deadlock.
+After the lock order fix, all 27 focused server tests passed, including the new
+concurrency test. All 101 client tests, type checks and build passed. The built
+client passed 73 offscreen checks with both languages and themes, a two-account
+gallery, real engines and existing captures. Manual scanner validation follows.
+
+## 2026-11-08: live pore identification check
+
+Pore SIFT and learned pore 1:N identification (H42) passed manual checks
+on the connected HiScan PRO.
