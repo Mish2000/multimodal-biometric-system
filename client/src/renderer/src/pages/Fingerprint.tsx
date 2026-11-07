@@ -1,7 +1,7 @@
 // The fingerprint screen (H15, H33): choose a finger, enrol it from the scanner with live guidance, then see
 // how its template is stored, or verify it with a new capture (H35).
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { Check, EnrolmentEvent, Pair, SavedEnrolment } from '../../../shared/bridge'
+import type { Check, EnrolmentEvent, Pair, SavedEnrolment, FingerprintAlgorithm, FingerprintMethod } from '../../../shared/bridge'
 import { Checks, Journey, Pairs, type Captured } from '../fingerprint/Journey'
 import { Verification } from '../fingerprint/Verification'
 import { errorText, type Texts } from '../texts'
@@ -21,6 +21,11 @@ export function Fingerprint() {
   const [chosen, setChosen] = useState<number | null>(null)
   const [running, setRunning] = useState(false)
   const [verifying, setVerifying] = useState(false)
+  const [choosingMethod, setChoosingMethod] = useState(false)
+  const methodHeading = useRef<HTMLHeadingElement>(null)
+  const [methods, setMethods] = useState<FingerprintMethod[]>([])
+  const [methodError, setMethodError] = useState('')
+  const [algorithm, setAlgorithm] = useState<FingerprintAlgorithm>('opencv-sift')
   const [result, setResult] = useState<{ saved: SavedEnrolment; captures: Record<number, Captured> } | null>(null)
   // H34: deleting the chosen finger's enrolment, after a confirmation.
   const [confirming, setConfirming] = useState(false)
@@ -50,12 +55,63 @@ export function Fingerprint() {
     })
   }, [call, t])
   useEffect(load, [load])
+  const loadMethods = useCallback(() => {
+    setMethodError('')
+    void call<{ methods: FingerprintMethod[] }>('fingerprintMethods').then((answer) => {
+      if (answer.ok) setMethods(answer.data.methods)
+      else setMethodError(errorText(answer, t))
+    })
+  }, [call, t])
+  useEffect(loadMethods, [loadMethods])
+  const selectedMethod = methods.find((method) => method.code === algorithm)
+  useEffect(() => { if (choosingMethod) methodHeading.current?.focus() }, [choosingMethod])
+
+  if (choosingMethod && chosen !== null)
+    return (
+      <section className="method-selection">
+        <h1 ref={methodHeading} tabIndex={-1}>{f.verification.title}</h1>
+        <p className="lead"><bdi>{f.fingers[chosen]}</bdi></p>
+        <p>{f.methodLead}</p>
+        <fieldset className="method-choices">
+          <legend>{f.methodChoice}</legend>
+          {methods.map((method) => (
+            <label key={method.code} className="method-choice">
+              <input type="radio" name="fingerprint-method" value={method.code} checked={algorithm === method.code}
+                aria-labelledby={`method-${method.code}`} aria-describedby={`method-${method.code}-description`}
+                disabled={!method.available} onChange={() => setAlgorithm(method.code)} />
+              <span>
+                <strong id={`method-${method.code}`}>{f.methodNames[method.code]}</strong>
+                <span className="method-description" id={`method-${method.code}-description`}>{f.methodDescriptions[method.code]}</span>
+                <span className="method-description aside">{f.methodAccuracy[method.code]}</span>
+                <span className="method-description aside">{f.methodSpeed[method.code]}</span>
+                <span className="method-description">{f.verification.threshold(method.threshold)}{method.threshold_provisional ? ` · ${f.provisional}` : ''}</span>
+                {!method.available && <span className="method-description error">{f.methodUnavailable}</span>}
+              </span>
+            </label>
+          ))}
+          {methodError ? (
+            <div>
+              <p className="error" role="alert">{methodError}</p>
+              <button type="button" className="secondary" onClick={loadMethods}>{f.tryAgain}</button>
+            </div>
+          ) : methods.length === 0 && <p className="aside">{t.loading}</p>}
+        </fieldset>
+        <div className="actions">
+          <button type="button" disabled={!selectedMethod?.available} onClick={() => {
+            setChoosingMethod(false)
+            setVerifying(true)
+          }}>{f.verification.begin}</button>
+          <button type="button" className="secondary" onClick={() => setChoosingMethod(false)}>{f.back}</button>
+        </div>
+      </section>
+    )
 
   if (verifying && chosen !== null)
     return (
       <Verification
         finger={chosen}
         enrolled={enrolled?.includes(chosen) ?? false}
+        algorithm={algorithm}
         onLeave={() => {
           setVerifying(false)
           load()
@@ -137,6 +193,7 @@ export function Fingerprint() {
                 </strong>
               </p>
               {enrolled.includes(chosen) && <p className="aside">{f.replaces}</p>}
+              <p className="aside">{f.enrolmentRole}</p>
               {confirming ? (
                 <div className="confirm" role="alertdialog" aria-label={f.deleteEnrolment}>
                   <p>{f.deleteAsk(f.fingers[chosen] ?? '')}</p>
@@ -152,7 +209,7 @@ export function Fingerprint() {
               ) : (
                 <div className="actions">
                   {enrolled.includes(chosen) && (
-                    <button type="button" onClick={() => setVerifying(true)}>{f.verification.start}</button>
+                    <button type="button" onClick={() => setChoosingMethod(true)}>{f.verification.start}</button>
                   )}
                   <button type="button" className={enrolled.includes(chosen) ? 'secondary' : ''} onClick={() => setRunning(true)}>
                     {enrolled.includes(chosen) ? f.enrolAgain : f.enrol}
@@ -182,7 +239,7 @@ export function Fingerprint() {
 }
 
 interface Run {
-  phase: 'starting' | 'place' | 'lift' | 'saving' | 'failed'
+  phase: 'starting' | 'place' | 'lift' | 'templates' | 'saving' | 'failed'
   placement: number
   placements: number
   minimum: number
@@ -249,6 +306,7 @@ function Enrolment({ finger, onSaved, onLeave }: { finger: number; onSaved: (sav
         <bdi>{f.fingers[finger]}</bdi>
       </h1>
       <p className="lead">{f.placementOf(Math.min(run.placement, run.placements), run.placements)}</p>
+      <p className="aside">{f.enrolmentRole}</p>
       <ol className="placements" aria-label={f.keptTitle}>
         {Array.from({ length: Math.max(run.placements, run.kept.length) }, (_, i) => (
           <li key={i} className={i < run.kept.length ? 'kept' : i === run.kept.length ? 'now' : ''} />
@@ -272,7 +330,7 @@ function Enrolment({ finger, onSaved, onLeave }: { finger: number; onSaved: (sav
         <>
           <p className="notice prompt" role="status" aria-live="polite">
             {run.message && <span>{run.message} </span>}
-            <strong>{prompt}</strong>
+            {prompt && <strong>{prompt}</strong>}
           </p>
           <button type="button" className="secondary" onClick={() => window.mbs.cancelEnrolment()}>
             {f.cancel}
@@ -337,6 +395,8 @@ function next(run: Run, event: EnrolmentEvent, t: Texts): Run {
       return { ...run, message: f.another, placements: run.kept.length + 1 }
     case 'lift':
       return { ...run, phase: 'lift' }
+    case 'templates':
+      return { ...run, phase: 'templates', message: f.preparingTemplates(f.methodNames[event.algorithm] ?? event.algorithm, event.completed, event.total) }
     case 'failed':
       return { ...run, phase: 'failed', error: f.errors[event.error] ?? t.errors[event.error] ?? t.unexpected }
     default:

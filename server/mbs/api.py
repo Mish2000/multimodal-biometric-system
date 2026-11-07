@@ -5,7 +5,7 @@ client shows (H12)."""
 from __future__ import annotations
 
 import uuid
-from typing import Annotated
+from typing import Annotated, Literal
 
 import anyio
 from fastapi import BackgroundTasks, Depends, FastAPI, Request
@@ -132,6 +132,10 @@ class FingerprintEnrolment(BaseModel):
     finger: int = Field(ge=1, le=10)  # ANSI/NIST-ITL position, as in ScannerCapture
 
 
+class FingerprintVerification(FingerprintEnrolment):
+    algorithm: Literal["opencv-sift", "pore-sift", "learned-pore"] = "opencv-sift"  # H38, H39
+
+
 def account_json(account: SignedIn) -> dict:
     return {"id": str(account.id), "username": account.username, "email": account.email, "role": account.role,
             "must_change_password": account.must_change_password, "theme": account.theme,
@@ -235,14 +239,19 @@ def create_app(databases: Databases, keys: Keys, outbox: Outbox, fingerprints: F
 
     @app.post("/api/fingerprint/verifications")
     @allow(USER)
-    async def verify_fingerprint(body: FingerprintEnrolment, account: SignedIn = Depends(signed_in)) -> StreamingResponse:
+    async def verify_fingerprint(body: FingerprintVerification, account: SignedIn = Depends(signed_in)) -> StreamingResponse:
         """H35: the signed-in user's chosen finger, through the same capture and progress channel as H33."""
         service = app.state.fingerprints
         if service is None:
             raise AccountError("fingerprint_unavailable", 503)
         subject = await run_in_threadpool(accounts.subject_of, databases, keys, account.id)
-        events = verification.verify(service, databases, keys, subject, body.finger)
+        events = verification.verify(service, databases, keys, subject, body.finger, body.algorithm)
         return FingerprintResponse(events)
+
+    @app.get("/api/fingerprint/methods")
+    @allow(USER)
+    def fingerprint_methods() -> dict:
+        return {"methods": fingerprint.methods(databases, app.state.fingerprints)}
 
     @app.get("/api/admin/accounts")
     @allow(ADMIN)

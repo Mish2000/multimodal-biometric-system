@@ -2,12 +2,12 @@
 // only after persistence. A fresh run id prevents a cancelled operation from updating the next one.
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
-import type { VerificationEvent, VerificationResult } from '../../../shared/bridge'
+import type { VerificationEvent, VerificationResult, FingerprintAlgorithm } from '../../../shared/bridge'
 import { useSession } from '../session'
 import { errorText } from '../texts'
 import { Checks, type Captured } from './Journey'
 
-type Phase = 'starting' | 'place' | 'checking' | 'lift' | 'comparing' | 'saving' | 'verified' | 'failed' | 'cancelled'
+type Phase = 'starting' | 'preparing' | 'place' | 'checking' | 'lift' | 'comparing' | 'saving' | 'verified' | 'failed' | 'cancelled'
 interface Run {
   phase: Phase
   latest: Captured | null
@@ -19,9 +19,10 @@ interface Run {
 }
 const START: Run = { phase: 'starting', latest: null, rejection: '', completed: 0, total: 3, error: '', result: null }
 
-export function Verification({ finger, enrolled, onLeave, onEnrol }: {
+export function Verification({ finger, enrolled, algorithm, onLeave, onEnrol }: {
   finger: number
   enrolled: boolean
+  algorithm: FingerprintAlgorithm
   onLeave: () => void
   onEnrol: () => void
 }) {
@@ -58,6 +59,9 @@ export function Verification({ finger, enrolled, onLeave, onEnrol }: {
         case 'started':
           setRun((current) => ({ ...current, total: event.references }))
           break
+        case 'preparing_templates':
+          setRun((current) => ({ ...current, phase: 'preparing', completed: event.completed, total: event.total }))
+          break
         case 'place':
         case 'checking':
         case 'lift':
@@ -88,7 +92,7 @@ export function Verification({ finger, enrolled, onLeave, onEnrol }: {
     queueMicrotask(() => {
       if (!active) return
       started = true
-      void window.mbs.verifyFingerprint(finger, runId).then((answer) => {
+      void window.mbs.verifyFingerprint(finger, runId, algorithm).then((answer) => {
         if (!active || finished || answer.ok) return
         fail(answer.error)
         if (answer.status === 401) void call('me') // keep the normal expired-session navigation
@@ -102,17 +106,19 @@ export function Verification({ finger, enrolled, onLeave, onEnrol }: {
     }
     // A language or theme update must not start another capture.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [finger, enrolled, attempt])
+  }, [finger, enrolled, algorithm, attempt])
 
   const prompts = {
     starting: v.preparing, place: v.place, checking: v.checking, lift: f.lift,
+    preparing: f.preparingTemplates(f.methodNames[algorithm] ?? algorithm, run.completed, run.total),
     comparing: v.comparing(run.completed, run.total), saving: v.saving,
     verified: '', failed: '', cancelled: v.cancelled,
   }
   const stages: Record<Phase, number> = {
-    starting: 0, place: 0, lift: 0, checking: 1, comparing: 2, saving: 3, verified: 3, failed: -1, cancelled: -1,
+    starting: 0, preparing: -1, place: 0, lift: 0, checking: 1, comparing: 2, saving: 3, verified: 3, failed: -1, cancelled: -1,
   }
   const result = run.result
+  const scoreLabel = algorithm === 'opencv-sift' ? v.score : v.pores
   const scoreMaximum = result ? Math.max(Math.ceil(result.score / 100) * 100, result.threshold * 2, 1) : 1
   const ended = result !== null || run.phase === 'failed' || run.phase === 'cancelled'
   const error = run.error === 'server_unreachable'
@@ -124,6 +130,7 @@ export function Verification({ finger, enrolled, onLeave, onEnrol }: {
     <section className="verification">
       <h1 ref={heading} tabIndex={-1}>{v.title}</h1>
       <p className="lead"><bdi>{f.fingers[finger]}</bdi></p>
+      <p><strong>{f.methodNames[algorithm]}</strong></p>
       {!enrolled ? (
         <>
           <p className="notice">{v.enrolFirst}</p>
@@ -135,7 +142,7 @@ export function Verification({ finger, enrolled, onLeave, onEnrol }: {
         </>
       ) : (
         <>
-          <p className="aside">{v.method}</p>
+          <p className="aside">{f.methodComparison[algorithm]}</p>
           <ol className="verification-steps" aria-label={v.title}>
             {v.stages.map((stage, index) => (
               <li key={stage} aria-current={!ended && index === stages[run.phase] ? 'step' : undefined}
@@ -147,13 +154,14 @@ export function Verification({ finger, enrolled, onLeave, onEnrol }: {
               <div className={`verification-result ${result.accepted ? 'matched' : 'unmatched'}`} role="status">
                 <h2>{result.accepted ? v.accepted : v.rejected}</h2>
                 <p>{v.explanation(result.score, result.threshold)}</p>
+                {result.threshold_provisional && <p className="notice">{f.provisionalExplanation}</p>}
                 <div className="verification-score">
                   <meter min={0} max={scoreMaximum} value={result.score}
-                    low={result.threshold} high={result.threshold + 1} optimum={scoreMaximum} aria-label={v.score} />
+                    low={result.threshold} high={result.threshold + 1} optimum={scoreMaximum} aria-label={scoreLabel} />
                   <span className="threshold-marker" style={{ insetInlineStart: `${result.threshold / scoreMaximum * 100}%` }} aria-hidden="true" />
                 </div>
                 <div className="score-axis" aria-hidden="true"><span>0</span><span>{scoreMaximum}</span></div>
-                <div className="score-labels"><strong>{v.score} {result.score}</strong><span>{v.threshold(result.threshold)}</span></div>
+                <div className="score-labels"><strong>{scoreLabel} {result.score}</strong><span>{v.threshold(result.threshold)}</span></div>
                 <p>{v.saved}</p>
                 {!result.accepted && <p>{v.retryHint}</p>}
               </div>
@@ -191,7 +199,7 @@ export function Verification({ finger, enrolled, onLeave, onEnrol }: {
                 <table>
                   <caption>{v.comparisons}</caption>
                   <thead>
-                    <tr><th>{v.placement}</th><th>{v.score}</th><th>{v.decision}</th></tr>
+                    <tr><th>{v.placement}</th><th>{scoreLabel}</th><th>{v.decision}</th></tr>
                   </thead>
                   <tbody>
                     {result.comparisons.map((comparison) => (

@@ -18,6 +18,7 @@ import base64
 import itertools
 import json
 import logging
+import math
 import threading
 import uuid
 from collections.abc import AsyncIterator
@@ -32,7 +33,7 @@ from sqlalchemy.orm import Session as DbSession
 from starlette.concurrency import run_in_threadpool
 
 from . import keys as keyring
-from .config import Config, REPOSITORY, research_python
+from .config import Config, REPOSITORY, research_python, pore_python, learned_python
 from .db import Databases
 from .engines import Engine, EngineError, Scanner, ScannerError, ScannerRun, conda_environment
 from .keys import Keys
@@ -41,6 +42,8 @@ from .models import Algorithm, Enrolment, Sample, Template
 logger = logging.getLogger("mbs.fingerprint")
 FINGERPRINT = "fingerprint"
 OPENCV_SIFT = "opencv-sift"
+PORE_SIFT = "pore-sift"
+LEARNED_PORE = "learned-pore"
 PLACEMENTS = 3  # H6, H9, H15
 QUALITY_MINIMUM = 35  # NFIQ 2.3, provisional (H33): none of the researcher's 40 captures scored below it
 MOST_KEPT = 6  # placements kept while looking for three that match each other (H33)
@@ -69,6 +72,8 @@ class FingerprintService:
     quality: Engine
     sift: Engine
     quality_minimum: int = QUALITY_MINIMUM
+    pore: Engine | None = None  # H38: the research's separate Pore SIFT runtime
+    learned: Engine | None = None  # H39: the second trained descriptor, in its research runtime
     _busy: threading.Lock = field(default_factory=threading.Lock)
 
     def warm_up(self) -> None:
@@ -84,6 +89,10 @@ class FingerprintService:
     def close(self) -> None:
         self.quality.close()
         self.sift.close()
+        if self.pore is not None:
+            self.pore.close()
+        if self.learned is not None:
+            self.learned.close()
 
 
 def from_config(config: Config) -> tuple[FingerprintService | None, str]:
@@ -99,10 +108,16 @@ def from_config(config: Config) -> tuple[FingerprintService | None, str]:
         return None, "missing: " + ", ".join(missing)
     env = conda_environment(python)
     engines = REPOSITORY / "engines"
+    pore = pore_python()
+    learned = learned_python()
     return FingerprintService(
         scanner=Scanner([str(config.scanner_exe), "oem-acquire", "--driver-dir", str(config.scanner_driver_dir)]),
         quality=Engine("nfiq2", [str(python), "-I", str(engines / "nfiq2_quality.py"), str(config.nfiq2_bin)], env),
         sift=Engine(OPENCV_SIFT, [str(python), "-I", str(engines / "opencv_sift.py")], env),
+        pore=Engine(PORE_SIFT, [str(pore), "-I", "-B", str(engines / "pore_sift.py"), str(python)], conda_environment(pore))
+             if pore and pore.exists() else None,
+        learned=Engine(LEARNED_PORE, [str(learned), "-I", "-B", str(engines / "learned_pore.py")],
+                       conda_environment(learned)) if pore and pore.exists() and learned and learned.exists() else None,
     ), ""
 
 
@@ -115,6 +130,60 @@ def enrolled_fingers(databases: Databases, subject: uuid.UUID) -> list[int]:
         rows = db.scalars(select(Enrolment.finger).where(Enrolment.subject_id == subject, Enrolment.modality == FINGERPRINT,
                                                          Enrolment.replaced_at.is_(None)).order_by(Enrolment.finger))
         return list(rows)
+
+
+def methods(databases: Databases, service: FingerprintService | None) -> list[dict]:
+    """H38: only implemented methods are offered. Their decision settings come from the database."""
+    with _db(databases.biometric) as db:
+        catalog = []
+        for code in (OPENCV_SIFT, LEARNED_PORE, PORE_SIFT):
+            algorithm = db.get(Algorithm, code)
+            if algorithm is not None:
+                catalog.append({"code": code, "threshold": algorithm.threshold,
+                                "threshold_provisional": algorithm.threshold_provisional,
+                                "threshold_origin": algorithm.threshold_origin,
+                                "available": service is not None and engine_for(service, code) is not None})
+        return catalog
+
+
+def engine_for(service: FingerprintService, code: str) -> Engine | None:
+    """H39: the selected descriptor's runtime; learned extraction also needs the shared detector."""
+    if code == OPENCV_SIFT:
+        return service.sift
+    if code == PORE_SIFT:
+        return service.pore
+    if code == LEARNED_PORE and service.pore is not None:
+        return service.learned
+    return None
+
+
+def extract_native(service: FingerprintService, code: str, png: bytes, pores: bytes | None = None) -> bytes:
+    """H39: reuse Pore SIFT's points when present, otherwise detect once without computing SIFT."""
+    engine = engine_for(service, code)
+    if engine is None:
+        raise EngineError("method is unavailable")
+    parts = [png]
+    if code == LEARNED_PORE:
+        if pores is None:
+            if service.pore.start()["version"] != engine.start()["version"]:
+                raise EngineError("detector and descriptor versions differ")
+            _, detected = service.pore.request({"op": "detect"}, [png])
+            pores = detected[0]
+        parts.append(pores)
+    _, native = engine.request({"op": "extract"}, parts)
+    if not native or not native[0]:
+        raise EngineError("missing native template")
+    return native[0]
+
+
+def comparison_score(result: dict) -> int:
+    """H10, H35, H39: defined comparison failures score zero; invalid replies are technical errors."""
+    if result.get("status") not in ("ok", "failure"):
+        raise EngineError("invalid comparison status")
+    value = 0 if result["status"] == "failure" else result.get("score")
+    if type(value) not in (int, float) or not math.isfinite(value) or value < 0 or int(value) != value:
+        raise EngineError("invalid comparison score")
+    return int(value)
 
 
 def delete_finger(databases: Databases, subject: uuid.UUID, finger: int) -> bool:
@@ -213,6 +282,7 @@ def capture_quality(service: FingerprintService, header: dict, png: bytes) -> tu
 
 async def _enrol(service, databases, keys, subject, finger, run) -> AsyncIterator[dict]:
     threshold = await run_in_threadpool(_threshold, databases)
+    catalog = {method["code"]: method for method in await run_in_threadpool(methods, databases, service)}
     yield {"type": "started", "finger": finger, "placements": PLACEMENTS, "quality_minimum": service.quality_minimum,
            "threshold": threshold, "most_kept": MOST_KEPT}
     try:
@@ -270,8 +340,39 @@ async def _enrol(service, databases, keys, subject, finger, run) -> AsyncIterato
                 trio = best_three(kept, scores, threshold)
                 if trio is not None:
                     chosen = [kept[i] for i in trio]
-                    saved = await run_in_threadpool(_save, databases, keys, subject, finger, chosen, version)
-                    yield _saved_event(saved, chosen, kept, scores, trio, threshold)
+                    extra: dict[str, list[bytes]] = {}
+                    comparisons = []
+                    for code in (PORE_SIFT, LEARNED_PORE):
+                        engine = engine_for(service, code)
+                        if engine is None:
+                            continue
+                        extra[code] = []
+                        yield {"type": "templates", "algorithm": code, "completed": 0, "total": PLACEMENTS}
+                        try:
+                            method_ready = await run_in_threadpool(engine.start)
+                            if method_ready["version"] != version:
+                                raise EngineError("method version differs from the research pin")
+                            for index, capture in enumerate(chosen):
+                                pores = extra[PORE_SIFT][index] if code == LEARNED_PORE else None
+                                native = await run_in_threadpool(extract_native, service, code, capture.png, pores)
+                                extra[code].append(native)
+                                yield {"type": "templates", "algorithm": code,
+                                       "completed": len(extra[code]), "total": PLACEMENTS}
+                            pairs = []
+                            for a, b in itertools.combinations(range(PLACEMENTS), 2):
+                                reply, _ = await run_in_threadpool(engine.request, {"op": "compare"},
+                                                                  [extra[code][b], extra[code][a]])
+                                value = comparison_score(reply)
+                                pairs.append({"probe": chosen[b].placement, "reference": chosen[a].placement,
+                                              "score": value, "accepted": value > catalog[code]["threshold"]})
+                            comparisons.append({"algorithm": code, "threshold": catalog[code]["threshold"],
+                                                "threshold_provisional": catalog[code]["threshold_provisional"], "pairs": pairs})
+                        except EngineError:
+                            yield {"type": "failed", "error": "engine_unavailable"}
+                            return
+                    saved = await run_in_threadpool(_save, databases, keys, subject, finger, chosen, version,
+                                                    extra.get(PORE_SIFT), extra.get(LEARNED_PORE))
+                    yield _saved_event(saved, chosen, kept, scores, trio, threshold, comparisons)
                     return
                 if len(kept) >= MOST_KEPT:
                     yield {"type": "failed", "error": "placements_do_not_match"}
@@ -296,9 +397,12 @@ class Saved:
     replaced: bool
     samples: list[Sample]
     templates: list[Template]
+    pore_templates: list[Template] = field(default_factory=list)
+    learned_templates: list[Template] = field(default_factory=list)
 
 
-def _save(databases: Databases, keys: Keys, subject: uuid.UUID, finger: int, chosen: list[Kept], version: str) -> Saved:
+def _save(databases: Databases, keys: Keys, subject: uuid.UUID, finger: int, chosen: list[Kept], version: str,
+          pore_data: list[bytes] | None = None, learned_data: list[bytes] | None = None) -> Saved:
     now = datetime.now(timezone.utc)
     with _db(databases.biometric) as db, db.begin():
         replaced = db.execute(update(Enrolment).where(
@@ -307,8 +411,8 @@ def _save(databases: Databases, keys: Keys, subject: uuid.UUID, finger: int, cho
         enrolment = Enrolment(id=uuid.uuid4(), subject_id=subject, modality=FINGERPRINT, finger=finger, created_at=now)
         db.add(enrolment)
         db.flush()
-        samples, templates = [], []
-        for capture in chosen:
+        samples, templates, pore_templates, learned_templates = [], [], [], []
+        for index, capture in enumerate(chosen):
             sample = Sample(id=uuid.uuid4(), enrolment_id=enrolment.id, placement=capture.placement,
                             captured_at=capture.captured_at, media_type="image/png", width=1000, height=1000, ppi=1000,
                             checks=capture.checks)
@@ -319,9 +423,16 @@ def _save(databases: Databases, keys: Keys, subject: uuid.UUID, finger: int, cho
             db.add(sample)
             db.flush()
             db.add(template)
+            for code, data, rows in ((PORE_SIFT, pore_data, pore_templates), (LEARNED_PORE, learned_data, learned_templates)):
+                if data:
+                    native = Template(id=uuid.uuid4(), sample_id=sample.id, algorithm=code, version=version, created_at=now)
+                    native.data = keyring.seal(keys, keyring.TEMPLATE,
+                        native.id.bytes + subject.bytes + code.encode("ascii"), data[index])
+                    db.add(native)
+                    rows.append(native)
             samples.append(sample)
             templates.append(template)
-    return Saved(enrolment, replaced > 0, samples, templates)
+    return Saved(enrolment, replaced > 0, samples, templates, pore_templates, learned_templates)
 
 
 def _sealed_parts(sealed: bytes) -> dict:
@@ -332,12 +443,15 @@ def _sealed_parts(sealed: bytes) -> dict:
             "ciphertext": len(sealed) - header - 16, "tag_bytes": 16}
 
 
-def _saved_event(saved: Saved, chosen: list[Kept], kept: list[Kept], scores: dict, trio: tuple, threshold: float) -> dict:
+def _saved_event(saved: Saved, chosen: list[Kept], kept: list[Kept], scores: dict, trio: tuple, threshold: float,
+                 comparisons: list[dict] | None = None) -> dict:
     pairs = []
     for a, b in itertools.combinations(trio, 2):
         score = scores.get((a, b))
         pairs.append({"probe": kept[b].placement, "reference": kept[a].placement, "score": score,
                       "accepted": score is not None and score > threshold})
+    prepared = [{"algorithm": code, "templates": len(rows)} for code, rows in (
+        (PORE_SIFT, saved.pore_templates), (LEARNED_PORE, saved.learned_templates)) if rows]
     return {
         "type": "saved",
         "enrolment": {"id": str(saved.enrolment.id), "finger": saved.enrolment.finger,
@@ -350,7 +464,12 @@ def _saved_event(saved: Saved, chosen: list[Kept], kept: list[Kept], scores: dic
                        "points": _b64(c.points), "descriptors": _b64(c.descriptors), "template_length": len(c.template),
                        "sealed": _sealed_parts(t.data)}
                       for t, c in zip(saved.templates, chosen)],
-        "pairs": pairs, "threshold": threshold, "pending_methods": list(PENDING_METHODS),
+        "pairs": pairs, "threshold": threshold,
+        "pending_methods": [code for code in PENDING_METHODS if code not in {method["algorithm"] for method in prepared}],
+        "prepared_methods": prepared,
+        "referee": OPENCV_SIFT,
+        "method_comparisons": [{"algorithm": OPENCV_SIFT, "threshold": threshold,
+                                "threshold_provisional": False, "pairs": pairs}, *(comparisons or [])],
         "not_kept": [k.placement for i, k in enumerate(kept) if i not in trio],
     }
 

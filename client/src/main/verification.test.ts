@@ -5,6 +5,14 @@ const BASE = 'http://127.0.0.1:55433'
 const RUN = '00000000-0000-4000-8000-000000000001'
 
 describe('verification transport (H35)', () => {
+  it.each(['pore-sift', 'learned-pore'])('sends %s on the fixed verification route and rejects unsupported methods (H38, H39)', async (algorithm) => {
+    const request = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response('{"type":"failed","error":"no_finger"}\n'))
+    const server = new ServerClient(BASE, request)
+    expect(await server.verify(7, RUN, () => undefined, 'fusion')).toMatchObject({ error: 'invalid_request' })
+    expect(request).not.toHaveBeenCalled()
+    await server.verify(7, RUN, () => undefined, algorithm)
+    expect(request.mock.calls[0]?.[1]?.body).toBe(JSON.stringify({ finger: 7, algorithm }))
+  })
   it('allows only a valid finger and run id', async () => {
     const request = vi.fn<typeof fetch>()
     const server = new ServerClient(BASE, request)

@@ -6,11 +6,10 @@ from __future__ import annotations
 
 import base64
 import logging
-import math
 import time
 import uuid
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from sqlalchemy import select
@@ -38,32 +37,82 @@ class Reference:
     origin: str
     version: str
     templates: list[tuple[int, bytes]]  # original placement numbers, native templates
+    algorithm: str = fp.OPENCV_SIFT
+    provisional: bool = False
+    pending: list[tuple[uuid.UUID, int, bytes]] = field(default_factory=list)
+    pore_sources: dict[uuid.UUID, bytes] = field(default_factory=dict)
 
 
-def _load(databases: Databases, keys: Keys, subject: uuid.UUID, finger: int) -> Reference:
+def _load(databases: Databases, keys: Keys, subject: uuid.UUID, finger: int,
+          code: str = fp.OPENCV_SIFT) -> Reference:
     with Session(databases.biometric) as db:
         enrolment = db.scalar(select(Enrolment).where(
             Enrolment.subject_id == subject, Enrolment.modality == fp.FINGERPRINT,
             Enrolment.finger == finger, Enrolment.replaced_at.is_(None)))
         if enrolment is None:
             raise VerificationError("not_enrolled")
-        algorithm = db.get(Algorithm, fp.OPENCV_SIFT)
-        rows = db.execute(select(Sample.placement, Template).join(Template, Template.sample_id == Sample.id).where(
-            Sample.enrolment_id == enrolment.id, Template.algorithm == fp.OPENCV_SIFT).order_by(Sample.placement)).all()
-        if len(rows) != fp.PLACEMENTS or any(template.data is None for _, template in rows):
+        algorithm = db.get(Algorithm, code)
+        rows = db.execute(select(Sample, Template).outerjoin(Template,
+            (Template.sample_id == Sample.id) & (Template.algorithm == code)).where(
+            Sample.enrolment_id == enrolment.id).order_by(Sample.placement)).all()
+        if len(rows) != fp.PLACEMENTS:
             raise VerificationError("templates_unavailable")
-        if any(template.version != algorithm.version for _, template in rows):
+        if any(template is not None and template.version != algorithm.version for _, template in rows):
             raise VerificationError("template_version_mismatch")
-        templates = [(placement, keyring.open_sealed(
-            keys, keyring.TEMPLATE, template.id.bytes + subject.bytes + fp.OPENCV_SIFT.encode("ascii"), template.data))
-            for placement, template in rows]
-        return Reference(enrolment.id, algorithm.threshold, algorithm.threshold_origin, algorithm.version, templates)
+        reference = Reference(enrolment.id, algorithm.threshold, algorithm.threshold_origin, algorithm.version, [],
+                              algorithm=code, provisional=algorithm.threshold_provisional)
+        for sample, template in rows:
+            if template is None:
+                if code not in (fp.PORE_SIFT, fp.LEARNED_PORE):
+                    raise VerificationError("templates_unavailable")
+                png = keyring.open_sealed(keys, keyring.SAMPLE, sample.id.bytes + subject.bytes, sample.data)
+                reference.pending.append((sample.id, sample.placement, png))
+                if code == fp.LEARNED_PORE:
+                    pores = db.scalar(select(Template).where(Template.sample_id == sample.id,
+                                                             Template.algorithm == fp.PORE_SIFT))
+                    if pores is not None:
+                        if pores.version != algorithm.version:
+                            raise VerificationError("template_version_mismatch")
+                        reference.pore_sources[sample.id] = keyring.open_sealed(keys, keyring.TEMPLATE,
+                            pores.id.bytes + subject.bytes + fp.PORE_SIFT.encode("ascii"), pores.data)
+            else:
+                native = keyring.open_sealed(keys, keyring.TEMPLATE,
+                    template.id.bytes + subject.bytes + code.encode("ascii"), template.data)
+                reference.templates.append((sample.placement, native))
+        return reference
+
+
+def _store_templates(databases: Databases, keys: Keys, subject: uuid.UUID, reference: Reference,
+                     generated: list[tuple[uuid.UUID, int, bytes]]) -> list[tuple[int, bytes]]:
+    """H38: fill missing templates atomically. A concurrent preparation reuses the already stored row."""
+    templates = list(reference.templates)
+    with Session(databases.biometric) as db, db.begin():
+        enrolment = db.scalar(select(Enrolment).where(
+            Enrolment.id == reference.enrolment_id, Enrolment.subject_id == subject).with_for_update())
+        if enrolment is None or enrolment.replaced_at is not None:
+            raise VerificationError("enrolment_changed")
+        for sample_id, placement, native in generated:
+            stored = db.scalar(select(Template).where(Template.sample_id == sample_id,
+                                                      Template.algorithm == reference.algorithm))
+            if stored is None:
+                stored = Template(id=uuid.uuid4(), sample_id=sample_id, algorithm=reference.algorithm,
+                                  version=reference.version, created_at=datetime.now(timezone.utc))
+                stored.data = keyring.seal(keys, keyring.TEMPLATE,
+                    stored.id.bytes + subject.bytes + reference.algorithm.encode("ascii"), native)
+                db.add(stored)
+            else:
+                if stored.version != reference.version:
+                    raise VerificationError("template_version_mismatch")
+                native = keyring.open_sealed(keys, keyring.TEMPLATE,
+                    stored.id.bytes + subject.bytes + reference.algorithm.encode("ascii"), stored.data)
+            templates.append((placement, native))
+    return sorted(templates)
 
 
 def _save(databases: Databases, keys: Keys, subject: uuid.UUID, reference: Reference, png: bytes,
           at: datetime, score: int, duration_ms: int) -> Attempt:
     attempt = Attempt(id=uuid.uuid4(), at=at, subject_id=subject, modality=fp.FINGERPRINT, mode="verify",
-                      algorithm=fp.OPENCV_SIFT, enrolment_id=reference.enrolment_id, score=score,
+                      algorithm=reference.algorithm, enrolment_id=reference.enrolment_id, score=score,
                       threshold=reference.threshold, accepted=score > reference.threshold,
                       duration_ms=duration_ms, source="device")
     attempt.probe = keyring.seal(keys, keyring.PROBE, attempt.id.bytes + subject.bytes, png)
@@ -79,13 +128,13 @@ def _save(databases: Databases, keys: Keys, subject: uuid.UUID, reference: Refer
 
 
 async def verify(service: fp.FingerprintService, databases: Databases, keys: Keys, subject: uuid.UUID,
-                 finger: int) -> AsyncIterator[dict]:
+                 finger: int, algorithm: str = fp.OPENCV_SIFT) -> AsyncIterator[dict]:
     if not service._busy.acquire(blocking=False):
         yield {"type": "failed", "error": "scanner_busy"}
         return
     run = ScannerRun()
     try:
-        async for event in _verify(service, databases, keys, subject, finger, run):
+        async for event in _verify(service, databases, keys, subject, finger, run, algorithm):
             yield event
     except VerificationError as error:
         yield {"type": "failed", "error": str(error)}
@@ -103,14 +152,31 @@ async def verify(service: fp.FingerprintService, databases: Databases, keys: Key
         service._busy.release()
 
 
-async def _verify(service, databases, keys, subject, finger, run) -> AsyncIterator[dict]:
-    reference = await run_in_threadpool(_load, databases, keys, subject, finger)
+async def _verify(service, databases, keys, subject, finger, run, algorithm) -> AsyncIterator[dict]:
+    if algorithm not in (fp.OPENCV_SIFT, fp.PORE_SIFT, fp.LEARNED_PORE):
+        raise VerificationError("unknown_method")
+    engine = fp.engine_for(service, algorithm)
+    if engine is None:
+        raise VerificationError("method_unavailable")
+    reference = await run_in_threadpool(_load, databases, keys, subject, finger, algorithm)
     yield {"type": "started", "finger": finger, "threshold": reference.threshold,
-           "quality_minimum": service.quality_minimum, "references": len(reference.templates)}
+           "quality_minimum": service.quality_minimum, "references": fp.PLACEMENTS,
+           "algorithm": algorithm, "threshold_provisional": reference.provisional}
+    if reference.pending:
+        yield {"type": "preparing_templates", "completed": 0, "total": len(reference.pending)}
     await run_in_threadpool(service.quality.start)
-    ready = await run_in_threadpool(service.sift.start)
+    ready = await run_in_threadpool(engine.start)
     if ready["version"] != reference.version:
         raise VerificationError("template_version_mismatch")
+    if reference.pending:
+        generated = []
+        for sample_id, placement, png in reference.pending:
+            native = await run_in_threadpool(fp.extract_native, service, algorithm, png, reference.pore_sources.get(sample_id))
+            generated.append((sample_id, placement, native))
+            yield {"type": "preparing_templates", "completed": len(generated), "total": len(reference.pending)}
+        reference.templates = await run_in_threadpool(_store_templates, databases, keys, subject, reference, generated)
+        reference.pending.clear()
+        reference.pore_sources.clear()
     for capture in range(1, fp.MOST_CAPTURES + 1):
         yield {"type": "place", "capture": capture, "maximum": fp.MOST_CAPTURES}
         header, png = await fp.acquire(service, "finger", run)
@@ -129,17 +195,13 @@ async def _verify(service, databases, keys, subject, finger, run) -> AsyncIterat
 
     yield {"type": "captured", "image": image, "checks": checks}
     yield {"type": "comparing", "completed": 0, "total": len(reference.templates)}
-    _, parts = await run_in_threadpool(service.sift.request, {"op": "extract"}, [png])
+    native = await run_in_threadpool(fp.extract_native, service, algorithm, png)
     comparisons = []
     for placement, template in reference.templates:
-        result, _ = await run_in_threadpool(service.sift.request, {"op": "compare"}, [parts[0], template])
+        result, _ = await run_in_threadpool(engine.request, {"op": "compare"}, [native, template])
         # H10 counts the research's defined comparison failures as zero. Process/protocol failures
         # raise EngineError and never become a non-match decision.
-        if result.get("status") not in ("ok", "failure"):
-            raise EngineError("invalid comparison status")
-        value = 0 if result["status"] == "failure" else result.get("score")
-        if type(value) not in (int, float) or not math.isfinite(value) or value < 0 or int(value) != value:
-            raise EngineError("invalid comparison score")
+        value = fp.comparison_score(result)
         comparisons.append({"placement": placement, "score": int(value),
                             "accepted": value > reference.threshold, "computed": result.get("status") == "ok"})
         yield {"type": "comparing", "completed": len(comparisons), "total": len(reference.templates)}
@@ -148,6 +210,7 @@ async def _verify(service, databases, keys, subject, finger, run) -> AsyncIterat
     yield {"type": "saving"}
     attempt = await run_in_threadpool(_save, databases, keys, subject, reference, png, at, score, duration_ms)
     yield {"type": "verified", "attempt_id": str(attempt.id), "at": attempt.at.isoformat(),
-           "finger": finger, "algorithm": fp.OPENCV_SIFT, "score": score, "threshold": attempt.threshold,
+           "finger": finger, "algorithm": algorithm, "score": score, "threshold": attempt.threshold,
+           "threshold_provisional": reference.provisional,
            "threshold_origin": reference.origin, "accepted": attempt.accepted, "duration_ms": duration_ms,
            "comparisons": comparisons}

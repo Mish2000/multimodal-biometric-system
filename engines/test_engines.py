@@ -12,6 +12,8 @@ import os
 import subprocess
 import sys
 import tomllib
+import types
+import weakref
 from pathlib import Path
 
 import cv2
@@ -85,6 +87,28 @@ def test_a_cut_message_is_refused():
     stream = io.BytesIO(b'{"op":"extract","length":9}\nabc')
     with pytest.raises(protocol.ProtocolError):
         protocol.read_message(stream)
+
+
+def test_completed_request_releases_its_result_before_waiting(monkeypatch):
+    """H13, H39: a loaded engine must release a derived result while idle."""
+    class Binary(bytearray):
+        pass
+    references = []
+    incoming = iter([({"op": "extract"}, [b"synthetic"]), None])
+    output = io.BytesIO()
+    def read(_source):
+        if references:
+            assert references[0]() is None
+        return next(incoming)
+    def extract(_header, _parts):
+        data = Binary(b"derived data")
+        references.append(weakref.ref(data))
+        return {}, data
+    monkeypatch.setattr(protocol, "read_message", read)
+    monkeypatch.setattr(sys, "stdin", types.SimpleNamespace(buffer=io.BytesIO()))
+    monkeypatch.setattr(sys, "stdout", types.SimpleNamespace(buffer=output))
+    protocol.serve({"engine": "synthetic"}, {"extract": extract})
+    assert b"derived data" in output.getvalue()
 
 
 def test_the_500_ppi_copy_is_the_mean_of_each_block():

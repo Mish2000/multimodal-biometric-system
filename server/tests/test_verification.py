@@ -18,8 +18,11 @@ from test_fingerprint import (LIFT, enrol, finger, fp_client, plan, placements, 
                               subject_of, user)  # noqa: F401 (shared fixtures)
 
 
-def verify(client, token, position=7):
-    response = client.post("/api/fingerprint/verifications", json={"finger": position}, headers=auth(token))
+def verify(client, token, position=7, algorithm=None):
+    body = {"finger": position}
+    if algorithm is not None:
+        body["algorithm"] = algorithm
+    response = client.post("/api/fingerprint/verifications", json=body, headers=auth(token))
     assert response.status_code == 200
     assert response.headers["cache-control"] == "no-store"
     return [json.loads(line) for line in response.iter_lines() if line]

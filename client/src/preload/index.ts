@@ -23,7 +23,7 @@ const bridge: MbsBridge = {
       ipcRenderer.removeListener('mbs:enrolment', pass)
     }
   },
-  verifyFingerprint: (finger, runId) => ipcRenderer.invoke('mbs:verify', finger, runId),
+  verifyFingerprint: (finger, runId, algorithm) => ipcRenderer.invoke('mbs:verify', finger, runId, algorithm),
   cancelVerification: (runId) => ipcRenderer.send('mbs:verify-cancel', runId),
   onVerification: (runId, listener) => {
     const pass = (_event: unknown, receivedId: string, verificationEvent: Parameters<typeof listener>[0]) => {

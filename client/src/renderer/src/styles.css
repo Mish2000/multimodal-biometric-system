@@ -937,3 +937,57 @@ button.danger {
 .verification-details { margin-top: 1.5rem; }
 .verification-details summary { cursor: pointer; padding-block: 0.5rem; }
 .verification-details dd { margin-inline-start: 0; margin-bottom: 0.75rem; }
+
+/* H38: method choices use the existing functional form layout. */
+.method-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-block: 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.method-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  flex: 1 1 18rem;
+  min-width: 0;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.method-choice:has(input:checked) {
+  border-color: var(--accent);
+}
+
+.method-choice input {
+  flex: 0 0 auto;
+  width: auto;
+  margin-top: 0.25rem;
+}
+
+.method-choice > span {
+  flex: 1;
+  min-width: 0;
+}
+
+.method-description {
+  display: block;
+  margin-top: 0.4rem;
+  font-size: 0.9rem;
+}
+
+.method-choices > p {
+  flex-basis: 100%;
+  margin-block: 0.25rem;
+}
+
+/* H39: enrolment approval and the other methods' illustrations have separate labels. */
+.method-comparisons { margin-top: 2rem; }
+.method-comparison { border-top: 1px solid var(--line); padding-top: 0.75rem; margin-top: 1.25rem; }
+.method-comparison h4 { margin-block: 0.25rem 0.5rem; }

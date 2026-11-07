@@ -20,6 +20,7 @@ export const ROUTES = {
   audit: ['GET', '/api/admin/audit'],
   // H34: a finger's position, 1 to 10, in place of {finger}.
   deleteFingerprint: ['DELETE', '/api/fingerprint/fingers/{finger}'],
+  fingerprintMethods: ['GET', '/api/fingerprint/methods'],
 } as const satisfies Record<string, readonly ['GET' | 'POST' | 'DELETE', string]>
 
 export type RouteName = keyof typeof ROUTES
@@ -63,6 +64,16 @@ export interface Check {
   score?: number | null
 }
 
+export const FINGERPRINT_ALGORITHMS = ['opencv-sift', 'learned-pore', 'pore-sift'] as const
+export type FingerprintAlgorithm = (typeof FINGERPRINT_ALGORITHMS)[number]
+export interface FingerprintMethod {
+  code: FingerprintAlgorithm
+  threshold: number
+  threshold_provisional: boolean
+  threshold_origin: string
+  available: boolean
+}
+
 export interface Pair {
   probe: number
   reference: number
@@ -103,6 +114,9 @@ export interface SavedEnrolment {
   pairs: Pair[]
   threshold: number
   pending_methods: string[]
+  prepared_methods?: Array<{ algorithm: string; templates: number }>
+  referee?: string
+  method_comparisons?: Array<{ algorithm: string; threshold: number; threshold_provisional: boolean; pairs: Pair[] }>
   not_kept: number[]
 }
 
@@ -113,6 +127,7 @@ export type EnrolmentEvent =
   | { type: 'kept'; placement: number; image: string; checks: Check[]; keypoints: number; pairs: Pair[] }
   | { type: 'another_placement'; kept: number }
   | { type: 'lift' }
+  | { type: 'templates'; algorithm: string; completed: number; total: number }
   | ({ type: 'saved' } & SavedEnrolment)
   | { type: 'failed'; error: string }
 
@@ -125,6 +140,7 @@ export interface VerificationResult {
   score: number
   threshold: number
   threshold_origin: string
+  threshold_provisional?: boolean
   accepted: boolean
   duration_ms: number
   comparisons: Array<{ placement: number; score: number; accepted: boolean; computed: boolean }>
@@ -132,6 +148,7 @@ export interface VerificationResult {
 
 export type VerificationEvent =
   | { type: 'started'; finger: number; threshold: number; quality_minimum: number; references: number }
+  | { type: 'preparing_templates'; completed: number; total: number }
   | { type: 'place'; capture: number; maximum: number }
   | { type: 'checking' }
   | { type: 'rejected'; image: string; checks: Check[]; score: number | null; minimum: number }
@@ -154,7 +171,7 @@ export interface MbsBridge {
   cancelEnrolment(): void
   onEnrolment(listener: (event: EnrolmentEvent) => void): () => void
   // Each verification has a page-generated id, so a cancelled run cannot update a later screen (H35).
-  verifyFingerprint(finger: number, runId: string): Promise<ApiResult<null>>
+  verifyFingerprint(finger: number, runId: string, algorithm?: FingerprintAlgorithm): Promise<ApiResult<null>>
   cancelVerification(runId: string): void
   onVerification(runId: string, listener: (event: VerificationEvent) => void): () => void
 }

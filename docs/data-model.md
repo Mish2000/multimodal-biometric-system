@@ -9,6 +9,13 @@ and `language` columns and the `password_reset` table (H29, H31, H32), and the
 biometric `subject`, `algorithm`, `enrolment`, `sample` and `template` tables
 exist (H23, H33); `attempt` exists for fingerprint verification (H35).
 
+H38 and H39 use these tables for OpenCV SIFT, Pore SIFT and the learned pore
+descriptor. Each new finding gets one sealed template per available method.
+An existing enrolment receives missing templates from its three sealed
+findings at its first verification with that method. The three new templates
+commit together. Learned templates preserve H10's native float16 NPY format;
+Pore SIFT uses integer coordinates and float32 descriptors in NPZ.
+
 ## Principles
 
 - Two databases, each with its own login role (H23). `mbs_accounts` holds
@@ -335,8 +342,8 @@ subject identifiers into usernames through the identity links.
 
 Fingerprint verification stores one row for every completed comparison,
 including a non-match (H35). Quality rejection, cancellation or a technical
-failure produces no comparison row. The initial implementation uses
-`mode = verify`, `algorithm = opencv-sift` and `source = device`; the fusion
+failure produces no comparison row. H35, H38 and H39 use `mode = verify`,
+`algorithm = opencv-sift`, `pore-sift` or `learned-pore`, and `source = device`; the fusion
 weights and identification fields are null. A check enforces that `accepted`
 equals `score > threshold`, and another keeps a fingerprint source to `device`.
 Deleting a finger erases the attempts and probes of its current and replaced

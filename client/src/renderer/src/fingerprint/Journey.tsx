@@ -185,6 +185,8 @@ export function Journey({ saved, captures, finger, onDone }: { saved: SavedEnrol
         {t.modalities.fingerprint}: <bdi>{f.fingers[finger]}</bdi>
       </p>
       <p className="notice">{f.journeyLead}</p>
+      <p>{f.templatesPrepared(['opencv-sift', ...(saved.prepared_methods ?? []).map((method) => method.algorithm)]
+        .map((code) => f.methodNames[code] ?? code).join(', '))}</p>
       <ol className="steps">
         {f.steps.map((name, i) => (
           <li key={name} className={i === step ? 'current' : i < step ? 'done' : ''}>
@@ -197,6 +199,7 @@ export function Journey({ saved, captures, finger, onDone }: { saved: SavedEnrol
       <p className="aside">{f.stepOf(step + 1, STEPS)}</p>
       <div className="step" key={step}>
         <h2>{f.steps[step]}</h2>
+        {step >= 1 && step <= 4 && <p className="notice">{f.demonstratedMethod(f.methodNames[template.algorithm] ?? template.algorithm)}</p>}
         {step === 0 && (
           <>
             <p>{f.capturesText}</p>
@@ -295,6 +298,9 @@ export function Journey({ saved, captures, finger, onDone }: { saved: SavedEnrol
                   <div key={sample.id} className="sample">
                     <div className="box">{f.sampleBox(sample.placement)}</div>
                     <div className="box filled">{f.methodNames['opencv-sift']}</div>
+                    {saved.prepared_methods?.map((method) => (
+                      <div key={method.algorithm} className="box filled">{f.methodNames[method.algorithm] ?? method.algorithm}</div>
+                    ))}
                     {saved.pending_methods.map((method) => (
                       <div key={method} className="box pending" title={f.pendingMethod}>
                         {f.methodNames[method] ?? method}
@@ -303,14 +309,28 @@ export function Journey({ saved, captures, finger, onDone }: { saved: SavedEnrol
                   </div>
                 ))}
               </div>
-              <p className="aside">{f.pendingMethod}</p>
+              {saved.pending_methods.length > 0 && <p className="aside">{f.pendingMethod}</p>}
             </div>
           </>
         )}
         {step === 5 && (
           <>
             <p>{f.acceptedText(saved.threshold)}</p>
+            <h3>{f.refereeTitle}</h3>
             <Pairs pairs={saved.pairs} threshold={saved.threshold} />
+            {(saved.method_comparisons?.length ?? 0) > 1 && (
+              <div className="method-comparisons">
+                <h3>{f.comparisonTitle}</h3>
+                <p className="aside">{f.comparisonExplanation}</p>
+                {saved.method_comparisons?.filter((method) => method.algorithm !== 'opencv-sift').map((method) => (
+                  <section key={method.algorithm} aria-label={f.methodNames[method.algorithm]} className="method-comparison">
+                    <h4>{f.methodNames[method.algorithm]}</h4>
+                    <p>{f.verification.threshold(method.threshold)}{method.threshold_provisional ? ` · ${f.provisional}` : ''}</p>
+                    <Pairs pairs={method.pairs} threshold={method.threshold} />
+                  </section>
+                ))}
+              </div>
+            )}
             {saved.not_kept.length > 0 && <p className="aside">{f.notKept(saved.not_kept.join(', '))}</p>}
           </>
         )}

@@ -96,3 +96,26 @@ def research_python() -> Path | None:
     with open(RESEARCH_LOCAL, "rb") as f:
         value = tomllib.load(f).get("project_python")
     return Path(value) if value else None
+
+
+def pore_python() -> Path | None:
+    """H38: reuse the Pore SIFT environment named by the research's existing configuration."""
+    if not RESEARCH_LOCAL.exists():
+        return None
+    with open(RESEARCH_LOCAL, "rb") as source:
+        repository = Path(tomllib.load(source)["repository"])
+    path = repository / "configs" / "algorithms.toml"
+    if not path.exists():
+        return None
+    with open(path, "rb") as source:
+        value = tomllib.load(source)["pore_sift"]["python"]
+    return Path(value)
+
+
+def learned_python() -> Path | None:
+    """H39: the existing research runtime of the second trained descriptor."""
+    if not RESEARCH_LOCAL.exists():
+        return None
+    with open(RESEARCH_LOCAL, "rb") as source:
+        value = tomllib.load(source).get("gpu_python")
+    return Path(value) if value else None

@@ -2,7 +2,7 @@
 
 Approved on 2026-10-20 (H11–H20 in `docs/decisions.md`),
 from the draft of 2026-10-19 as revised on 2026-10-20, and amended with his
-approval since (H24 to H37). Every decision is cited by its ID; a change needs
+approval since (H24 to H39). Every decision is cited by its ID; a change needs
 the researcher's approval and a new entry in the decision record.
 
 ## 1. Purpose and scope
@@ -189,6 +189,19 @@ flow of 2026-10-18).
   attempt and encrypted probe are stored. A replaced or deleted enrolment
   invalidates an in-progress comparison before storage. Deleting a finger
   also erases the attempts and probes of all its enrolments (H35).
+  H38 adds Pore SIFT and the choice of comparison method, with its provisional
+  threshold above 37. New enrolments prepare both methods when available;
+  existing ones get missing Pore SIFT templates from their stored captures
+  before the first verification in that method. The fixed enrolment referee
+  remains OpenCV SIFT. Preparation and storage are atomic and version-checked.
+  H39 adds the second trained pore descriptor, accepting strictly above the
+  provisional threshold of 21. New enrolments share Pore SIFT's detected
+  coordinates; existing samples reuse stored coordinates when available.
+  Native learned templates are float16 NPY arrays, as in H10. Method choice
+  sits inside verification, before an explicit capture start. Enrolment's
+  completion labels its OpenCV SIFT demonstration and shows the other
+  methods' three placement-pair scores for illustration, separately from
+  the fixed referee's approval.
 - **Identification (1:N, H15):** the new capture is compared with every
   enrolled fingerprint template; candidates are ranked by their highest
   score, and the top one is reported only when it passes the threshold, else
@@ -427,3 +440,8 @@ themes during that work.
   distinctly (3).
 - **H37** OEM scanner cleanup explicitly switches off the capture
   illumination before closing the channel (3).
+- **H38** Pore SIFT verification, comparison-method choice and native sealed
+  templates for new and existing generic enrolments (5.1, 6).
+- **H39** Second trained pore descriptor, shared detection, method choice
+  within verification and the generic enrolment's labelled demonstrations
+  and placement-pair comparisons (5.1, 6).

@@ -680,3 +680,96 @@ Approved on 2026-11-07: restore the scanner's idle illumination behavior.
 The OpenCV SIFT 1:1 verification flow (H35) passed a manual check on the
 connected HiScan PRO after H36 and H37. A read-only check of the local
 biometric database confirmed saved verification outcomes with sealed probes.
+
+## 2026-11-07: Pore SIFT verification and method choice
+
+Approved on 2026-11-07: the first task of increment 3 adds Pore SIFT to 1:1
+verification and lets the user choose between it and OpenCV SIFT.
+
+- **H38** Both methods use the generic enrolment of H33. OpenCV SIFT remains
+  the fixed same-finger referee for enrolment. When the Pore SIFT runtime is
+  configured, a new enrolment creates its three Pore SIFT templates after the
+  referee has chosen the three captures. Both methods' templates and the
+  samples commit together, so a failed extraction preserves the prior enrolment.
+- An existing enrolment gets missing Pore SIFT templates at its first
+  verification with that method. The server opens the three sealed samples
+  in memory and shows preparation progress before asking for a new capture.
+  The new templates commit together, under their method's label and version.
+  A retry reuses prepared templates. A deletion or replacement before the
+  preparation commits invalidates the operation. Preparation is serialized
+  with capture through the existing service lock and rechecked under a row
+  lock, including when another process prepares the same enrolment.
+- The Pore SIFT engine imports the research worker and its upstream code
+  from the pinned checkout, in its existing Python 3.10 environment. A short
+  startup check in the research project Python verifies the pin, upstream
+  revisions and tracked files, and resolves the configuration. The model's
+  SHA-256 and loading checks remain those of the research worker.
+  Detection, NMS, coordinate ordering, preprocessing, descriptors and the
+  basic matcher keep their research functions and parameters. NMS image
+  output is discarded and its coordinate text is held in memory. The engine
+  adds no dependency and keeps no sample or template between requests.
+- Templates retain the research's native NPZ layout, with integer pore
+  coordinates and float32 descriptors, sealed in the existing template table.
+  Verification extracts only the new capture and compares it with the three
+  stored templates of the selected method. The highest score decides. The
+  attempt records the selected algorithm and its threshold. H16's initial
+  Pore SIFT threshold remains provisional, accepting strictly above 37.
+- The client defaults to OpenCV SIFT. Its method choices describe accuracy
+  on SD302, estimated processing time and how the method works, with the
+  current threshold from the server. SD302 accuracy refers to other scanners
+  at the research thresholds. The Pore SIFT result marks the local threshold
+  provisional and names the score as matched pores. Preparation, cancellation,
+  retry and results work in both languages and themes. The template screen
+  identifies which methods' templates were prepared. Its detailed point/vector
+  demonstration continues to show OpenCV SIFT.
+
+Validation uses stored HiScan captures and synthetic inputs. All 30 second-set
+templates have exactly the research's points and descriptors; all 435 pair
+scores equal H10. Live scanner validation of the new method follows separately.
+
+## 2026-11-07: learned pore verification and generic enrolment clarity
+
+Approved on 2026-11-07: add the second trained pore descriptor to 1:1
+verification and clarify the separate roles of enrolment and method choice.
+
+- **H39** The learned descriptor imports the pinned research's second model,
+  window selection, description and matching functions in its existing GPU
+  environment. The model and research pin are verified before use. Native
+  templates remain NPY arrays of 128-value float16 descriptors, as in H10.
+  Extraction uses the same detected pores as Pore SIFT. No dependency is
+  downloaded and no research source or model is changed.
+- New enrolments prepare all available methods after the unchanged OpenCV
+  SIFT referee chooses the three captures. Pore SIFT's extracted coordinates
+  feed the learned descriptor directly, without another detection. Each
+  additional method compares the three placement pairs for illustration;
+  these scores do not decide whether to accept the enrolment. All captures
+  and templates commit together, preserving the previous enrolment on failure.
+- Existing enrolments receive missing learned templates before their first
+  verification with that method. When a sample already has a current Pore
+  SIFT template, its coordinates are reused; otherwise the shared detector
+  returns coordinates from memory. Preparation is atomic, version-checked,
+  cancellable and invalidated by deletion or replacement, following H38.
+- Learned verification compares the new capture with the three stored
+  learned templates, taking the highest score. H16's provisional threshold
+  remains strictly above 21. The selected method, threshold, result and
+  sealed probe enter the existing attempt table, following H35.
+- The client places method choice inside verification, with an explicit
+  start before capture. Enrolment explains its fixed referee and its generic
+  templates. The completion screen labels the OpenCV SIFT template
+  demonstration and separates the enrolment check from the other methods'
+  placement-pair scores, each with its own threshold and provisional flag.
+  Both languages and themes retain the existing functional appearance.
+
+Validation uses synthetic inputs and existing HiScan captures; the integrated
+scanner flow is left for the manual check after implementation.
+
+The process protocol also releases request-local input and output references
+before waiting for the next message, including error replies (H13, H39).
+The learned adapter reproduced all 30 second-set templates exactly and all
+435 H10 pair scores. Automated validation passed 141 server tests, including
+both real-engine enrolment shapes, 84 client tests, 9 engine tests, 7
+research-link tests and 63 offscreen client checks. Type checking and the
+client build passed. Offscreen checks covered all three methods, old-template
+preparation, new generic enrolment, the method labels and pair-score
+separation, both languages and themes, and cancellation. No live scanner
+test was run during this validation.

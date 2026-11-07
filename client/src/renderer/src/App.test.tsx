@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { StrictMode } from 'react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import type { Account, ApiResult, EnrolmentEvent, Language, MbsBridge, OpenedLink, RouteName, Theme, VerificationEvent } from '../../shared/bridge'
+import type { Account, ApiResult, EnrolmentEvent, Language, MbsBridge, OpenedLink, RouteName, Theme, VerificationEvent, FingerprintAlgorithm } from '../../shared/bridge'
 import { App } from './App'
 import { SessionProvider } from './session'
 
@@ -33,12 +33,14 @@ class FakeServer implements MbsBridge {
   cancelled = 0
   private enrolmentListeners = new Set<(event: EnrolmentEvent) => void>()
   verification: VerificationEvent[] = []
-  verifications: Array<{ finger: number; runId: string }> = []
+  verifications: Array<{ finger: number; runId: string; algorithm: FingerprintAlgorithm }> = []
   verificationCancels: string[] = []
+  poreAvailable = true
+  learnedAvailable = true
   private verificationListeners = new Map<string, (event: VerificationEvent) => void>()
 
-  verifyFingerprint = async (finger: number, runId: string): Promise<ApiResult<null>> => {
-    this.verifications.push({ finger, runId })
+  verifyFingerprint = async (finger: number, runId: string, algorithm: FingerprintAlgorithm = 'opencv-sift'): Promise<ApiResult<null>> => {
+    this.verifications.push({ finger, runId, algorithm })
     for (const event of this.verification) {
       await Promise.resolve()
       this.emitVerification(event, runId)
@@ -135,6 +137,12 @@ class FakeServer implements MbsBridge {
     const no = (status: number, error: string): ApiResult => ({ ok: false, status, error })
     if (!this.up) return no(0, 'server_unreachable')
     switch (route) {
+      case 'fingerprintMethods':
+        return ok({ methods: [
+          { code: 'opencv-sift', threshold: 57, threshold_provisional: false, threshold_origin: 'SD302', available: true },
+          { code: 'learned-pore', threshold: 21, threshold_provisional: true, threshold_origin: 'H10', available: this.learnedAvailable },
+          { code: 'pore-sift', threshold: 37, threshold_provisional: true, threshold_origin: 'H10', available: this.poreAvailable },
+        ] })
       case 'deleteFingerprint': {
         const finger = Number(id)
         if (!this.fingers.includes(finger)) return no(404, 'not_enrolled')
@@ -706,9 +714,59 @@ async function startVerification() {
   await openFingerprint()
   fireEvent.click(within(screen.getByRole('group', { name: 'Left hand' })).getByRole('button', { name: /Index/ }))
   fireEvent.click(screen.getByRole('button', { name: 'Verify this finger (1:1)' }))
+  if (server.fingers.includes(7)) fireEvent.click(await screen.findByRole('button', { name: 'Start verification' }))
 }
 
 describe('fingerprint verification (H35)', () => {
+  it('chooses Pore SIFT, guides preparation and shows its saved provisional result (H38)', async () => {
+    server.fingers = [7]
+    server.verification = [VERIFY_STARTED, { type: 'preparing_templates', completed: 1, total: 3 }]
+    await openFingerprint()
+    expect(screen.queryByRole('radio')).toBeNull()
+    fireEvent.click(within(screen.getByRole('group', { name: 'Left hand' })).getByRole('button', { name: /Index/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Verify this finger (1:1)' }))
+    expect(screen.getByRole('radio', { name: 'OpenCV SIFT' })).toHaveProperty('checked', true)
+    fireEvent.click(screen.getByRole('radio', { name: 'Pore SIFT' }))
+    expect(server.verifications).toEqual([])
+    fireEvent.click(screen.getByRole('button', { name: 'Start verification' }))
+    expect(await screen.findByText('Creating Pore SIFT templates (1 of 3)…')).toBeTruthy()
+    expect(server.verifications[0]?.algorithm).toBe('pore-sift')
+    act(() => server.emitVerification({ ...VERIFIED, algorithm: 'pore-sift', score: 45, threshold: 37,
+      threshold_provisional: true,
+      comparisons: VERIFIED.comparisons.map((c) => ({ ...c, score: 45, accepted: true })) }))
+    expect(await screen.findByRole('heading', { name: 'Fingerprint matches' })).toBeTruthy()
+    expect(screen.getByRole('meter', { name: 'Matching pores' })).toHaveProperty('value', 45)
+    expect(screen.getByText(/This threshold is provisional on the HiScan PRO/)).toBeTruthy()
+    expect(screen.getByText('Match above 37')).toBeTruthy()
+  })
+
+  it('cancels preparation and retries with the selected method (H38)', async () => {
+    server.fingers = [7]
+    server.verification = [{ type: 'preparing_templates', completed: 0, total: 3 }]
+    await openFingerprint()
+    fireEvent.click(within(screen.getByRole('group', { name: 'Left hand' })).getByRole('button', { name: /Index/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Verify this finger (1:1)' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Pore SIFT' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start verification' }))
+    await screen.findByText('Creating Pore SIFT templates (0 of 3)…')
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await screen.findByText('Verification cancelled.')
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    await waitFor(() => expect(server.verifications).toHaveLength(2))
+    expect(server.verifications.map((run) => run.algorithm)).toEqual(['pore-sift', 'pore-sift'])
+  })
+
+  it('keeps an unavailable method disabled and OpenCV SIFT usable (H38)', async () => {
+    server.poreAvailable = false
+    server.fingers = [7]
+    await openFingerprint()
+    fireEvent.click(within(screen.getByRole('group', { name: 'Left hand' })).getByRole('button', { name: /Index/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Verify this finger (1:1)' }))
+    expect(screen.getByRole('radio', { name: 'Pore SIFT' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('radio', { name: 'OpenCV SIFT' })).toHaveProperty('disabled', false)
+    expect(screen.getByText('This method is unavailable on this computer. Check the server configuration.')).toBeTruthy()
+  })
+
   it('starts just one verification in development StrictMode', async () => {
     server.current = server.add('dana', 'user')
     server.fingers = [7]
@@ -716,6 +774,7 @@ describe('fingerprint verification (H35)', () => {
     open('/fingerprint', true)
     fireEvent.click(within(await screen.findByRole('group', { name: 'Left hand' })).getByRole('button', { name: /Index/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Verify this finger (1:1)' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Start verification' }))
     await screen.findByText('Place the selected finger on the scanner and hold it still.')
     expect(server.verifications).toHaveLength(1)
     expect(server.verificationCancels).toEqual([])
@@ -793,6 +852,7 @@ describe('fingerprint verification (H35)', () => {
     fireEvent.click(await screen.findByRole('link', { name: 'Open' }))
     fireEvent.click(within(await screen.findByRole('group', { name: 'Left hand' })).getByRole('button', { name: /Index/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Verify this finger (1:1)' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Start verification' }))
     await screen.findByText('Place the selected finger on the scanner and hold it still.')
     act(() => server.emitVerification(VERIFIED, previous))
     expect(screen.queryByText('Fingerprint matches')).toBeNull()
@@ -807,6 +867,7 @@ describe('fingerprint verification (H35)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Back to the fingers' }))
     server.verification = [{ type: 'failed', error: 'server_unreachable' }]
     fireEvent.click(await screen.findByRole('button', { name: 'Verify this finger (1:1)' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Start verification' }))
     expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'The connection to the server ended. A completed result may already have been saved. Check the server before starting a new verification.')
   })
 
@@ -817,9 +878,74 @@ describe('fingerprint verification (H35)', () => {
     open('/fingerprint')
     fireEvent.click(within(await screen.findByRole('group', { name: 'יד שמאל' })).getByRole('button', { name: /מורה/ }))
     fireEvent.click(screen.getByRole('button', { name: 'אימות האצבע הזו (1:1)' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'התחלת האימות' }))
     expect(await screen.findByRole('heading', { name: 'נמצאה התאמה לטביעת האצבע' })).toBeTruthy()
     expect(screen.getByText('הנחה 4')).toBeTruthy()
     expect(document.documentElement.dir).toBe('rtl')
+  })
+})
+
+describe('learned verification and generic enrolment clarity (H39)', () => {
+  it.each(['en', 'he'] as const)('selects the learned method before capture and explains preparation and its result in %s', async (language) => {
+    server.current = server.add('dana', 'user', { language })
+    server.fingers = [7]
+    server.verification = [{ type: 'preparing_templates', completed: 1, total: 3 }]
+    open('/fingerprint')
+    const he = language === 'he'
+    const hands = await screen.findByRole('group', { name: he ? 'יד שמאל' : 'Left hand' })
+    expect(screen.queryByRole('radio')).toBeNull()
+    fireEvent.click(within(hands).getByRole('button', { name: he ? /מורה/ : /Index/ }))
+    fireEvent.click(screen.getByRole('button', { name: he ? 'אימות האצבע הזו (1:1)' : 'Verify this finger (1:1)' }))
+    fireEvent.click(await screen.findByRole('radio', { name: he ? 'המתאר הנלמד' : 'Learned pore descriptor' }))
+    expect(server.verifications).toEqual([])
+    fireEvent.click(screen.getByRole('button', { name: he ? 'התחלת האימות' : 'Start verification' }))
+    expect(await screen.findByText(he ? 'יוצרים תבניות המתאר הנלמד (1 מתוך 3)…' : 'Creating Learned pore descriptor templates (1 of 3)…')).toBeTruthy()
+    expect(server.verifications[0]?.algorithm).toBe('learned-pore')
+    act(() => server.emitVerification({ ...VERIFIED, algorithm: 'learned-pore', score: 30, threshold: 21, threshold_provisional: true }))
+    expect(await screen.findByRole('heading', { name: he ? 'נמצאה התאמה לטביעת האצבע' : 'Fingerprint matches' })).toBeTruthy()
+    expect(screen.getByRole('meter', { name: he ? 'נקבוביות תואמות' : 'Matching pores' })).toHaveProperty('value', 30)
+    expect(screen.getByText(he ? 'התאמה מעל 21' : 'Match above 21')).toBeTruthy()
+  })
+
+  it('returns from method selection without starting or cancelling a scan', async () => {
+    server.fingers = [7]
+    await openFingerprint()
+    fireEvent.click(within(screen.getByRole('group', { name: 'Left hand' })).getByRole('button', { name: /Index/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Verify this finger (1:1)' }))
+    fireEvent.click(await screen.findByRole('radio', { name: 'Learned pore descriptor' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Back to the fingers' }))
+    expect(screen.getByRole('button', { name: 'Enrol this finger again' })).toBeTruthy()
+    expect(server.verifications).toEqual([])
+    expect(server.verificationCancels).toEqual([])
+  })
+
+  it('labels the demonstrated template and separates approval from the other methods’ pair scores', async () => {
+    server.enrolment = [STARTED, kept(1, []), kept(2, []), kept(3, []), {
+      ...SAVED,
+      pending_methods: [],
+      prepared_methods: [{ algorithm: 'pore-sift', templates: 3 }, { algorithm: 'learned-pore', templates: 3 }],
+      method_comparisons: [
+        { algorithm: 'opencv-sift', threshold: 57, threshold_provisional: false, pairs: SAVED.pairs },
+        { algorithm: 'pore-sift', threshold: 37, threshold_provisional: true,
+          pairs: SAVED.pairs.map((p) => ({ ...p, score: 0, accepted: false })) },
+        { algorithm: 'learned-pore', threshold: 21, threshold_provisional: true,
+          pairs: SAVED.pairs.map((p) => ({ ...p, score: 30, accepted: true })) },
+      ],
+    }]
+    await openFingerprint()
+    fireEvent.click(within(screen.getByRole('group', { name: 'Left hand' })).getByRole('button', { name: /Index/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Enrol this finger' }))
+    await screen.findByRole('heading', { name: 'How your fingerprint is stored' })
+    expect(screen.getByText('Templates stored for: OpenCV SIFT, Pore SIFT, Learned pore descriptor.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'The points' }))
+    expect(screen.getByText('Template demonstration: OpenCV SIFT')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Why it was accepted' }))
+    expect(screen.getByRole('heading', { name: 'Enrolment check: OpenCV SIFT' })).toBeTruthy()
+    const pore = screen.getByRole('region', { name: 'Pore SIFT' })
+    expect(within(pore).getAllByText('not above 37')).toHaveLength(3)
+    const learned = screen.getByRole('region', { name: 'Learned pore descriptor' })
+    expect(within(learned).getAllByText('above 21: match')).toHaveLength(3)
+    expect(screen.queryByRole('radio')).toBeNull()
   })
 })
 

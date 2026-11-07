@@ -4,13 +4,36 @@ Long-running child processes of the server (H13): each loads its method once,
 answers one request at a time on standard input and output, and keeps nothing
 between requests. A message is one line of JSON with `length` (and `parts`
 when the data has several), followed by its bytes (`protocol.py`, standard
-library only). The server starts the engines when it starts and runs them in
-the research project environment, which has numpy; they add no package to it.
+library only). The server runs OpenCV SIFT and NFIQ 2 in the research project
+environment, Pore SIFT in its existing research environment, and the learned
+descriptor in the research GPU environment. They add no package.
 
 | Engine | Operations | Decision |
 | --- | --- | --- |
 | `opencv_sift.py` | `extract` a PNG: keypoints, the template (the research's `.npz` layout), and the points and descriptors for the template screen; `compare` two templates: the research's score (RANSAC inliers) | H10, H33 |
 | `nfiq2_quality.py` | `quality` of a PNG: NIST's NFIQ 2.3 score, 0 to 100, of a 500 ppi copy made in memory | H33 |
+| `pore_sift.py` | `extract` a native PNG to the research's NPZ template; `compare` two templates by its basic matcher, with the research's detector, NMS and descriptor functions | H10, H38 |
+| `learned_pore.py` | `extract` a native PNG and shared pore coordinates to the second model's native float16 NPY template; `compare` by the research's batched matcher | H6, H10, H39 |
+
+Pore SIFT starts on demand. Its short configuration check runs in the research
+project Python, which can read the research TOML files and verify the pin.
+The persistent engine runs in the Python 3.10 environment named by the
+research's `configs/algorithms.toml`. The upstream NMS functions keep their
+parameters and coordinate writer; their image output is discarded and the
+coordinate text goes to a memory buffer. No sample or derived file is written.
+The engine keeps integer row/column points and float32 descriptors in the
+research's native NPZ layout. The synthetic test compares it with the unchanged
+file-based research worker; local validation also reproduced all 30 second-set
+templates and 435 H10 scores exactly.
+
+H39 also exposes `detect`, returning the same integer coordinates in memory
+without computing SIFT descriptors. New enrolments pass the existing Pore
+SIFT template's coordinates to the learned descriptor, detecting once per
+capture. The learned engine verifies the research pin and model hash, calls
+the unchanged 32 x 32 window selector and description function, then stores
+and scores half-precision descriptors exactly as H10 does. Templates and
+all 435 second-set scores were reproduced exactly. No coordinate or capture
+file is created, and neither engine retains a finding between requests.
 
 The OpenCV SIFT engine checks the pinned research link before it answers
 (`methods/research_link.py`). The research's extraction reads an image file,

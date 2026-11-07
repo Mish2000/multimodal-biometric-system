@@ -1,7 +1,7 @@
 // Requests to the local server on behalf of the page (H11, H26). The session token is kept here and is
 // never handed to the page, so a script running in the page cannot read or send it elsewhere. The token of
 // a link that opened the client to reset a password stays here in the same way (H32).
-import { ROUTES, type ApiResult, type OpenedLink, type RouteName } from '../shared/bridge'
+import { ROUTES, FINGERPRINT_ALGORITHMS, type ApiResult, type OpenedLink, type RouteName, type FingerprintAlgorithm } from '../shared/bridge'
 import type { ResetLink } from './links'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -81,12 +81,14 @@ export class ServerClient {
     return this.scan(ENROLMENTS, finger, null, emit)
   }
 
-  async verify(finger: unknown, runId: unknown, emit: (event: unknown) => void): Promise<ApiResult> {
+  async verify(finger: unknown, runId: unknown, emit: (event: unknown) => void, algorithm?: unknown): Promise<ApiResult> {
     if (typeof runId !== 'string' || !UUID.test(runId)) return refused('invalid_request')
-    return this.scan(VERIFICATIONS, finger, runId, emit)
+    if (algorithm !== undefined && !FINGERPRINT_ALGORITHMS.includes(algorithm as FingerprintAlgorithm)) return refused('invalid_request')
+    return this.scan(VERIFICATIONS, finger, runId, emit, algorithm as FingerprintAlgorithm | undefined)
   }
 
-  private async scan(path: string, finger: unknown, runId: string | null, emit: (event: unknown) => void): Promise<ApiResult> {
+  private async scan(path: string, finger: unknown, runId: string | null, emit: (event: unknown) => void,
+                     algorithm?: FingerprintAlgorithm): Promise<ApiResult> {
     if (typeof finger !== 'number' || !Number.isInteger(finger) || finger < 1 || finger > 10) return refused('invalid_request')
     if (this.capture !== null) return { ok: false, status: 409, error: 'scanner_busy' }
     const controller = new AbortController()
@@ -108,7 +110,7 @@ export class ServerClient {
         response = await this.request(this.base + path, {
           method: 'POST',
           headers,
-          body: JSON.stringify({ finger }),
+          body: JSON.stringify({ finger, ...(algorithm === undefined ? {} : { algorithm }) }),
           signal: controller.signal,
         })
       } catch {

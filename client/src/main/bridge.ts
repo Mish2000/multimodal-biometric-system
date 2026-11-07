@@ -32,7 +32,7 @@ export function registerBridge(serverUrl: string): ServerClient {
   ipcMain.on('mbs:enrol-cancel', (event) => {
     if (fromTopFrame(event)) server.cancelEnrolment()
   })
-  ipcMain.handle('mbs:verify', (event, finger: unknown, runId: unknown) => {
+  ipcMain.handle('mbs:verify', (event, finger: unknown, runId: unknown, algorithm: unknown) => {
     if (!fromTopFrame(event)) return { ok: false, status: 0, error: 'unknown_route' }
     const page = event.sender
     const cancel = () => server.cancelVerification(runId)
@@ -41,7 +41,7 @@ export function registerBridge(serverUrl: string): ServerClient {
     page.once('render-process-gone', cancel)
     return server.verify(finger, runId, (verificationEvent) => {
       if (!page.isDestroyed()) page.send('mbs:verification', runId, verificationEvent)
-    }).finally(() => {
+    }, algorithm).finally(() => {
       page.removeListener('destroyed', cancel)
       page.removeListener('did-start-loading', cancel)
       page.removeListener('render-process-gone', cancel)

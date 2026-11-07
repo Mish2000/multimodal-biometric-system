@@ -73,18 +73,25 @@ def serve(ready: dict, handlers: dict[str, Handler]) -> None:
     out, source = sys.stdout.buffer, sys.stdin.buffer
     sys.stdout = sys.stderr
     write_message(out, {"ok": True, **ready})
-    while True:
-        message = read_message(source)
-        if message is None:
-            return
+    def answer(message):
+        # H39: request-local variables are released before waiting for the next message.
         header, parts = message
         handler = handlers.get(header.get("op", ""))
         if handler is None:
             write_message(out, {"ok": False, "error": "unknown_operation"})
-            continue
+            return
         try:
             reply, data = handler(header, parts)
         except Exception as error:  # the engine keeps serving; the server decides what a failure means
             write_message(out, {"ok": False, "error": type(error).__name__, "detail": str(error)[:300]})
-            continue
+            return
         write_message(out, {"ok": True, **reply}, data)
+
+    while True:
+        message = read_message(source)
+        if message is None:
+            return
+        try:
+            answer(message)
+        finally:
+            del message

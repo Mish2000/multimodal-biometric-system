@@ -14,6 +14,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "engines"))
 import protocol  # noqa: E402
 
 KEYPOINTS = 3
+PORE = sys.argv[1] == "pore"
+LEARNED = sys.argv[1] == "learned"
 
 
 def label(data: bytes) -> tuple[int, str]:
@@ -31,18 +33,29 @@ def quality(_header, parts):
 
 def extract(_header, parts):
     _, name = label(parts[0])
+    if PORE:
+        return {"keypoints": KEYPOINTS}, b"PORE:" + name.encode()
+    if LEARNED:
+        assert parts[1] == b"PORE:" + name.encode(), "must use this capture's shared pores"
+        return {}, b"LEARNED:" + name.encode()
     points = struct.pack("<6f", 10, 20, 30, 40, 50, 60)
     descriptors = bytes(range(KEYPOINTS * 128 % 256)) + bytes(KEYPOINTS * 128 - KEYPOINTS * 128 % 256)
     return {"keypoints": KEYPOINTS}, [b"TEMPLATE:" + name.encode(), points, descriptors]
 
 
 def compare(_header, parts):
+    if PORE:
+        assert all(part.startswith(b"PORE:") for part in parts)
+    if LEARNED:
+        assert all(part.startswith(b"LEARNED:") for part in parts)
     probe, reference = (p.decode().split(":", 1)[1] for p in parts)
-    return {"status": "ok", "reason": "", "score": 90 if probe[0] == reference[0] else 5, "good": 12}, b""
+    same, other = (30, 2) if LEARNED else (45, 3) if PORE else (90, 5)
+    return {"status": "ok", "reason": "", "score": same if probe[0] == reference[0] else other, "good": 12}, b""
 
 
 if sys.argv[1] == "quality":
     protocol.serve({"engine": "nfiq2", "version": "2.3.0", "model_hash": "fake"}, {"quality": quality})
 else:
-    protocol.serve({"algorithm": "opencv-sift", "version": "606c8d33a7a27570b5bb55cca8248259b9b6ba8a"},
-                   {"extract": extract, "compare": compare})
+    protocol.serve({"algorithm": "learned-pore" if LEARNED else "pore-sift" if PORE else "opencv-sift",
+                    "version": "606c8d33a7a27570b5bb55cca8248259b9b6ba8a"},
+                   {"extract": extract, "detect": extract, "compare": compare})
