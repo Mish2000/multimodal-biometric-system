@@ -13,7 +13,7 @@ export class ServerClient {
   private token: string | null = null
   private resetToken: string | null = null
   private opened: OpenedLink | null = null
-  private enrolment: AbortController | null = null
+  private capture: { controller: AbortController; path: string; runId: string | null } | null = null
 
   constructor(
     private readonly base: string,
@@ -60,7 +60,7 @@ export class ServerClient {
       // Signing out ends the session here even when the server is gone or the session already expired.
       const token = this.token
       this.token = null
-      this.cancelEnrolment()
+      this.cancelCapture()
       if (token === null) return { ok: true, data: null }
       return this.send(method, path, undefined, token)
     }
@@ -74,32 +74,49 @@ export class ServerClient {
     return result
   }
 
-  // A fingerprint enrolment (H33): the server's answer is a stream of JSON lines, passed on one event at a
+  // Fingerprint capture (H33, H35): the server's answer is a stream of JSON lines, passed on one event at a
   // time as they come. It has no overall time limit, since the scanner waits for the finger (the server
   // bounds every wait); cancelling closes the connection, and the server then stops the scanner.
   async enrol(finger: unknown, emit: (event: unknown) => void): Promise<ApiResult> {
+    return this.scan(ENROLMENTS, finger, null, emit)
+  }
+
+  async verify(finger: unknown, runId: unknown, emit: (event: unknown) => void): Promise<ApiResult> {
+    if (typeof runId !== 'string' || !UUID.test(runId)) return refused('invalid_request')
+    return this.scan(VERIFICATIONS, finger, runId, emit)
+  }
+
+  private async scan(path: string, finger: unknown, runId: string | null, emit: (event: unknown) => void): Promise<ApiResult> {
     if (typeof finger !== 'number' || !Number.isInteger(finger) || finger < 1 || finger > 10) return refused('invalid_request')
-    if (this.enrolment !== null) return { ok: false, status: 409, error: 'scanner_busy' }
+    if (this.capture !== null) return { ok: false, status: 409, error: 'scanner_busy' }
     const controller = new AbortController()
-    this.enrolment = controller
+    this.capture = { controller, path, runId }
     let ended = false
     const pass = (event: { type?: unknown; error?: unknown }) => {
-      if (event.type === 'saved' || event.type === 'failed') ended = true
+      if (event.type === 'saved' || event.type === 'verified' || event.type === 'failed') {
+        ended = true
+        if (this.capture?.controller === controller) this.capture = null
+      }
       emit(event)
+      return ended
     }
     try {
       const headers: Record<string, string> = { 'content-type': 'application/json' }
       if (this.token !== null) headers.authorization = `Bearer ${this.token}`
       let response: Response
       try {
-        response = await this.request(this.base + ENROLMENTS, {
+        response = await this.request(this.base + path, {
           method: 'POST',
           headers,
           body: JSON.stringify({ finger }),
           signal: controller.signal,
         })
       } catch {
-        return controller.signal.aborted ? { ok: true, data: null } : refused('server_unreachable')
+        if (controller.signal.aborted) {
+          pass({ type: 'failed', error: 'cancelled' })
+          return { ok: true, data: null }
+        }
+        return refused('server_unreachable')
       }
       if (!response.ok) {
         const data: unknown = await response.json().catch(() => null)
@@ -115,12 +132,21 @@ export class ServerClient {
       if (!ended) pass({ type: 'failed', error: controller.signal.aborted ? 'cancelled' : 'server_unreachable' })
       return { ok: true, data: null }
     } finally {
-      this.enrolment = null
+      controller.abort()
+      if (this.capture?.controller === controller) this.capture = null
     }
   }
 
   cancelEnrolment(): void {
-    this.enrolment?.abort()
+    if (this.capture?.path === ENROLMENTS) this.cancelCapture()
+  }
+
+  cancelVerification(runId: unknown): void {
+    if (this.capture?.path === VERIFICATIONS && this.capture.runId === runId) this.cancelCapture()
+  }
+
+  cancelCapture(): void {
+    this.capture?.controller.abort()
   }
 
   private async send(method: string, path: string, body: unknown, token: string | null): Promise<ApiResult> {
@@ -152,25 +178,31 @@ function refused(error: string): ApiResult {
 }
 
 const ENROLMENTS = '/api/fingerprint/enrolments'
+const VERIFICATIONS = '/api/fingerprint/verifications'
 
 // Lines of a streamed answer, each without its newline; an event with a whole template's view is several
 // megabytes, so a line may arrive in many pieces.
-async function readLines(response: Response, line: (text: string) => void): Promise<void> {
+async function readLines(response: Response, line: (text: string) => boolean): Promise<void> {
   if (response.body === null) return
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
   let pending = ''
-  for (;;) {
-    const { value, done } = await reader.read()
-    pending += done ? decoder.decode() : decoder.decode(value, { stream: true })
-    let end = pending.indexOf('\n')
-    while (end >= 0) {
-      const text = pending.slice(0, end)
-      pending = pending.slice(end + 1)
-      if (text.trim() !== '') line(text)
-      end = pending.indexOf('\n')
+  try {
+    for (;;) {
+      const { value, done } = await reader.read()
+      pending += done ? decoder.decode() : decoder.decode(value, { stream: true })
+      let end = pending.indexOf('\n')
+      while (end >= 0) {
+        const text = pending.slice(0, end)
+        pending = pending.slice(end + 1)
+        if (text.trim() !== '' && line(text)) return
+        end = pending.indexOf('\n')
+      }
+      if (done) break
     }
-    if (done) break
+    if (pending.trim() !== '') line(pending)
+  } finally {
+    await reader.cancel().catch(() => undefined)
+    reader.releaseLock()
   }
-  if (pending.trim() !== '') line(pending)
 }

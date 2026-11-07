@@ -116,6 +116,32 @@ export type EnrolmentEvent =
   | ({ type: 'saved' } & SavedEnrolment)
   | { type: 'failed'; error: string }
 
+// H35: only the new capture is sent to the page. The three stored templates stay with the engines.
+export interface VerificationResult {
+  attempt_id: string
+  at: string
+  finger: number
+  algorithm: string
+  score: number
+  threshold: number
+  threshold_origin: string
+  accepted: boolean
+  duration_ms: number
+  comparisons: Array<{ placement: number; score: number; accepted: boolean; computed: boolean }>
+}
+
+export type VerificationEvent =
+  | { type: 'started'; finger: number; threshold: number; quality_minimum: number; references: number }
+  | { type: 'place'; capture: number; maximum: number }
+  | { type: 'checking' }
+  | { type: 'rejected'; image: string; checks: Check[]; score: number | null; minimum: number }
+  | { type: 'lift' }
+  | { type: 'captured'; image: string; checks: Check[] }
+  | { type: 'comparing'; completed: number; total: number }
+  | { type: 'saving' }
+  | ({ type: 'verified' } & VerificationResult)
+  | { type: 'failed'; error: string }
+
 export interface MbsBridge {
   call<T = unknown>(route: RouteName, body?: unknown, id?: string): Promise<ApiResult<T>>
   setTheme(theme: Theme): void
@@ -127,4 +153,8 @@ export interface MbsBridge {
   enrolFingerprint(finger: number): Promise<ApiResult<null>>
   cancelEnrolment(): void
   onEnrolment(listener: (event: EnrolmentEvent) => void): () => void
+  // Each verification has a page-generated id, so a cancelled run cannot update a later screen (H35).
+  verifyFingerprint(finger: number, runId: string): Promise<ApiResult<null>>
+  cancelVerification(runId: string): void
+  onVerification(runId: string, listener: (event: VerificationEvent) => void): () => void
 }

@@ -2,7 +2,8 @@
 
 The FastAPI server of the system: the local PostgreSQL cluster, the key file, registration with the
 national ID and the mobile phone, sign-in, password recovery, roles and the accounts part of the
-administration (H3, H11, H12, H14, H19, H29 to H32), and fingerprint enrolment (H33).
+administration (H3, H11, H12, H14, H19, H29 to H32), fingerprint enrolment (H33)
+and 1:1 verification (H35).
 It runs with the `multimodal-server` environment and starts PostgreSQL from the
 `multimodal-postgres` environment (`environments/`).
 
@@ -15,7 +16,7 @@ $python = '<conda envs>\multimodal-server\python.exe'
 & $python -m mbs create-admin --username <name> --email <address>   # prints a one-time password
 & $python -m mbs serve        # the API on 127.0.0.1; starts and stops PostgreSQL with it
 & $python -m mbs db status    # or start / stop
-& $python -m pytest           # 101 tests against a throwaway cluster, about a minute (one is a local check)
+& $python -m pytest           # 119 tests against a throwaway cluster (one needs MBS_LIVE_CAPTURES)
 ```
 
 ## Machine settings
@@ -97,11 +98,24 @@ what is missing, and answers enrolment requests with `fingerprint_unavailable`.
 | `POST /api/password-reset` | anyone | a recovery link by SMS or email (H32), answered 202 either way |
 | `POST /api/password-reset/check`, `POST /api/password-reset/complete` | anyone with a link | whether the link works; the new password |
 | `POST /api/fingerprint/enrolments` | user | enrol a finger (`{"finger": 1-10}`); the answer is a stream of JSON lines, one event each (`started`, `place`, `kept`, `rejected`, `lift`, `another_placement`, then `saved` or `failed`); closing it cancels the enrolment (H33) |
-| `DELETE /api/fingerprint/fingers/{finger}` | user | delete a finger's enrolment with the ones it replaced, their captures and templates (H34); 404 when it is not enrolled |
+| `DELETE /api/fingerprint/fingers/{finger}` | user | delete a finger's current and replaced enrolments, their captures, templates and verification attempts with their probes (H34, H35); 404 when it is not enrolled |
+| `POST /api/fingerprint/verifications` | user | verify the chosen finger (`{"finger": 1-10}`) against its three current OpenCV SIFT templates, with H33 quality checks; streamed events `started`, `place`, `checking`, `rejected`, `lift`, `captured`, `comparing`, `saving`, then `verified` or `failed` (H35) |
 | `GET /api/admin/accounts`, `POST /api/admin/accounts/{id}/status` | administrator | accounts; disable or enable |
 | `POST /api/admin/administrators`, `GET /api/admin/audit` | administrator | a new administrator; the audit log |
 
 Errors answer `{"error": "<code>"}`; the client turns codes into English or Hebrew text.
+
+Verification uses the existing capture and engine settings. On startup, `serve`
+applies `biometric_0003`, preserving enrolled fingers and adding `attempt`.
+The highest of the three scores decides, strictly above the threshold; a result
+is sent only after storage. Its probe is sealed under `mbs/probe/v1`, bound to
+the attempt and its subject. Deleting a finger cascades to the verification
+attempts of all its enrolments, including their probes (H35).
+
+To check the real engines against the existing second capture set, set
+`MBS_LIVE_CAPTURES` to `../captures/live002` before running pytest. The local
+check enrols a finger, verifies it and rejects another finger using those
+stored captures. Manual validation uses the real scanner in the client.
 
 ## Known limits
 

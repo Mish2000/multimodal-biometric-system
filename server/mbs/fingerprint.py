@@ -21,10 +21,12 @@ import logging
 import threading
 import uuid
 from collections.abc import AsyncIterator
+from contextlib import aclosing
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
+import anyio
 from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session as DbSession
 from starlette.concurrency import run_in_threadpool
@@ -174,9 +176,43 @@ def _quiet(_header: dict) -> None:
     """The scanner's own progress (frames without a finger) is not forwarded."""
 
 
+async def acquire(service: FingerprintService, wait: str, run: ScannerRun) -> tuple[dict, bytes | None]:
+    """H35: a disconnect must interrupt a blocking scanner wait, then finish its cleanup before another
+    operation takes the scanner. Used by both enrolment and verification."""
+    started, finished = threading.Event(), threading.Event()
+
+    def capture():
+        started.set()
+        try:
+            seconds = FINGER_WAIT_S if wait == "finger" else LIFT_WAIT_S
+            return service.scanner.acquire(wait, seconds, _quiet, run)
+        finally:
+            finished.set()
+
+    try:
+        return await anyio.to_thread.run_sync(capture, abandon_on_cancel=True)
+    finally:
+        if not finished.is_set():
+            run.cancel()
+            if started.is_set():
+                with anyio.CancelScope(shield=True):
+                    await anyio.to_thread.run_sync(finished.wait)
+
+
+def capture_quality(service: FingerprintService, header: dict, png: bytes) -> tuple[int | None, list[dict]]:
+    """H33, H35: the same quality gate for every capture. Invalid NFIQ values never pass."""
+    reply, _ = service.quality.request({"op": "quality"}, [png])
+    score = reply.get("score")
+    valid = reply.get("valid") is True and type(score) is int and 0 <= score <= 100
+    score = score if valid else None
+    quality = _check("quality", valid and score >= service.quality_minimum,
+                     f"NFIQ 2 score {score if score is not None else 'not computed'} "
+                     f"(at least {service.quality_minimum})", score=score)
+    return score, [*header.get("checks", []), quality]
+
+
 async def _enrol(service, databases, keys, subject, finger, run) -> AsyncIterator[dict]:
     threshold = await run_in_threadpool(_threshold, databases)
-    scanner_event = _quiet
     yield {"type": "started", "finger": finger, "placements": PLACEMENTS, "quality_minimum": service.quality_minimum,
            "threshold": threshold, "most_kept": MOST_KEPT}
     try:
@@ -195,23 +231,18 @@ async def _enrol(service, databases, keys, subject, finger, run) -> AsyncIterato
             return
         yield {"type": "place", "placement": placement + 1, "kept": len(kept)}
         try:
-            header, png = await run_in_threadpool(service.scanner.acquire, "finger", FINGER_WAIT_S, scanner_event, run)
+            header, png = await acquire(service, "finger", run)
         except ScannerError as error:
             yield {"type": "failed", "error": error.code}
             return
         captures += 1
         captured_at = datetime.now(timezone.utc)
         try:
-            reply, _ = await run_in_threadpool(service.quality.request, {"op": "quality"}, [png])
+            score, checks = await run_in_threadpool(capture_quality, service, header, png)
         except EngineError:
             yield {"type": "failed", "error": "engine_unavailable"}
             return
-        score = reply.get("score")
-        passed = bool(reply.get("valid")) and score >= service.quality_minimum
-        quality = _check("quality", passed, f"NFIQ 2 score {score if score is not None else 'not computed'} "
-                                            f"(at least {service.quality_minimum})", score=score)
-        checks = [*header.get("checks", []), quality]
-        if not passed:
+        if not checks[-1]["passed"]:
             yield {"type": "rejected", "reason": "quality", "image": _b64(png), "checks": checks, "score": score,
                    "minimum": service.quality_minimum}
         else:
@@ -248,7 +279,7 @@ async def _enrol(service, databases, keys, subject, finger, run) -> AsyncIterato
                 yield {"type": "another_placement", "kept": len(kept)}
         yield {"type": "lift"}
         try:
-            await run_in_threadpool(service.scanner.acquire, "lift", LIFT_WAIT_S, scanner_event, run)
+            await acquire(service, "lift", run)
         except ScannerError as error:
             yield {"type": "failed", "error": error.code}
             return
@@ -326,6 +357,7 @@ def _saved_event(saved: Saved, chosen: list[Kept], kept: list[Kept], scores: dic
 
 def ndjson(events: AsyncIterator[dict]) -> AsyncIterator[bytes]:
     async def lines():
-        async for event in events:
-            yield (json.dumps(event, separators=(",", ":")) + "\n").encode("utf-8")
+        async with aclosing(events):
+            async for event in events:
+                yield (json.dumps(event, separators=(",", ":")) + "\n").encode("utf-8")
     return lines()

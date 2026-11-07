@@ -1,8 +1,9 @@
 // The fingerprint screen (H15, H33): choose a finger, enrol it from the scanner with live guidance, then see
-// how its template is stored. Verification and identification follow in the next build steps.
+// how its template is stored, or verify it with a new capture (H35).
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Check, EnrolmentEvent, Pair, SavedEnrolment } from '../../../shared/bridge'
 import { Checks, Journey, Pairs, type Captured } from '../fingerprint/Journey'
+import { Verification } from '../fingerprint/Verification'
 import { errorText, type Texts } from '../texts'
 import { useSession } from '../session'
 
@@ -19,6 +20,7 @@ export function Fingerprint() {
   const [enrolled, setEnrolled] = useState<number[] | null>(null)
   const [chosen, setChosen] = useState<number | null>(null)
   const [running, setRunning] = useState(false)
+  const [verifying, setVerifying] = useState(false)
   const [result, setResult] = useState<{ saved: SavedEnrolment; captures: Record<number, Captured> } | null>(null)
   // H34: deleting the chosen finger's enrolment, after a confirmation.
   const [confirming, setConfirming] = useState(false)
@@ -44,9 +46,26 @@ export function Fingerprint() {
   const load = useCallback(() => {
     void call<{ modalities: Record<string, FingerprintState> | null }>('me').then((answer) => {
       if (answer.ok) setEnrolled(answer.data.modalities?.fingerprint?.fingers ?? [])
+      else setMessage({ kind: 'error', text: errorText(answer, t) })
     })
-  }, [call])
+  }, [call, t])
   useEffect(load, [load])
+
+  if (verifying && chosen !== null)
+    return (
+      <Verification
+        finger={chosen}
+        enrolled={enrolled?.includes(chosen) ?? false}
+        onLeave={() => {
+          setVerifying(false)
+          load()
+        }}
+        onEnrol={() => {
+          setVerifying(false)
+          setRunning(true)
+        }}
+      />
+    )
 
   if (result !== null && chosen !== null)
     return (
@@ -80,7 +99,12 @@ export function Fingerprint() {
       <h1>{t.modalities.fingerprint}</h1>
       <p className="lead">{f.lead}</p>
       {enrolled === null ? (
-        <p className="aside">{t.loading}</p>
+        message?.kind === 'error' ? (
+          <>
+            <p className="error" role="alert">{message.text}</p>
+            <button type="button" onClick={load}>{f.tryAgain}</button>
+          </>
+        ) : <p className="aside">{t.loading}</p>
       ) : (
         <>
           <div className="hands">
@@ -93,6 +117,7 @@ export function Fingerprint() {
                     type="button"
                     className={chosen === position ? 'finger current' : 'finger secondary'}
                     aria-pressed={chosen === position}
+                    disabled={deleting}
                     onClick={() => choose(position)}
                   >
                     {f.shortFingers[position > 5 ? position - 5 : position]}
@@ -102,6 +127,7 @@ export function Fingerprint() {
               </fieldset>
             ))}
           </div>
+          {chosen === null && <p className="aside">{f.verification.choose}</p>}
           {chosen !== null && (
             <div className="setting">
               <p>
@@ -125,9 +151,15 @@ export function Fingerprint() {
                 </div>
               ) : (
                 <div className="actions">
-                  <button type="button" onClick={() => setRunning(true)}>
+                  {enrolled.includes(chosen) && (
+                    <button type="button" onClick={() => setVerifying(true)}>{f.verification.start}</button>
+                  )}
+                  <button type="button" className={enrolled.includes(chosen) ? 'secondary' : ''} onClick={() => setRunning(true)}>
                     {enrolled.includes(chosen) ? f.enrolAgain : f.enrol}
                   </button>
+                  {!enrolled.includes(chosen) && (
+                    <button type="button" className="secondary" onClick={() => setVerifying(true)}>{f.verification.start}</button>
+                  )}
                   {enrolled.includes(chosen) && (
                     <button type="button" className="secondary" onClick={() => setConfirming(true)}>
                       {f.deleteEnrolment}
@@ -173,11 +205,13 @@ function Enrolment({ finger, onSaved, onLeave }: { finger: number; onSaved: (sav
   const done = useRef(false)
 
   useEffect(() => {
+    let active = true
+    let started = false
     done.current = false
     captures.current = {}
     setRun(START)
     const stop = window.mbs.onEnrolment((event: EnrolmentEvent) => {
-      if (done.current) return
+      if (!active || done.current) return
       setRun((current) => next(current, event, t))
       if (event.type === 'kept') captures.current[event.placement] = { image: event.image, checks: event.checks }
       if (event.type === 'saved') {
@@ -186,15 +220,21 @@ function Enrolment({ finger, onSaved, onLeave }: { finger: number; onSaved: (sav
       }
       if (event.type === 'failed') done.current = true
     })
-    void window.mbs.enrolFingerprint(finger).then((answer) => {
-      if (!answer.ok && !done.current) {
-        done.current = true
-        setRun((current) => ({ ...current, phase: 'failed', error: f.errors[answer.error] ?? errorText(answer, t) }))
-      }
+    // H35: start only after React's synchronous development effect check has finished.
+    queueMicrotask(() => {
+      if (!active) return
+      started = true
+      void window.mbs.enrolFingerprint(finger).then((answer) => {
+        if (active && !answer.ok && !done.current) {
+          done.current = true
+          setRun((current) => ({ ...current, phase: 'failed', error: f.errors[answer.error] ?? errorText(answer, t) }))
+        }
+      })
     })
     return () => {
+      active = false
       stop()
-      if (!done.current) window.mbs.cancelEnrolment() // leaving the screen stops the scanner too
+      if (started && !done.current) window.mbs.cancelEnrolment() // leaving the screen stops the scanner too
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [finger, attempt])

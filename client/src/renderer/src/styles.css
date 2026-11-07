@@ -866,6 +866,7 @@ table.row th {
 
 .actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.75rem;
   margin-top: 1.5rem;
 }
@@ -891,3 +892,48 @@ button.danger {
   background: var(--error);
   color: var(--surface);
 }
+
+/* H35: the verification's real progress and score, using the existing theme. */
+.verification-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding-inline-start: 1.5rem;
+  margin-block: 1.5rem;
+}
+
+.verification-steps li {
+  padding: 0.4rem 1rem;
+  margin-inline-end: 0.8rem;
+  color: var(--muted);
+  border-bottom: 2px solid var(--line);
+}
+
+.verification-steps li[aria-current] {
+  color: var(--text);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.verification-steps li.complete { border-color: var(--ok); }
+
+.verification-result {
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--line);
+  border-inline-start: 4px solid var(--error);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.verification-result.matched { border-inline-start-color: var(--ok); }
+.verification-result h2 { margin-top: 0; }
+.verification-result meter { display: block; width: 100%; height: 1.5rem; }
+.verification-score { position: relative; }
+.threshold-marker { position: absolute; top: 0; bottom: 0; border-inline-start: 2px solid var(--text); }
+.score-axis { display: flex; justify-content: space-between; color: var(--muted); font-size: 0.75rem; margin-bottom: 0.5rem; }
+.score-labels { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.score-note { display: block; font-size: 0.8rem; color: var(--muted); }
+.verification table caption { text-align: start; font-weight: 600; padding-block: 1.25rem 0.5rem; }
+.verification-details { margin-top: 1.5rem; }
+.verification-details summary { cursor: pointer; padding-block: 0.5rem; }
+.verification-details dd { margin-inline-start: 0; margin-bottom: 0.75rem; }

@@ -20,6 +20,7 @@ from mbs.engines import Engine, Scanner, conda_environment
 from mbs.fingerprint import FingerprintService
 
 from test_fingerprint import FAKES, LIFT, PYTHON, enrol, plan, script, user  # noqa: F401 (script is a fixture)
+from test_verification import verify
 
 LIVE = Path(os.environ["MBS_LIVE_CAPTURES"]) if os.environ.get("MBS_LIVE_CAPTURES") else None
 
@@ -40,7 +41,17 @@ def test_the_real_engines_enrol_a_finger_of_the_second_set(databases, keys, outb
     plan(script, *steps[:-1])
     try:
         with TestClient(create_app(databases, keys, outbox, service)) as client:
-            events = enrol(client, user(client))
+            token = user(client)
+            events = enrol(client, token)
+            plan(script, {"wait": "finger", "file": str(files[2])})
+            matched = verify(client, token)[-1]
+            assert matched["type"] == "verified" and matched["accepted"] is True
+            assert [p["score"] for p in matched["comparisons"][:2]] == [384, 562]
+            assert matched["score"] == max(p["score"] for p in matched["comparisons"])
+            other = sorted(LIVE.glob("live002_f02_p*.png"))[0]
+            plan(script, {"wait": "finger", "file": str(other)})
+            different = verify(client, token)[-1]
+            assert different["type"] == "verified" and different["accepted"] is False
     finally:
         service.close()
     saved = events[-1]

@@ -12,9 +12,9 @@
   <img alt=".NET Framework 4.8" src="https://img.shields.io/badge/.NET_Framework-4.8-512BD4?logo=dotnet&logoColor=white">
 </p>
 <p align="center">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-101%20server%20%C2%B7%2061%20client%20%C2%B7%2014%20scanner%20%C2%B7%206%20engines-2EA44F">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-119%20server%20%C2%B7%2075%20client%20%C2%B7%2014%20scanner%20%C2%B7%206%20engines-2EA44F">
   <img alt="Cryptography" src="https://img.shields.io/badge/crypto-AES--256--GCM%20%C2%B7%20Argon2id%20%C2%B7%20HMAC-7C3AED">
-  <img alt="Build" src="https://img.shields.io/badge/build-increment%201%20of%206-F59E0B">
+  <img alt="Build" src="https://img.shields.io/badge/build-increment%202%20of%206-F59E0B">
 </p>
 
 A desktop system that recognises a person by **fingerprint, face and voice**: enrolment once, then
@@ -24,9 +24,9 @@ an academic research project on level-3 fingerprint features such as sweat pores
 matching methods run inside the system, on native 1000 ppi captures.
 
 > [!NOTE]
-> Built in six approved increments. The first, accounts, roles and the client's skeleton, is being
-> completed while the client's visual direction is chosen with the academic supervisor; the second has
-> begun with fingerprint enrolment.
+> Built in six approved increments. Accounts, roles, fingerprint enrolment and OpenCV SIFT 1:1
+> verification are implemented. Manual scanner validation follows.
+> The final visual direction follows the functional build.
 
 ## Screenshots
 
@@ -97,7 +97,7 @@ checked 1000 ppi images.
 <td valign="top">
 
 **📜 Every decision on record**<br>
-Each design choice is numbered (H1 to H32), dated, and cited in the code and the commits.
+Each design choice is numbered (H1 to H35), dated, and cited in the code and the commits.
 
 </td>
 <td valign="top">
@@ -132,12 +132,12 @@ flowchart LR
   main -- "HTTP on 127.0.0.1" --> api["FastAPI server<br/>role check on every route"]
   api --> acc[("Accounts DB<br/>PostgreSQL 16")]
   api --> bio[("Biometric DB<br/>PostgreSQL 16 + pgvector")]
-  api -.-> eng["Engines<br/>one process per method"]
-  api -.-> scan["ScannerCapture<br/>C# · OEM route · 1000 ppi"]
-  eng -.-> research["Research methods<br/>pinned commit"]
+  api --> eng["Engines<br/>one process per method"]
+  api --> scan["ScannerCapture<br/>C# · OEM route · 1000 ppi"]
+  eng --> research["Research methods<br/>pinned commit"]
 ```
 
-<sub>Dashed links arrive with the next increments. Everything runs on one PC; nothing listens beyond localhost.</sub>
+<sub>Everything runs on one PC, with the server listening on localhost.</sub>
 
 ## Security
 
@@ -157,8 +157,8 @@ flowchart LR
 
 | | Increment | |
 | --- | --- | --- |
-| 🟡 | **1 · Foundation** | environments, local PostgreSQL + pgvector, accounts, roles, administration, the client's skeleton |
-| 🟡 | **2 · Fingerprint, 1:1** | enrolment with an NFIQ 2 quality check, sealed captures and templates, and a screen of the stored template (built); verification with OpenCV SIFT and the attempt history (next) |
+| 🟡 | **1 · Foundation** | environments, local PostgreSQL + pgvector, accounts, roles, administration and the client's skeleton (built); final visual design follows the functional build |
+| 🟡 | **2 · Fingerprint, 1:1** | enrolment, NFIQ 2 quality checks, sealed captures and templates, the stored-template screen and OpenCV SIFT verification with saved attempts (built), with manual scanner validation pending |
 | ⚪ | **3 · Fingerprint, complete** | all methods, the method choice, 1:N and the match drawings |
 | ⚪ | **4 · Face** | enrolment, 1:1 and 1:N |
 | ⚪ | **5 · Voice** | enrolment, 1:1 and 1:N |
@@ -187,13 +187,13 @@ conda activate multimodal-server
 cd server
 python -m mbs setup        # key file, local settings, cluster and databases
 python -m mbs serve        # the API on 127.0.0.1:55433
-python -m pytest           # 87 tests against a throwaway cluster
+python -m pytest           # 119 tests; the local capture check needs MBS_LIVE_CAPTURES
 
 # The client, from its lock file
 cd ../client
 npm ci
 npm run dev                # the app, with the server running
-npm test                   # 47 tests
+npm test                   # 75 tests
 ```
 
 Details: [server](server/README.md) · [scanner](scanner/README.md) · [research methods](methods/README.md)

@@ -579,3 +579,51 @@ Approved on 2026-11-05.
   `DELETE /api/fingerprint/fingers/{finger}`, for user accounts only (H12).
   Attempts do not exist yet; verification will settle what an attempt keeps
   when its enrolment is deleted.
+
+## 2026-11-06: fingerprint verification
+
+Approved on 2026-11-06: implement the next fingerprint step, verification
+(1:1), with a guided functional client. The visual direction follows the
+functional build. The deletion rule below was approved explicitly the same day.
+
+- **H35** A user chooses an enrolled finger and takes one new capture. The
+  same H7 checks and NFIQ 2 minimum of 35 from H33 apply. A rejected capture
+  asks for a lift and another placement, with at most 12 captures per run.
+  NFIQ 2 uses its in-memory 500 ppi copy only; matching uses native 1000 ppi.
+  - The server opens that finger's three current OpenCV SIFT templates,
+    checks their version against the engine, and compares the new template
+    with each. Only the new capture is extracted. The highest score decides,
+    strictly above the threshold read at the start of the attempt (H15, H16).
+    The research's defined comparison failures count as zero, as in H10;
+    scanner, engine, encryption and storage errors end the run with an error.
+  - Migration `biometric_0003` creates `attempt` as in H25 and H27. Every
+    completed comparison, accepted or rejected, stores its score, threshold,
+    decision, processing time and probe. The probe is sealed under
+    `mbs/probe/v1`, bound to the attempt and its subject. Processing time
+    starts when the accepted capture arrives, includes quality, extraction
+    and comparison, and ends before storage. Quality-rejected captures and
+    cancelled or failed runs have no comparison outcome and create no attempt.
+  - `POST /api/fingerprint/verifications` is for user accounts only, with the
+    same authenticated streamed JSON-line response as enrolment. Both flows
+    share the scanner lock. Cancellation stops the scanner. Before storing,
+    the server checks that the compared enrolment is still current; a deletion
+    or replacement during the run invalidates it. A completed result is sent
+    only after storage commits. A connection lost at completion can leave a
+    saved attempt whose result did not reach the client.
+  - The client shows the chosen finger, real capture, quality and comparison
+    progress, cancellation, retries and the saved result. The result gives
+    all three scores, the deciding score and threshold, and processing time;
+    capture checks are available in its details. An unenrolled finger offers
+    enrolment or a return home (H15). The screens work in English and Hebrew
+    and in both themes, using the existing neutral appearance. Match drawings
+    remain in increment 3 and the administrative history screen in increment 6.
+  - Amending H34's open question: deleting a finger erases the verification
+    attempts of its current and replaced enrolments, including their sealed
+    probes. The foreign key uses `ON DELETE CASCADE`. Re-enrolment still keeps
+    the earlier enrolment and its attempts. The deletion confirmation states
+    this scope. The retention of identification attempts is settled when 1:N
+    is implemented.
+
+Validation on 2026-11-06 uses throwaway databases, synthetic protocol inputs
+and the real engines on existing HiScan captures. Manual validation of the
+integrated flow with a finger on the scanner follows separately.

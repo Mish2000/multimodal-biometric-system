@@ -1,8 +1,9 @@
 /** @vitest-environment jsdom */
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { StrictMode } from 'react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import type { Account, ApiResult, EnrolmentEvent, Language, MbsBridge, OpenedLink, RouteName, Theme } from '../../shared/bridge'
+import type { Account, ApiResult, EnrolmentEvent, Language, MbsBridge, OpenedLink, RouteName, Theme, VerificationEvent } from '../../shared/bridge'
 import { App } from './App'
 import { SessionProvider } from './session'
 
@@ -31,6 +32,33 @@ class FakeServer implements MbsBridge {
   enrolments: number[] = []
   cancelled = 0
   private enrolmentListeners = new Set<(event: EnrolmentEvent) => void>()
+  verification: VerificationEvent[] = []
+  verifications: Array<{ finger: number; runId: string }> = []
+  verificationCancels: string[] = []
+  private verificationListeners = new Map<string, (event: VerificationEvent) => void>()
+
+  verifyFingerprint = async (finger: number, runId: string): Promise<ApiResult<null>> => {
+    this.verifications.push({ finger, runId })
+    for (const event of this.verification) {
+      await Promise.resolve()
+      this.emitVerification(event, runId)
+    }
+    return { ok: true, data: null }
+  }
+
+  emitVerification(event: VerificationEvent, runId = this.verifications.at(-1)?.runId): void {
+    if (runId) this.verificationListeners.get(runId)?.(event)
+  }
+
+  cancelVerification = (runId: string): void => {
+    this.verificationCancels.push(runId)
+    this.emitVerification({ type: 'failed', error: 'cancelled' }, runId)
+  }
+
+  onVerification = (runId: string, listener: (event: VerificationEvent) => void): (() => void) => {
+    this.verificationListeners.set(runId, listener)
+    return () => { this.verificationListeners.delete(runId) }
+  }
 
   add(username: string, role: Account['role'], extra: Partial<Stored> = {}): Stored {
     const account: Stored = {
@@ -209,14 +237,15 @@ beforeEach(() => {
 
 afterEach(cleanup)
 
-function open(path: string) {
-  render(
+function open(path: string, strict = false) {
+  const page = (
     <MemoryRouter initialEntries={[path]}>
       <SessionProvider>
         <App />
       </SessionProvider>
-    </MemoryRouter>,
+    </MemoryRouter>
   )
+  render(strict ? <StrictMode>{page}</StrictMode> : page)
 }
 
 function type(label: string, value: string, scope: HTMLElement = document.body) {
@@ -416,6 +445,7 @@ describe('password recovery (H32)', () => {
     server.openLink(dana, 'he')
     open('/sign-in')
     expect(await screen.findByRole('heading', { name: 'בחירת סיסמה חדשה' })).toBeTruthy()
+    await screen.findByLabelText('סיסמה חדשה') // the link check finishes after the heading appears
     type('סיסמה חדשה', 'Better one 2027!')
     expect(screen.getByRole('status').textContent).toBe('חוזק הסיסמה: חזקה')
     type('הסיסמה החדשה שוב', 'Better one 2027!')
@@ -657,6 +687,139 @@ describe('fingerprint enrolment (H33)', () => {
     fireEvent.click(await screen.findByRole('link', { name: 'פתיחה' }))
     expect(await screen.findByRole('heading', { name: 'טביעת אצבע' })).toBeTruthy()
     expect(screen.getByRole('group', { name: 'יד שמאל' })).toBeTruthy()
+  })
+})
+
+const VERIFIED: VerificationEvent = {
+  type: 'verified', attempt_id: '00000000-0000-4000-8000-000000000001', at: '2026-11-06T10:00:00Z',
+  finger: 7, algorithm: 'opencv-sift', score: 88, threshold: 57, threshold_origin: 'SD302 plain vs plain, FAR 0.1 % (RxJ)',
+  accepted: true, duration_ms: 430,
+  comparisons: [
+    { placement: 1, score: 40, accepted: false, computed: true },
+    { placement: 2, score: 57, accepted: false, computed: true },
+    { placement: 4, score: 88, accepted: true, computed: true },
+  ],
+}
+const VERIFY_STARTED: VerificationEvent = { type: 'started', finger: 7, threshold: 57, quality_minimum: 35, references: 3 }
+
+async function startVerification() {
+  await openFingerprint()
+  fireEvent.click(within(screen.getByRole('group', { name: 'Left hand' })).getByRole('button', { name: /Index/ }))
+  fireEvent.click(screen.getByRole('button', { name: 'Verify this finger (1:1)' }))
+}
+
+describe('fingerprint verification (H35)', () => {
+  it('starts just one verification in development StrictMode', async () => {
+    server.current = server.add('dana', 'user')
+    server.fingers = [7]
+    server.verification = [VERIFY_STARTED, { type: 'place', capture: 1, maximum: 12 }]
+    open('/fingerprint', true)
+    fireEvent.click(within(await screen.findByRole('group', { name: 'Left hand' })).getByRole('button', { name: /Index/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Verify this finger (1:1)' }))
+    await screen.findByText('Place the selected finger on the scanner and hold it still.')
+    expect(server.verifications).toHaveLength(1)
+    expect(server.verificationCancels).toEqual([])
+  })
+
+  it('starts just one enrolment in development StrictMode', async () => {
+    server.current = server.add('dana', 'user')
+    server.enrolment = [STARTED, { type: 'place', placement: 1, kept: 0 }]
+    open('/fingerprint', true)
+    fireEvent.click(within(await screen.findByRole('group', { name: 'Left hand' })).getByRole('button', { name: /Index/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Enrol this finger' }))
+    await screen.findByText('Place the finger on the scanner and hold it still until it is kept.')
+    expect(server.enrolments).toEqual([7])
+    expect(server.cancelled).toBe(0)
+  })
+
+  it('offers enrolment or home before starting a scan of an unenrolled finger', async () => {
+    await startVerification()
+    expect(await screen.findByText(/Enrol this finger before verifying/)).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Back to home' })).toBeTruthy()
+    expect(server.verifications).toEqual([])
+    fireEvent.click(screen.getByRole('button', { name: 'Enrol this finger' }))
+    await waitFor(() => expect(server.enrolments).toEqual([7]))
+  })
+
+  it('shows the saved decision, each original placement score and processing time', async () => {
+    server.fingers = [7]
+    server.verification = [VERIFY_STARTED, { type: 'captured', image: 'AAAA', checks: CHECKS }, VERIFIED]
+    await startVerification()
+    expect(await screen.findByRole('heading', { name: 'Fingerprint matches' })).toBeTruthy()
+    expect(screen.getByRole('meter')).toHaveProperty('value', 88)
+    expect(screen.getByText('Placement 4')).toBeTruthy()
+    expect(screen.getAllByText('At or below the threshold')).toHaveLength(2)
+    expect(screen.getByText('The result and its encrypted capture were saved.')).toBeTruthy()
+    expect(screen.getByText('Processing time 0.43 s')).toBeTruthy()
+    server.verification = [VERIFY_STARTED, { type: 'place', capture: 1, maximum: 12 }]
+    fireEvent.click(screen.getByRole('button', { name: 'Verify again' }))
+    expect(await screen.findByText('Place the selected finger on the scanner and hold it still.')).toBeTruthy()
+    expect(screen.queryByText('Fingerprint matches')).toBeNull()
+    expect(server.verifications).toHaveLength(2)
+    expect(server.verifications[0]?.runId).not.toBe(server.verifications[1]?.runId)
+  })
+
+  it('treats a non-match as a completed result with practical retry guidance', async () => {
+    server.fingers = [7]
+    server.verification = [{ ...VERIFIED, accepted: false, score: 57,
+      comparisons: VERIFIED.comparisons.map((p) => ({ ...p, score: 57, accepted: false })) }]
+    await startVerification()
+    expect(await screen.findByRole('heading', { name: 'Fingerprint does not match' })).toBeTruthy()
+    expect(screen.getByText(/Check that you selected the correct finger/)).toBeTruthy()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('guides a quality retry and reports a cancelled run without a result', async () => {
+    server.fingers = [7]
+    server.verification = [VERIFY_STARTED, { type: 'rejected', image: 'AAAA', checks: CHECKS, score: 20, minimum: 35 }, { type: 'lift' }]
+    await startVerification()
+    expect(await screen.findByText(/The quality is 20, below the minimum of 35/)).toBeTruthy()
+    expect(screen.getByText('Lift the finger off the glass.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(await screen.findByText('Verification cancelled.')).toBeTruthy()
+    expect(screen.queryByText('The result and its encrypted capture were saved.')).toBeNull()
+    expect(server.verificationCancels).toEqual([server.verifications[0]?.runId])
+  })
+
+  it('cancels on navigation and ignores events from the old run after returning', async () => {
+    server.fingers = [7]
+    server.verification = [VERIFY_STARTED, { type: 'place', capture: 1, maximum: 12 }]
+    await startVerification()
+    await screen.findByText('Place the selected finger on the scanner and hold it still.')
+    const previous = server.verifications[0]!.runId
+    fireEvent.click(screen.getByRole('link', { name: 'Home' }))
+    await screen.findByRole('heading', { name: /Hello/ })
+    expect(server.verificationCancels).toEqual([previous])
+    fireEvent.click(await screen.findByRole('link', { name: 'Open' }))
+    fireEvent.click(within(await screen.findByRole('group', { name: 'Left hand' })).getByRole('button', { name: /Index/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Verify this finger (1:1)' }))
+    await screen.findByText('Place the selected finger on the scanner and hold it still.')
+    act(() => server.emitVerification(VERIFIED, previous))
+    expect(screen.queryByText('Fingerprint matches')).toBeNull()
+  })
+
+  it('offers re-enrolment for missing templates and words a lost connection', async () => {
+    server.fingers = [7]
+    server.verification = [{ type: 'failed', error: 'templates_unavailable' }]
+    await startVerification()
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'The three stored templates are incomplete. Enrol this finger again.')
+    expect(screen.getByRole('button', { name: 'Enrol this finger again' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Back to the fingers' }))
+    server.verification = [{ type: 'failed', error: 'server_unreachable' }]
+    fireEvent.click(await screen.findByRole('button', { name: 'Verify this finger (1:1)' }))
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'The connection to the server ended. A completed result may already have been saved. Check the server before starting a new verification.')
+  })
+
+  it('shows the verification result in Hebrew with the same scores', async () => {
+    server.current = server.add('noa', 'user', { language: 'he' })
+    server.fingers = [7]
+    server.verification = [VERIFIED]
+    open('/fingerprint')
+    fireEvent.click(within(await screen.findByRole('group', { name: 'יד שמאל' })).getByRole('button', { name: /מורה/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'אימות האצבע הזו (1:1)' }))
+    expect(await screen.findByRole('heading', { name: 'נמצאה התאמה לטביעת האצבע' })).toBeTruthy()
+    expect(screen.getByText('הנחה 4')).toBeTruthy()
+    expect(document.documentElement.dir).toBe('rtl')
   })
 })
 

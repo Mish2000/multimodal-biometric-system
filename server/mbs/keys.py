@@ -30,6 +30,7 @@ HEADER_BYTES = len(MAGIC) + 2 + SALT_BYTES + NONCE_BYTES
 IDENTITY_LINK = "mbs/identity-link/v1"
 SAMPLE = "mbs/sample/v1"  # a raw capture of an enrolment (H25)
 TEMPLATE = "mbs/template/v1"  # a fingerprint template (H25)
+PROBE = "mbs/probe/v1"  # the new capture of a comparison attempt (H25, H35)
 
 DATABASE_ROLES = ("postgres", "accounts", "biometric")
 

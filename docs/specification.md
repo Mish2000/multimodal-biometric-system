@@ -2,7 +2,7 @@
 
 Approved on 2026-10-20 (H11–H20 in `docs/decisions.md`),
 from the draft of 2026-10-19 as revised on 2026-10-20, and amended with his
-approval since (H24 to H34). Every decision is cited by its ID; a change needs
+approval since (H24 to H35). Every decision is cited by its ID; a change needs
 the researcher's approval and a new entry in the decision record.
 
 ## 1. Purpose and scope
@@ -184,7 +184,11 @@ flow of 2026-10-18).
   detection per capture, as in H10.
 - **Verification (1:1, H15):** the user picks one of the enrolled fingers;
   the new capture is compared with its three templates, and the highest score
-  decides.
+  decides. Implemented with OpenCV SIFT (H35), including the quality gate of
+  H33, live progress, cancellation and retry. The result is sent after its
+  attempt and encrypted probe are stored. A replaced or deleted enrolment
+  invalidates an in-progress comparison before storage. Deleting a finger
+  also erases the attempts and probes of all its enrolments (H35).
 - **Identification (1:N, H15):** the new capture is compared with every
   enrolled fingerprint template; candidates are ranked by their highest
   score, and the top one is reported only when it passes the threshold, else
@@ -307,6 +311,12 @@ the subject of the logged-in user and, in 1:N, the top candidate's enrolment,
 and so its subject (H25). Only subject identifiers are stored; the
 administration area turns them into usernames through the identity link.
 
+Fingerprint verification stores completed comparisons, accepted or rejected
+(H35). Captures rejected by the quality gate, cancelled runs and technical
+failures create no comparison record. Its processing time covers quality,
+extraction and the three comparisons, excluding the wait for the finger and
+database storage. The administrative history screen follows in increment 6.
+
 Administrative changes are stored in the audit log of the accounts database:
 time, administrator, action and target (an account, or the algorithm whose
 threshold changed).
@@ -338,6 +348,10 @@ research environments stay unchanged.
 
 Each increment works end to end, comes with automated tests, and is approved
 and reported on its own.
+
+H35 postpones the final visual direction until the functional build is
+complete. Functional screens use the neutral client in both languages and
+themes during that work.
 
 1. Foundation: environments, PostgreSQL with pgvector, the server, the
    accounts database, registration with the national ID, login, the roles
@@ -404,3 +418,7 @@ and reported on its own.
   streamed HTTP answer, and the screen of the stored template (3, 5.1, 6).
 - **H34** Deleting a finger's enrolment, with the enrolments it replaced and
   their findings and templates, without a new enrolment (5.1, 6).
+- **H35** Fingerprint verification with OpenCV SIFT, its capture quality
+  gate, guided progress and saved attempts; deleting a finger also erases its
+  verification attempts and probes. Final visual design follows the functional
+  build (5.1, 7, 9).

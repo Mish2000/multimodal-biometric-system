@@ -7,7 +7,7 @@ findings. Types are PostgreSQL 16's; every `uuid` is random (version 4). The
 accounts database, with the account's `theme` column (H24, H26), its `phone`
 and `language` columns and the `password_reset` table (H29, H31, H32), and the
 biometric `subject`, `algorithm`, `enrolment`, `sample` and `template` tables
-exist (H23, H33); `attempt` is built with verification (H20).
+exist (H23, H33); `attempt` exists for fingerprint verification (H35).
 
 ## Principles
 
@@ -319,19 +319,28 @@ table.
 | `mode` | `varchar(8)` | `verify` (1:1) or `identify` (1:N) |
 | `algorithm` | `varchar(32)` | references `algorithm.code` |
 | `weight_opencv_sift`, `weight_learned_pore`, `weight_pore_sift` | `smallint` | fusion only: the weights used, summing to 100 (H6) |
-| `enrolment_id` | `uuid` | 1:1 only: references the enrolment compared with |
+| `enrolment_id` | `uuid` | 1:1 only: references the enrolment compared with; deleted with that enrolment (`ON DELETE CASCADE`, H35) |
 | `top_enrolment_id` | `uuid` | 1:N only: references the top candidate's enrolment, and so its subject |
 | `gallery_size` | `integer` | 1:N only: the number of templates searched |
 | `score` | `double precision` | the deciding score: in 1:1 the highest over the enrolment's templates, in 1:N the top candidate's |
 | `threshold` | `double precision` | the threshold used (H16) |
 | `accepted` | `boolean` | same person (1:1), or found (1:N) |
-| `duration_ms` | `integer` | |
+| `duration_ms` | `integer` | processing time from capture receipt through quality, extraction and comparison, before storage (H35) |
 | `source` | `varchar(8)` | `device` (the default) or `file` (H27); a check keeps fingerprint attempts to `device` |
 | `probe` | `bytea` | the sealed new capture; from a file, its normalised form: a face's pixels as PNG, a voice as 16 kHz mono WAV, without the original file or its name |
 
 The attempt's outcome stays unsealed, so the administration area can filter
 the history (H12); its capture is sealed (H14). The administration area turns
 subject identifiers into usernames through the identity links.
+
+Fingerprint verification stores one row for every completed comparison,
+including a non-match (H35). Quality rejection, cancellation or a technical
+failure produces no comparison row. The initial implementation uses
+`mode = verify`, `algorithm = opencv-sift` and `source = device`; the fusion
+weights and identification fields are null. A check enforces that `accepted`
+equals `score > threshold`, and another keeps a fingerprint source to `device`.
+Deleting a finger erases the attempts and probes of its current and replaced
+enrolments. Re-enrolment retains the old enrolment and its attempts.
 
 ## Many findings for one person
 

@@ -207,3 +207,46 @@ class Template(BiometricBase):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     data: Mapped[bytes | None] = mapped_column(LargeBinary)
     embedding: Mapped[object | None] = mapped_column(Vector)
+
+
+class Attempt(BiometricBase):
+    """A completed comparison (H25, H35). Its outcome is searchable; its probe is sealed to this row
+    and subject. Deleting the compared enrolment also deletes its verification attempts (H35)."""
+
+    __tablename__ = "attempt"
+    __table_args__ = (
+        CheckConstraint("modality IN ('fingerprint', 'face', 'voice')", name="attempt_modality"),
+        CheckConstraint("mode IN ('verify', 'identify')", name="attempt_mode"),
+        CheckConstraint("source IN ('device', 'file') AND (modality <> 'fingerprint' OR source = 'device')",
+                        name="attempt_source"),
+        CheckConstraint("(mode = 'verify' AND enrolment_id IS NOT NULL AND top_enrolment_id IS NULL AND gallery_size IS NULL)"
+                        " OR (mode = 'identify' AND enrolment_id IS NULL AND gallery_size IS NOT NULL AND gallery_size >= 0)", name="attempt_target"),
+        CheckConstraint("duration_ms >= 0", name="attempt_duration"),
+        CheckConstraint("accepted = (score > threshold)", name="attempt_decision"),
+        CheckConstraint("(algorithm = 'fusion' AND weight_opencv_sift BETWEEN 0 AND 100"
+                        " AND weight_learned_pore BETWEEN 0 AND 100 AND weight_pore_sift BETWEEN 0 AND 100"
+                        " AND weight_opencv_sift + weight_learned_pore + weight_pore_sift = 100"
+                        " AND num_nonnulls(weight_opencv_sift, weight_learned_pore, weight_pore_sift) = 3)"
+                        " OR (algorithm <> 'fusion' AND num_nonnulls(weight_opencv_sift, weight_learned_pore, weight_pore_sift) = 0)",
+                        name="attempt_weights"),
+        Index("ix_attempt_subject_at", "subject_id", "at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    subject_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("subject.id"))
+    modality: Mapped[str] = mapped_column(String(12))
+    mode: Mapped[str] = mapped_column(String(8))
+    algorithm: Mapped[str] = mapped_column(ForeignKey("algorithm.code"))
+    weight_opencv_sift: Mapped[int | None] = mapped_column(SmallInteger)
+    weight_learned_pore: Mapped[int | None] = mapped_column(SmallInteger)
+    weight_pore_sift: Mapped[int | None] = mapped_column(SmallInteger)
+    enrolment_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("enrolment.id", ondelete="CASCADE"), index=True)
+    top_enrolment_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("enrolment.id"))
+    gallery_size: Mapped[int | None] = mapped_column(Integer)
+    score: Mapped[float] = mapped_column(Double)
+    threshold: Mapped[float] = mapped_column(Double)
+    accepted: Mapped[bool] = mapped_column(Boolean)
+    duration_ms: Mapped[int] = mapped_column(Integer)
+    source: Mapped[str] = mapped_column(String(8), server_default="device")
+    probe: Mapped[bytes] = mapped_column(LargeBinary)
