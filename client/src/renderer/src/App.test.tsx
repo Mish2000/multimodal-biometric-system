@@ -905,6 +905,25 @@ describe('learned verification and generic enrolment clarity (H39)', () => {
     expect(await screen.findByRole('heading', { name: he ? 'נמצאה התאמה לטביעת האצבע' : 'Fingerprint matches' })).toBeTruthy()
     expect(screen.getByRole('meter', { name: he ? 'נקבוביות תואמות' : 'Matching pores' })).toHaveProperty('value', 30)
     expect(screen.getByText(he ? 'התאמה מעל 21' : 'Match above 21')).toBeTruthy()
+    // H40: changing method keeps the finger and does not start or cancel a completed scan.
+    const change = screen.getByRole('button', { name: he ? 'החלפת שיטה' : 'Change method' })
+    expect([...change.closest('.actions')!.querySelectorAll('button')].map((button) => button.textContent)).toEqual(
+      he ? ['אימות נוסף', 'החלפת שיטה', 'חזרה לבחירת האצבע'] : ['Verify again', 'Change method', 'Back to the fingers'],
+    )
+    const previous = server.verifications[0]!.runId
+    fireEvent.click(change)
+    expect(await screen.findByRole('radio', { name: he ? 'המתאר הנלמד' : 'Learned pore descriptor' })).toHaveProperty('checked', true)
+    expect(screen.getByText(he ? 'מורה שמאל' : 'left index')).toBeTruthy()
+    expect(server.verifications).toHaveLength(1)
+    expect(server.verificationCancels).toEqual([])
+    fireEvent.click(screen.getByRole('radio', { name: 'Pore SIFT' }))
+    server.verification = [{ type: 'place', capture: 1, maximum: 12 }]
+    fireEvent.click(screen.getByRole('button', { name: he ? 'התחלת האימות' : 'Start verification' }))
+    await waitFor(() => expect(server.verifications).toHaveLength(2))
+    expect(server.verifications[1]).toMatchObject({ finger: 7, algorithm: 'pore-sift' })
+    expect(server.verifications[1]!.runId).not.toBe(previous)
+    act(() => server.emitVerification(VERIFIED, previous))
+    expect(screen.queryByRole('heading', { name: he ? 'נמצאה התאמה לטביעת האצבע' : 'Fingerprint matches' })).toBeNull()
   })
 
   it('returns from method selection without starting or cancelling a scan', async () => {

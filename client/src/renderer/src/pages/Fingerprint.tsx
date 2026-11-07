@@ -112,6 +112,12 @@ export function Fingerprint() {
         finger={chosen}
         enrolled={enrolled?.includes(chosen) ?? false}
         algorithm={algorithm}
+        onChangeMethod={() => {
+          // H40: retain the chosen finger and wait for an explicit start with the next method.
+          setVerifying(false)
+          setChoosingMethod(true)
+          loadMethods()
+        }}
         onLeave={() => {
           setVerifying(false)
           load()

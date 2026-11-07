@@ -773,3 +773,22 @@ client build passed. Offscreen checks covered all three methods, old-template
 preparation, new generic enrolment, the method labels and pair-score
 separation, both languages and themes, and cancellation. No live scanner
 test was run during this validation.
+
+## 2026-11-07: manual fingerprint check and method-change shortcut
+
+The H39 implementation passed a manual check on the connected HiScan PRO.
+
+Approved on 2026-11-07.
+
+- **H40** A matched 1:1 result offers `Change method` between `Verify again`
+  and `Back to the fingers`. It opens the existing method selection while
+  keeping the chosen finger and the previous method selected. The catalog
+  is refreshed, and a new capture starts only after `Start verification`.
+  The new attempt has a fresh run identifier; late events from the earlier
+  attempt cannot change its screen. Labels are English or Hebrew and use
+  the existing light and dark styles.
+
+The existing bilingual verification checks now cover the action order, the
+preserved finger, the explicit capture start and isolation from earlier
+events. All 84 client tests, type checking and the build passed.
+The shortcut also passed a manual check on the connected HiScan PRO.

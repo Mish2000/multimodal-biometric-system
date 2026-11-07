@@ -19,12 +19,13 @@ interface Run {
 }
 const START: Run = { phase: 'starting', latest: null, rejection: '', completed: 0, total: 3, error: '', result: null }
 
-export function Verification({ finger, enrolled, algorithm, onLeave, onEnrol }: {
+export function Verification({ finger, enrolled, algorithm, onLeave, onEnrol, onChangeMethod }: {
   finger: number
   enrolled: boolean
   algorithm: FingerprintAlgorithm
   onLeave: () => void
   onEnrol: () => void
+  onChangeMethod: () => void
 }) {
   const { t, language, call } = useSession()
   const f = t.fingerprint
@@ -182,6 +183,7 @@ export function Verification({ finger, enrolled, algorithm, onLeave, onEnrol }: 
                 ) : (
                   <button type="button" onClick={() => setAttempt((value) => value + 1)}>{result ? v.again : f.tryAgain}</button>
                 )}
+                {result?.accepted && <button type="button" className="secondary" onClick={onChangeMethod}>{v.changeMethod}</button>}
                 <button type="button" className="secondary" onClick={onLeave}>{f.back}</button>
               </>
             ) : (

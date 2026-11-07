@@ -2,7 +2,7 @@
 
 Approved on 2026-10-20 (H11–H20 in `docs/decisions.md`),
 from the draft of 2026-10-19 as revised on 2026-10-20, and amended with his
-approval since (H24 to H39). Every decision is cited by its ID; a change needs
+approval since (H24 to H40). Every decision is cited by its ID; a change needs
 the researcher's approval and a new entry in the decision record.
 
 ## 1. Purpose and scope
@@ -202,6 +202,8 @@ flow of 2026-10-18).
   completion labels its OpenCV SIFT demonstration and shows the other
   methods' three placement-pair scores for illustration, separately from
   the fixed referee's approval.
+  A matched result offers a method-change shortcut that keeps the finger;
+  the next capture still requires an explicit start (H40).
 - **Identification (1:N, H15):** the new capture is compared with every
   enrolled fingerprint template; candidates are ranked by their highest
   score, and the top one is reported only when it passes the threshold, else
@@ -445,3 +447,5 @@ themes during that work.
 - **H39** Second trained pore descriptor, shared detection, method choice
   within verification and the generic enrolment's labelled demonstrations
   and placement-pair comparisons (5.1, 6).
+- **H40** A matched verification result can return to method selection for
+  the same finger, with a new capture only after confirmation (5.1).
