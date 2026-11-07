@@ -78,24 +78,29 @@ export class ServerClient {
   // time as they come. It has no overall time limit, since the scanner waits for the finger (the server
   // bounds every wait); cancelling closes the connection, and the server then stops the scanner.
   async enrol(finger: unknown, emit: (event: unknown) => void): Promise<ApiResult> {
-    return this.scan(ENROLMENTS, finger, null, emit)
+    if (!validFinger(finger)) return refused('invalid_request')
+    return this.scan(ENROLMENTS, { finger }, null, emit)
   }
 
   async verify(finger: unknown, runId: unknown, emit: (event: unknown) => void, algorithm?: unknown): Promise<ApiResult> {
+    if (!validFinger(finger)) return refused('invalid_request')
     if (typeof runId !== 'string' || !UUID.test(runId)) return refused('invalid_request')
     if (algorithm !== undefined && !FINGERPRINT_ALGORITHMS.includes(algorithm as FingerprintAlgorithm)) return refused('invalid_request')
-    return this.scan(VERIFICATIONS, finger, runId, emit, algorithm as FingerprintAlgorithm | undefined)
+    return this.scan(VERIFICATIONS, { finger, ...(algorithm === undefined ? {} : { algorithm }) }, runId, emit)
   }
 
-  private async scan(path: string, finger: unknown, runId: string | null, emit: (event: unknown) => void,
-                     algorithm?: FingerprintAlgorithm): Promise<ApiResult> {
-    if (typeof finger !== 'number' || !Number.isInteger(finger) || finger < 1 || finger > 10) return refused('invalid_request')
+  async identify(runId: unknown, emit: (event: unknown) => void): Promise<ApiResult> {
+    if (typeof runId !== 'string' || !UUID.test(runId)) return refused('invalid_request')
+    return this.scan(IDENTIFICATIONS, { algorithm: 'opencv-sift' }, runId, emit)
+  }
+
+  private async scan(path: string, body: object, runId: string | null, emit: (event: unknown) => void): Promise<ApiResult> {
     if (this.capture !== null) return { ok: false, status: 409, error: 'scanner_busy' }
     const controller = new AbortController()
     this.capture = { controller, path, runId }
     let ended = false
     const pass = (event: { type?: unknown; error?: unknown }) => {
-      if (event.type === 'saved' || event.type === 'verified' || event.type === 'failed') {
+      if (event.type === 'saved' || event.type === 'verified' || event.type === 'identified' || event.type === 'failed') {
         ended = true
         if (this.capture?.controller === controller) this.capture = null
       }
@@ -110,7 +115,7 @@ export class ServerClient {
         response = await this.request(this.base + path, {
           method: 'POST',
           headers,
-          body: JSON.stringify({ finger, ...(algorithm === undefined ? {} : { algorithm }) }),
+          body: JSON.stringify(body),
           signal: controller.signal,
         })
       } catch {
@@ -147,6 +152,10 @@ export class ServerClient {
     if (this.capture?.path === VERIFICATIONS && this.capture.runId === runId) this.cancelCapture()
   }
 
+  cancelIdentification(runId: unknown): void {
+    if (this.capture?.path === IDENTIFICATIONS && this.capture.runId === runId) this.cancelCapture()
+  }
+
   cancelCapture(): void {
     this.capture?.controller.abort()
   }
@@ -179,8 +188,13 @@ function refused(error: string): ApiResult {
   return { ok: false, status: 0, error }
 }
 
+function validFinger(finger: unknown): finger is number {
+  return typeof finger === 'number' && Number.isInteger(finger) && finger >= 1 && finger <= 10
+}
+
 const ENROLMENTS = '/api/fingerprint/enrolments'
 const VERIFICATIONS = '/api/fingerprint/verifications'
+const IDENTIFICATIONS = '/api/fingerprint/identifications'
 
 // Lines of a streamed answer, each without its newline; an event with a whole template's view is several
 // megabytes, so a line may arrive in many pieces.

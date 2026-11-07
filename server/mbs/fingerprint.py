@@ -75,6 +75,13 @@ class FingerprintService:
     pore: Engine | None = None  # H38: the research's separate Pore SIFT runtime
     learned: Engine | None = None  # H39: the second trained descriptor, in its research runtime
     _busy: threading.Lock = field(default_factory=threading.Lock)
+    _search_peers: list[Engine] = field(default_factory=list)
+
+    def search_engines(self) -> list[Engine]:
+        """H41: at most four independent comparisons, requested under the shared capture lock."""
+        if not self._search_peers:
+            self._search_peers = [self.sift.peer() for _ in range(3)]
+        return [self.sift, *self._search_peers]
 
     def warm_up(self) -> None:
         """Start both engines in the background, so the first enrolment does not wait for them."""
@@ -93,6 +100,8 @@ class FingerprintService:
             self.pore.close()
         if self.learned is not None:
             self.learned.close()
+        for engine in self._search_peers:
+            engine.close()
 
 
 def from_config(config: Config) -> tuple[FingerprintService | None, str]:

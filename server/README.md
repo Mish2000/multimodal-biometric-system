@@ -4,7 +4,7 @@ The FastAPI server of the system: the local PostgreSQL cluster, the key file, re
 national ID and the mobile phone, sign-in, password recovery, roles and the accounts part of the
 administration (H3, H11, H12, H14, H19, H29 to H32), fingerprint enrolment (H33)
 and 1:1 verification with OpenCV SIFT, Pore SIFT and the learned pore descriptor
-(H35, H38, H39).
+(H35, H38, H39), and OpenCV SIFT 1:N identification (H41).
 It runs with the `multimodal-server` environment and starts PostgreSQL from the
 `multimodal-postgres` environment (`environments/`).
 
@@ -17,7 +17,7 @@ $python = '<conda envs>\multimodal-server\python.exe'
 & $python -m mbs create-admin --username <name> --email <address>   # prints a one-time password
 & $python -m mbs serve        # the API on 127.0.0.1; starts and stops PostgreSQL with it
 & $python -m mbs db status    # or start / stop
-& $python -m pytest           # 141 tests against a throwaway cluster (two need MBS_LIVE_CAPTURES)
+& $python -m pytest           # 168 tests against a throwaway cluster (three need MBS_LIVE_CAPTURES)
 ```
 
 ## Machine settings
@@ -102,13 +102,15 @@ what is missing, and answers enrolment requests with `fingerprint_unavailable`.
 | `DELETE /api/fingerprint/fingers/{finger}` | user | delete a finger's current and replaced enrolments, their captures, templates and verification attempts with their probes (H34, H35); 404 when it is not enrolled |
 | `POST /api/fingerprint/verifications` | user | verify the chosen finger (`{"finger": 1-10, "algorithm": "opencv-sift"}`) against the selected method's three current templates, with H33 quality checks. Streamed events end in `verified` or `failed` (H35, H38) |
 | `GET /api/fingerprint/methods` | user | implemented methods with their threshold, origin, provisional flag and local availability (H38) |
+| `POST /api/fingerprint/identifications` | user | identify a new fingerprint against current active enrolments with OpenCV SIFT (`{"algorithm": "opencv-sift"}`), with streamed progress ending in `identified` or `failed` (H41) |
 | `GET /api/admin/accounts`, `POST /api/admin/accounts/{id}/status` | administrator | accounts; disable or enable |
 | `POST /api/admin/administrators`, `GET /api/admin/audit` | administrator | a new administrator; the audit log |
 
 Errors answer `{"error": "<code>"}`; the client turns codes into English or Hebrew text.
 
 Verification uses the existing capture and engine settings. On startup, `serve`
-applies `biometric_0003`, preserving enrolled fingers and adding `attempt`.
+applies the biometric migrations through `biometric_0004`, preserving enrolled
+fingers and attempts while updating identification retention (H41).
 The highest of the three scores decides, strictly above the threshold; a result
 is sent only after storage. Its probe is sealed under `mbs/probe/v1`, bound to
 the attempt and its subject. Deleting a finger cascades to the verification
@@ -128,10 +130,28 @@ The saved enrolment event also carries `method_comparisons`, each method's
 three placement-pair scores and threshold for the completion screen, without
 changing the referee. Shared pore coordinates stay in memory.
 
+Identification requires the caller to have an enrolled finger (H15). It fixes
+the gallery of current enrolments belonging to active user accounts and the
+threshold at the start, extracts the new capture once, and compares stored
+templates in groups of up to four independent engine processes. Gallery
+metadata spans the search, while the reference data is loaded for each group.
+The server rechecks participating accounts, enrolments and template membership
+before committing. Cancellation interrupts computation and waits for cleanup.
+Events include `started`, `place`, `checking`, `rejected`, `lift`, `captured`,
+`extracting`, `searching` and `saving`. The terminal `identified` event carries
+the five leading enrolments and their scores, the total number of enrolments
+and templates, and the number of equal leaders. Other candidates have only
+per-attempt ranks and anonymous labels. The caller's own finger positions
+are included. The attempt stores its leading enrolment even for a non-match.
+Deleting that enrolment sets the link to null and retains the attempt and
+its sealed probe, as stated in the client confirmation (H41).
+
 To check the real engines against the existing second capture set, set
 `MBS_LIVE_CAPTURES` to `../captures/live002` before running pytest. The local
-check enrols a finger, verifies it and rejects another finger using those
-stored captures. Manual validation uses the real scanner in the client.
+checks cover enrolment and verification in all three methods, and OpenCV SIFT
+identification across two accounts. Parallel search scores must equal serial
+comparison of the same native templates. Manual validation uses the real
+scanner in the client.
 
 Cancellation closes the acquisition worker's standard input (H36). The worker
 finishes its current native call, switches off the illumination (H37),

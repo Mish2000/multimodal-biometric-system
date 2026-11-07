@@ -2,7 +2,7 @@
 
 Approved on 2026-10-20 (H11–H20 in `docs/decisions.md`),
 from the draft of 2026-10-19 as revised on 2026-10-20, and amended with his
-approval since (H24 to H40). Every decision is cited by its ID; a change needs
+approval since (H24 to H41). Every decision is cited by its ID; a change needs
 the researcher's approval and a new entry in the decision record.
 
 ## 1. Purpose and scope
@@ -76,8 +76,8 @@ FastAPI server: Python 3.12, its own environment
 - Live progress during capture (place the finger, placement kept, "lift the
   finger") comes as a streamed HTTP answer of JSON lines, one event each
   (H33, amending this section's WebSocket messages); closing the connection
-  cancels the enrolment and stops the scanner. The 1:N search's progress
-  follows in increment 3.
+  cancels the enrolment and stops the scanner. OpenCV SIFT 1:N uses the same
+  authenticated event stream for completed-comparison progress (H41).
 - The engines are long-running child processes of the server (H13). Each
   message on their standard input and output is a JSON header followed by
   its binary data (images, templates), since one template can take several
@@ -209,6 +209,15 @@ flow of 2026-10-18).
   score, and the top one is reported only when it passes the threshold, else
   the result is "not found". The search time grows with the number of
   enrolled templates and is shown to the user.
+  H41 implements OpenCV SIFT identification over current enrolments of active
+  users. It extracts the probe once and compares references in groups of at
+  most four independent engine processes. Gallery membership and threshold
+  are fixed at the beginning. Before saving, every participating account,
+  enrolment and template membership is rechecked. A changed gallery ends
+  the attempt with an error. The client sees the five leading enrolments,
+  their scores and the total gallery size. Equal leaders are marked as a
+  tie, with deterministic ordering for storage. Results identify the caller's
+  own fingers and keep other candidates anonymous (H18).
 - **Thresholds (H16):** settings per algorithm, kept in the biometric
   database; a comparison is accepted when its score is above its threshold.
   Administrators can change them in the client, each change enters the audit
@@ -332,6 +341,12 @@ failures create no comparison record. Its processing time covers quality,
 extraction and the three comparisons, excluding the wait for the finger and
 database storage. The administrative history screen follows in increment 6.
 
+OpenCV SIFT identification follows the same quality and attempt-storage rules
+(H41), with processing time through all gallery comparisons. Deleting a
+leading enrolment sets `top_enrolment_id` to null and retains the attempt,
+its score and its sealed probe. This includes identification attempts made
+by other users. Re-enrolment retains the previous enrolment and its history.
+
 Administrative changes are stored in the audit log of the accounts database:
 time, administrator, action and target (an account, or the algorithm whose
 threshold changed).
@@ -449,3 +464,6 @@ themes during that work.
   and placement-pair comparisons (5.1, 6).
 - **H40** A matched verification result can return to method selection for
   the same finger, with a new capture only after confirmation (5.1).
+- **H41** OpenCV SIFT identification over current active enrolments, bounded
+  parallel comparison, anonymous ranked results and retention of identification
+  attempts after deletion of the leading enrolment (3, 5.1, 7).

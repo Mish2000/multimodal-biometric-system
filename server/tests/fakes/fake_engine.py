@@ -8,6 +8,7 @@ otherwise score 5.
 
 import struct
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "engines"))
@@ -44,6 +45,9 @@ def extract(_header, parts):
 
 
 def compare(_header, parts):
+    if "--hang-compare" in sys.argv:
+        Path(sys.argv[sys.argv.index("--hang-compare") + 1]).write_text("comparing", encoding="utf-8")
+        time.sleep(120)
     if PORE:
         assert all(part.startswith(b"PORE:") for part in parts)
     if LEARNED:

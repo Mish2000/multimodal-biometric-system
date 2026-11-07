@@ -50,5 +50,24 @@ export function registerBridge(serverUrl: string): ServerClient {
   ipcMain.on('mbs:verify-cancel', (event, runId: unknown) => {
     if (fromTopFrame(event)) server.cancelVerification(runId)
   })
+  // H41: identification has its own fixed route and per-run events, with the same window lifecycle.
+  ipcMain.handle('mbs:identify', (event, runId: unknown) => {
+    if (!fromTopFrame(event)) return { ok: false, status: 0, error: 'unknown_route' }
+    const page = event.sender
+    const cancel = () => server.cancelIdentification(runId)
+    page.once('destroyed', cancel)
+    page.once('did-start-loading', cancel)
+    page.once('render-process-gone', cancel)
+    return server.identify(runId, (identificationEvent) => {
+      if (!page.isDestroyed()) page.send('mbs:identification', runId, identificationEvent)
+    }).finally(() => {
+      page.removeListener('destroyed', cancel)
+      page.removeListener('did-start-loading', cancel)
+      page.removeListener('render-process-gone', cancel)
+    })
+  })
+  ipcMain.on('mbs:identify-cancel', (event, runId: unknown) => {
+    if (fromTopFrame(event)) server.cancelIdentification(runId)
+  })
   return server
 }

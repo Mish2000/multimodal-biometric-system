@@ -792,3 +792,67 @@ The existing bilingual verification checks now cover the action order, the
 preserved finger, the explicit capture start and isolation from earlier
 events. All 84 client tests, type checking and the build passed.
 The shortcut also passed a manual check on the connected HiScan PRO.
+
+## 2026-11-07: fingerprint identification with OpenCV SIFT
+
+Approved on 2026-11-07: implement OpenCV SIFT 1:N before face and voice,
+following H20. On the same date, identification history and its sealed
+probes were explicitly retained when a leading enrolment is deleted.
+
+- **H41** A signed-in user with at least one enrolled finger starts an
+  identification without choosing a finger. The gallery contains the
+  current fingerprint enrolments of active user accounts, resolved through
+  their encrypted identity links. Each enrolment must have three complete,
+  version-compatible OpenCV SIFT templates. Gallery metadata and the
+  method's threshold are fixed at the beginning of the attempt.
+- Capture uses H7 and H33, including the NFIQ 2 minimum of 35 and at most
+  12 captures. The new accepted capture is extracted once. Up to four
+  independent instances of the pinned OpenCV SIFT engine compare it with
+  stored native templates. Each group opens at most four references in
+  memory. Each enrolment receives its highest score, and the highest gallery
+  score decides, strictly above the snapshotted threshold (initially 57).
+  Defined comparison failures score zero. Technical failures end the run
+  with an error and create no comparison record.
+- The search uses the gallery fixed for that attempt. Additions are included
+  in the next search. Before saving, the server locks and rechecks all
+  participating accounts and enrolments, including template membership and
+  version. A completed deletion, replacement or account deactivation
+  invalidates the result. The scanner lock is shared with enrolment and
+  verification. Cancellation interrupts computation and waits for worker
+  cleanup before releasing the lock. Progress reports completed comparisons.
+- Every completed search, including a non-match, stores an identification
+  attempt with the caller's subject, leading enrolment, number of compared
+  templates, score, threshold, decision, processing time and sealed probe.
+  The result reaches the client after the transaction commits. The client
+  receives the five highest-ranked enrolments and the total count. It sees
+  only the caller's own finger names. Other candidates have a rank for this
+  attempt and the label `Another registered user`.
+- Equal highest scores are reported explicitly as tied leaders. Enrolment
+  UUID orders ties deterministically for storage and ranking. The client
+  indicates that a unique candidate has not been selected. UUIDs of gallery
+  subjects, accounts, enrolments and templates stay on the server.
+- Migration `biometric_0004` changes `attempt.top_enrolment_id` to
+  `ON DELETE SET NULL`. Deleting an enrolment keeps identification attempts,
+  their outcomes and their sealed probes, including attempts made by other
+  users, and removes the link to the deleted enrolment. H35 continues to
+  delete that enrolment's verification attempts. The deletion confirmation
+  describes both rules.
+- The client offers an explicit start, real capture and search progress,
+  cancellation, retry, a ranked result and capture details in English and
+  Hebrew, with both themes. Search progress uses a visual pass over the
+  gallery driven by completed comparisons. The detailed match drawings
+  remain a later task of increment 3.
+
+Validation passed 168 server tests, including migration of existing attempts,
+parallel-search cancellation and equality with serial OpenCV SIFT comparison
+of stored HiScan templates. All 93 client tests, type checking and the build
+passed. The offscreen client passed 64 checks with a two-account throwaway
+database, real engines and existing captures. It covers own and other-user
+matches, no match, cancellation and retry, both languages and themes, the
+minimum window width and correct 1:N notation in Hebrew. Manual validation
+with the scanner follows separately.
+
+## 2026-11-07: live OpenCV SIFT identification check
+
+The OpenCV SIFT 1:N identification flow (H41) passed a manual check on the
+connected HiScan PRO.

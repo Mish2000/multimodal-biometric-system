@@ -157,6 +157,19 @@ class Engine:
                 except subprocess.TimeoutExpired:
                     process.kill()
 
+    def peer(self) -> Engine:
+        """H41: an independent process with the same pinned method and runtime."""
+        return Engine(self.name, list(self.command), self.env, self.start_timeout, self.request_timeout)
+
+    def interrupt(self) -> None:
+        """H41: stop an in-flight computation. Its request thread finishes protocol cleanup."""
+        process = self._process
+        if process is not None:
+            try:
+                process.kill()
+            except OSError:
+                pass  # it already exited or its request thread finished cleanup
+
 
 @dataclass
 class ScannerRun:

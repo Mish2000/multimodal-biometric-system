@@ -7,7 +7,8 @@ findings. Types are PostgreSQL 16's; every `uuid` is random (version 4). The
 accounts database, with the account's `theme` column (H24, H26), its `phone`
 and `language` columns and the `password_reset` table (H29, H31, H32), and the
 biometric `subject`, `algorithm`, `enrolment`, `sample` and `template` tables
-exist (H23, H33); `attempt` exists for fingerprint verification (H35).
+exist (H23, H33); `attempt` exists for fingerprint verification (H35) and
+OpenCV SIFT identification (H41).
 
 H38 and H39 use these tables for OpenCV SIFT, Pore SIFT and the learned pore
 descriptor. Each new finding gets one sealed template per available method.
@@ -327,12 +328,12 @@ table.
 | `algorithm` | `varchar(32)` | references `algorithm.code` |
 | `weight_opencv_sift`, `weight_learned_pore`, `weight_pore_sift` | `smallint` | fusion only: the weights used, summing to 100 (H6) |
 | `enrolment_id` | `uuid` | 1:1 only: references the enrolment compared with; deleted with that enrolment (`ON DELETE CASCADE`, H35) |
-| `top_enrolment_id` | `uuid` | 1:N only: references the top candidate's enrolment, and so its subject |
+| `top_enrolment_id` | `uuid` | 1:N only: references the top candidate's enrolment, and so its subject. Indexed, set to null when that enrolment is deleted (H41) |
 | `gallery_size` | `integer` | 1:N only: the number of templates searched |
 | `score` | `double precision` | the deciding score: in 1:1 the highest over the enrolment's templates, in 1:N the top candidate's |
 | `threshold` | `double precision` | the threshold used (H16) |
 | `accepted` | `boolean` | same person (1:1), or found (1:N) |
-| `duration_ms` | `integer` | processing time from capture receipt through quality, extraction and comparison, before storage (H35) |
+| `duration_ms` | `integer` | processing time from capture receipt through quality, extraction and comparison, before storage (H35, H41) |
 | `source` | `varchar(8)` | `device` (the default) or `file` (H27); a check keeps fingerprint attempts to `device` |
 | `probe` | `bytea` | the sealed new capture; from a file, its normalised form: a face's pixels as PNG, a voice as 16 kHz mono WAV, without the original file or its name |
 
@@ -348,6 +349,14 @@ weights and identification fields are null. A check enforces that `accepted`
 equals `score > threshold`, and another keeps a fingerprint source to `device`.
 Deleting a finger erases the attempts and probes of its current and replaced
 enrolments. Re-enrolment retains the old enrolment and its attempts.
+
+H41 uses `mode = identify`, `algorithm = opencv-sift`, `enrolment_id = null`
+and the number of compared templates in `gallery_size`. It stores the
+leading enrolment even below the threshold. Equal leaders use deterministic
+UUID ordering, and the client marks the tie. Migration `biometric_0004`
+changes the leading-enrolment foreign key to `ON DELETE SET NULL`, keeping
+identification attempts, scores and sealed probes when that enrolment is
+deleted, including attempts made by other users.
 
 ## Many findings for one person
 

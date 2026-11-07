@@ -34,6 +34,15 @@ const bridge: MbsBridge = {
       ipcRenderer.removeListener('mbs:verification', pass)
     }
   },
+  identifyFingerprint: (runId) => ipcRenderer.invoke('mbs:identify', runId),
+  cancelIdentification: (runId) => ipcRenderer.send('mbs:identify-cancel', runId),
+  onIdentification: (runId, listener) => {
+    const pass = (_event: unknown, receivedId: string, identificationEvent: Parameters<typeof listener>[0]) => {
+      if (receivedId === runId) listener(identificationEvent)
+    }
+    ipcRenderer.on('mbs:identification', pass)
+    return () => { ipcRenderer.removeListener('mbs:identification', pass) }
+  },
 }
 
 contextBridge.exposeInMainWorld('mbs', bridge)

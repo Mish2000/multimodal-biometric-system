@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { StrictMode } from 'react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import type { Account, ApiResult, EnrolmentEvent, Language, MbsBridge, OpenedLink, RouteName, Theme, VerificationEvent, FingerprintAlgorithm } from '../../shared/bridge'
+import type { Account, ApiResult, EnrolmentEvent, Language, MbsBridge, OpenedLink, RouteName, Theme, VerificationEvent, FingerprintAlgorithm, IdentificationEvent } from '../../shared/bridge'
 import { App } from './App'
 import { SessionProvider } from './session'
 
@@ -38,6 +38,33 @@ class FakeServer implements MbsBridge {
   poreAvailable = true
   learnedAvailable = true
   private verificationListeners = new Map<string, (event: VerificationEvent) => void>()
+  identification: IdentificationEvent[] = []
+  identifications: string[] = []
+  identificationCancels: string[] = []
+  private identificationListeners = new Map<string, (event: IdentificationEvent) => void>()
+
+  identifyFingerprint = async (runId: string): Promise<ApiResult<null>> => {
+    this.identifications.push(runId)
+    for (const event of this.identification) {
+      await Promise.resolve()
+      this.emitIdentification(event, runId)
+    }
+    return { ok: true, data: null }
+  }
+
+  emitIdentification(event: IdentificationEvent, runId = this.identifications.at(-1)): void {
+    if (runId) this.identificationListeners.get(runId)?.(event)
+  }
+
+  cancelIdentification = (runId: string): void => {
+    this.identificationCancels.push(runId)
+    this.emitIdentification({ type: 'failed', error: 'cancelled' }, runId)
+  }
+
+  onIdentification = (runId: string, listener: (event: IdentificationEvent) => void): (() => void) => {
+    this.identificationListeners.set(runId, listener)
+    return () => { this.identificationListeners.delete(runId) }
+  }
 
   verifyFingerprint = async (finger: number, runId: string, algorithm: FingerprintAlgorithm = 'opencv-sift'): Promise<ApiResult<null>> => {
     this.verifications.push({ finger, runId, algorithm })
@@ -965,6 +992,105 @@ describe('learned verification and generic enrolment clarity (H39)', () => {
     const learned = screen.getByRole('region', { name: 'Learned pore descriptor' })
     expect(within(learned).getAllByText('above 21: match')).toHaveLength(3)
     expect(screen.queryByRole('radio')).toBeNull()
+  })
+})
+
+const IDENTIFIED: IdentificationEvent = {
+  type: 'identified', attempt_id: '00000000-0000-4000-8000-000000000041', at: '2026-11-07T16:00:00Z',
+  algorithm: 'opencv-sift', score: 90, threshold: 57, threshold_origin: 'SD302 plain vs plain', threshold_provisional: false,
+  accepted: true, duration_ms: 710, gallery_size: 6, enrolments: 2, tied_leaders: 1,
+  candidates: [
+    { rank: 1, own: false, finger: null, score: 90, accepted: true },
+    { rank: 2, own: true, finger: 7, score: 5, accepted: false },
+  ],
+}
+
+describe('fingerprint identification (H41)', () => {
+  it.each(['en', 'he'] as const)('identifies without a chosen finger and shows anonymous ranks in %s', async (language) => {
+    const he = language === 'he'
+    server.current = server.add('dana', 'user', { language })
+    server.fingers = [7]
+    server.identification = [IDENTIFIED]
+    open('/fingerprint', true)
+    fireEvent.click(await screen.findByRole('button', { name: he ? 'זיהוי טביעת אצבע (1:N)' : 'Identify a fingerprint (1:N)' }))
+    expect(server.identifications).toEqual([])
+    fireEvent.click(screen.getByRole('button', { name: he ? 'התחלת הזיהוי' : 'Start identification' }))
+    expect(await screen.findByRole('heading', { name: he ? 'נמצאה טביעת אצבע תואמת' : 'A matching fingerprint was found' })).toBeTruthy()
+    expect(server.identifications).toHaveLength(1)
+    expect(server.identificationCancels).toEqual([])
+    expect(screen.getAllByText(he ? 'משתמש רשום אחר' : 'Another registered user')).toHaveLength(2)
+    expect(screen.getByText(he ? 'האצבע שלך: מורה שמאל' : 'Your left index')).toBeTruthy()
+    expect(screen.getByRole('meter')).toHaveProperty('value', 90)
+    expect(document.documentElement.dir).toBe(he ? 'rtl' : 'ltr')
+    const previous = server.identifications[0]!
+    server.identification = [{ type: 'searching', completed: 4, total: 6 }]
+    fireEvent.click(screen.getByRole('button', { name: he ? 'זיהוי נוסף' : 'Identify again' }))
+    await waitFor(() => expect(server.identifications).toHaveLength(2))
+    expect(server.identifications[1]).not.toBe(previous)
+    act(() => server.emitIdentification(IDENTIFIED, previous))
+    expect(screen.queryByRole('meter')).toBeNull()
+  })
+
+  it('requires enrolment before starting identification', async () => {
+    await openFingerprint()
+    fireEvent.click(screen.getByRole('button', { name: 'Identify a fingerprint (1:N)' }))
+    expect(screen.getByText('Enrol at least one of your fingers before using fingerprint identification.')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Back to home' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Choose a finger to enrol' }))
+    expect(await screen.findByRole('group', { name: 'Left hand' })).toBeTruthy()
+    expect(server.identifications).toEqual([])
+  })
+
+  it('reports real progress, cancels on navigation and ignores the old result', async () => {
+    server.fingers = [7]
+    server.identification = [
+      { type: 'started', algorithm: 'opencv-sift', threshold: 57, quality_minimum: 35, gallery_size: 9, enrolments: 3 },
+      { type: 'searching', completed: 4, total: 9 },
+    ]
+    await openFingerprint()
+    fireEvent.click(screen.getByRole('button', { name: 'Identify a fingerprint (1:N)' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start identification' }))
+    await screen.findByText('Compared 4 of 9 stored templates…')
+    expect(screen.getByRole('progressbar')).toHaveProperty('value', 4)
+    expect(screen.getByRole('progressbar')).toHaveProperty('max', 9)
+    const previous = server.identifications[0]!
+    fireEvent.click(screen.getByRole('link', { name: 'Home' }))
+    expect(server.identificationCancels).toEqual([previous])
+    fireEvent.click(await screen.findByRole('link', { name: 'Open' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Identify a fingerprint (1:N)' }))
+    act(() => server.emitIdentification(IDENTIFIED, previous))
+    expect(screen.queryByText('A matching fingerprint was found')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Start identification' })).toBeTruthy()
+  })
+
+  it('allows cancellation and a new run after a quality retry', async () => {
+    server.fingers = [7]
+    server.identification = [{ type: 'rejected', image: 'AAAA', checks: CHECKS, score: 20, minimum: 35 }, { type: 'lift' }]
+    await openFingerprint()
+    fireEvent.click(screen.getByRole('button', { name: 'Identify a fingerprint (1:N)' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start identification' }))
+    await screen.findByText(/The quality is 20, below the minimum of 35/)
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(await screen.findByText('Identification cancelled.')).toBeTruthy()
+    expect(screen.queryByRole('meter')).toBeNull()
+    server.identification = [{ ...IDENTIFIED, accepted: false, score: 57,
+      candidates: IDENTIFIED.candidates.map((c) => ({ ...c, score: 57, accepted: false })) }]
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(await screen.findByRole('heading', { name: 'No matching fingerprint was found' })).toBeTruthy()
+    expect(screen.getByText('The result and its encrypted capture were saved.')).toBeTruthy()
+  })
+
+  it('explains tied leaders and gallery changes', async () => {
+    server.fingers = [7]
+    server.identification = [{ ...IDENTIFIED, tied_leaders: 2 }]
+    await openFingerprint()
+    fireEvent.click(screen.getByRole('button', { name: 'Identify a fingerprint (1:N)' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start identification' }))
+    expect(await screen.findByText('2 candidates share the highest score. The result does not select a unique candidate.')).toBeTruthy()
+    server.identification = [{ type: 'failed', error: 'gallery_changed' }]
+    fireEvent.click(screen.getByRole('button', { name: 'Identify again' }))
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'A searched enrolment or account changed. Start a new search to use the current registrations.')
+    expect(screen.queryByRole('meter')).toBeNull()
   })
 })
 

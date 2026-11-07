@@ -159,6 +159,33 @@ export type VerificationEvent =
   | ({ type: 'verified' } & VerificationResult)
   | { type: 'failed'; error: string }
 
+// H41: other candidates have only a rank for this attempt, never a stable identifier or a sample.
+export interface IdentificationResult {
+  attempt_id: string
+  at: string
+  algorithm: 'opencv-sift'
+  score: number
+  threshold: number
+  threshold_origin: string
+  threshold_provisional: boolean
+  accepted: boolean
+  duration_ms: number
+  gallery_size: number
+  enrolments: number
+  tied_leaders: number
+  candidates: Array<{ rank: number; own: boolean; finger: number | null; score: number; accepted: boolean }>
+}
+
+export type IdentificationEvent =
+  | { type: 'started'; algorithm: 'opencv-sift'; threshold: number; quality_minimum: number; gallery_size: number; enrolments: number }
+  | { type: 'place'; capture: number; maximum: number }
+  | { type: 'checking' | 'lift' | 'extracting' | 'saving' }
+  | { type: 'rejected'; image: string; checks: Check[]; score: number | null; minimum: number }
+  | { type: 'captured'; image: string; checks: Check[] }
+  | { type: 'searching'; completed: number; total: number }
+  | ({ type: 'identified' } & IdentificationResult)
+  | { type: 'failed'; error: string }
+
 export interface MbsBridge {
   call<T = unknown>(route: RouteName, body?: unknown, id?: string): Promise<ApiResult<T>>
   setTheme(theme: Theme): void
@@ -174,4 +201,7 @@ export interface MbsBridge {
   verifyFingerprint(finger: number, runId: string, algorithm?: FingerprintAlgorithm): Promise<ApiResult<null>>
   cancelVerification(runId: string): void
   onVerification(runId: string, listener: (event: VerificationEvent) => void): () => void
+  identifyFingerprint(runId: string): Promise<ApiResult<null>>
+  cancelIdentification(runId: string): void
+  onIdentification(runId: string, listener: (event: IdentificationEvent) => void): () => void
 }

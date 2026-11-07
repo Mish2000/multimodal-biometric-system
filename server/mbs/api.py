@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
-from . import accounts, fingerprint, verification
+from . import accounts, fingerprint, verification, identification
 from .accounts import AccountError, SignedIn, Throttle
 from .db import Databases
 from .fingerprint import FingerprintService
@@ -136,6 +136,11 @@ class FingerprintVerification(FingerprintEnrolment):
     algorithm: Literal["opencv-sift", "pore-sift", "learned-pore"] = "opencv-sift"  # H38, H39
 
 
+class FingerprintIdentification(BaseModel):
+    model_config = {"extra": "forbid"}
+    algorithm: Literal["opencv-sift"] = "opencv-sift"  # H41: first complete 1:N path
+
+
 def account_json(account: SignedIn) -> dict:
     return {"id": str(account.id), "username": account.username, "email": account.email, "role": account.role,
             "must_change_password": account.must_change_password, "theme": account.theme,
@@ -252,6 +257,15 @@ def create_app(databases: Databases, keys: Keys, outbox: Outbox, fingerprints: F
     @allow(USER)
     def fingerprint_methods() -> dict:
         return {"methods": fingerprint.methods(databases, app.state.fingerprints)}
+
+    @app.post("/api/fingerprint/identifications")
+    @allow(USER)
+    async def identify_fingerprint(body: FingerprintIdentification, account: SignedIn = Depends(signed_in)) -> StreamingResponse:
+        service = app.state.fingerprints
+        if service is None:
+            raise AccountError("fingerprint_unavailable", 503)
+        subject = await run_in_threadpool(accounts.subject_of, databases, keys, account.id)
+        return FingerprintResponse(identification.identify(service, databases, keys, subject))
 
     @app.get("/api/admin/accounts")
     @allow(ADMIN)

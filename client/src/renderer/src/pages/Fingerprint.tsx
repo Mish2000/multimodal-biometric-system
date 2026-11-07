@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Check, EnrolmentEvent, Pair, SavedEnrolment, FingerprintAlgorithm, FingerprintMethod } from '../../../shared/bridge'
 import { Checks, Journey, Pairs, type Captured } from '../fingerprint/Journey'
 import { Verification } from '../fingerprint/Verification'
+import { Identification } from '../fingerprint/Identification'
 import { errorText, type Texts } from '../texts'
 import { useSession } from '../session'
 
@@ -21,6 +22,7 @@ export function Fingerprint() {
   const [chosen, setChosen] = useState<number | null>(null)
   const [running, setRunning] = useState(false)
   const [verifying, setVerifying] = useState(false)
+  const [identifying, setIdentifying] = useState(false)
   const [choosingMethod, setChoosingMethod] = useState(false)
   const methodHeading = useRef<HTMLHeadingElement>(null)
   const [methods, setMethods] = useState<FingerprintMethod[]>([])
@@ -65,6 +67,12 @@ export function Fingerprint() {
   useEffect(loadMethods, [loadMethods])
   const selectedMethod = methods.find((method) => method.code === algorithm)
   useEffect(() => { if (choosingMethod) methodHeading.current?.focus() }, [choosingMethod])
+
+  if (identifying)
+    return <Identification enrolled={(enrolled?.length ?? 0) > 0} onLeave={() => {
+      setIdentifying(false)
+      load()
+    }} />
 
   if (choosingMethod && chosen !== null)
     return (
@@ -237,7 +245,11 @@ export function Fingerprint() {
               {message.text}
             </p>
           )}
-          <p className="aside">{f.laterSteps}</p>
+          <div className="setting identification-entry">
+            <h2>{f.identification.entryTitle}</h2>
+            <p>{f.identification.entryText}</p>
+            <button type="button" disabled={deleting} onClick={() => setIdentifying(true)}>{f.identification.open} <bdi dir="ltr">(1:N)</bdi></button>
+          </div>
         </>
       )}
     </section>

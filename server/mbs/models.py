@@ -242,7 +242,7 @@ class Attempt(BiometricBase):
     weight_learned_pore: Mapped[int | None] = mapped_column(SmallInteger)
     weight_pore_sift: Mapped[int | None] = mapped_column(SmallInteger)
     enrolment_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("enrolment.id", ondelete="CASCADE"), index=True)
-    top_enrolment_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("enrolment.id"))
+    top_enrolment_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("enrolment.id", ondelete="SET NULL"), index=True)
     gallery_size: Mapped[int | None] = mapped_column(Integer)
     score: Mapped[float] = mapped_column(Double)
     threshold: Mapped[float] = mapped_column(Double)

@@ -12,7 +12,7 @@
   <img alt=".NET Framework 4.8" src="https://img.shields.io/badge/.NET_Framework-4.8-512BD4?logo=dotnet&logoColor=white">
 </p>
 <p align="center">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-141%20server%20%C2%B7%2084%20client%20%C2%B7%2015%20scanner%20%C2%B7%209%20engines-2EA44F">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-168%20server%20%C2%B7%2093%20client%20%C2%B7%2015%20scanner%20%C2%B7%209%20engines-2EA44F">
   <img alt="Cryptography" src="https://img.shields.io/badge/crypto-AES--256--GCM%20%C2%B7%20Argon2id%20%C2%B7%20HMAC-7C3AED">
   <img alt="Build" src="https://img.shields.io/badge/build-increment%203%20of%206-F59E0B">
 </p>
@@ -25,8 +25,9 @@ matching methods run inside the system, on native 1000 ppi captures.
 
 > [!NOTE]
 > Built in six approved increments. Accounts, roles, fingerprint enrolment and 1:1 verification
-> with all three fingerprint methods are implemented. The expanded fingerprint flow passed a
-> manual check on the HiScan PRO. Increment 3 continues with 1:N and match drawings.
+> with all three fingerprint methods are implemented. Fingerprint enrolment, 1:1 and OpenCV SIFT
+> 1:N identification passed manual checks on the HiScan PRO.
+> Increment 3 continues with identification in the other methods and match drawings.
 > The final visual direction follows the functional build.
 
 ## Screenshots
@@ -98,7 +99,7 @@ checked 1000 ppi images.
 <td valign="top">
 
 **📜 Every decision on record**<br>
-Each design choice is numbered (H1 to H40), dated, and cited in the code and the commits.
+Each design choice is numbered (H1 to H41), dated, and cited in the code and the commits.
 
 </td>
 <td valign="top">
@@ -160,7 +161,7 @@ flowchart LR
 | --- | --- | --- |
 | 🟡 | **1 · Foundation** | environments, local PostgreSQL + pgvector, accounts, roles, administration and the client's skeleton (built); final visual design follows the functional build |
 | 🟢 | **2 · Fingerprint, 1:1** | enrolment, NFIQ 2 quality checks, sealed captures and templates, the stored-template screen and OpenCV SIFT verification with saved attempts. Verification passed a manual check on the scanner |
-| 🟡 | **3 · Fingerprint, complete** | Pore SIFT, the learned descriptor and method choice built; enrolment shows each method's pair scores; 1:N and match drawings follow |
+| 🟡 | **3 · Fingerprint, complete** | three-method verification and enrolment comparisons built; OpenCV SIFT 1:N checked on HiScan PRO; identification in the other methods and match drawings follow |
 | ⚪ | **4 · Face** | enrolment, 1:1 and 1:N |
 | ⚪ | **5 · Voice** | enrolment, 1:1 and 1:N |
 | ⚪ | **6 · Finish** | thresholds and history in the administration, fusion, the finished experience |
@@ -171,7 +172,7 @@ flowchart LR
 client/        Electron + React + TypeScript client
 server/        FastAPI server, accounts, keys and the local PostgreSQL cluster
 scanner/       ScannerCapture: native 1000 ppi capture (C#, .NET Framework 4.8, x86)
-engines/       engine processes: the research's OpenCV SIFT and NIST's NFIQ 2 quality score
+engines/       engine processes: the three research fingerprint methods and NIST's NFIQ 2 quality score
 methods/       pinned link to the research methods and their evaluation on the scanner
 docs/          specification, data model, decision record and validations
 environments/  locked conda environments of the server and the database
@@ -188,13 +189,13 @@ conda activate multimodal-server
 cd server
 python -m mbs setup        # key file, local settings, cluster and databases
 python -m mbs serve        # the API on 127.0.0.1:55433
-python -m pytest           # 141 tests; two local checks need MBS_LIVE_CAPTURES
+python -m pytest           # 168 tests; three local checks need MBS_LIVE_CAPTURES
 
 # The client, from its lock file
 cd ../client
 npm ci
 npm run dev                # the app, with the server running
-npm test                   # 84 tests
+npm test                   # 93 tests
 ```
 
 Details: [server](server/README.md) · [scanner](scanner/README.md) · [research methods](methods/README.md)

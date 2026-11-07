@@ -991,3 +991,11 @@ button.danger {
 .method-comparisons { margin-top: 2rem; }
 .method-comparison { border-top: 1px solid var(--line); padding-top: 0.75rem; margin-top: 1.25rem; }
 .method-comparison h4 { margin-block: 0.25rem 0.5rem; }
+
+/* H41: the gallery display advances only when actual comparisons finish. */
+.identification-entry { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: 1.25rem; }
+.gallery-progress { margin-block: 1rem; }
+.gallery-progress progress { width: 100%; height: 1rem; accent-color: var(--accent); }
+.gallery-sweep { display: grid; grid-template-columns: repeat(12, 1fr); gap: 0.35rem; margin-top: 0.6rem; }
+.gallery-sweep span { height: 1.25rem; border-radius: var(--radius); background: var(--accent); opacity: 0.12; transition: opacity 150ms ease-out; }
+.gallery-sweep span.complete { opacity: 0.8; }
