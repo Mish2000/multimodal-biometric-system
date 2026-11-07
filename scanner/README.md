@@ -83,6 +83,10 @@ the acquisition worker to stop after its current native capture. The worker
 exits with code 4 after cleanup. The server allows 10 seconds for that cleanup
 before forcing a hung worker to stop.
 
+On cleanup the OEM tool switches off the capture illumination (H37), restores
+the previous DPI and closes the channel. The initial capture register value
+in `oem-probe` is recorded for diagnosis.
+
 The older `probe`, `capture` and `save-settings` commands retain their TWAIN
 behavior. They do not use the OEM route. See
 [`docs/scanner-native-capture.md`](../docs/scanner-native-capture.md) for the

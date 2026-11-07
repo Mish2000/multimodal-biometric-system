@@ -81,7 +81,7 @@ at RVA `0x15340` treats requested 1000 specially: it does not accept the
 half-DPI fallback permitted for other resolutions. This supports the intended
 native-detail route; it is not an independent measurement of optical MTF.
 
-Two call sites in `twBiometrika.ds` supply the crucial acquisition details:
+The calls in `twBiometrika.ds` show the acquisition and shutdown sequence.
 
 - RVA `0x2BC11`: after opening the channel, call
   `FXOEM_SensorConfiguration(0x32, 2, 0x80, &value)` to enable the capture
@@ -92,6 +92,9 @@ Two call sites in `twBiometrika.ds` supply the crucial acquisition details:
 - RVAs `0x2B73B` through `0x2B79A`: call `CaptureImage`, obtain a 16-byte
   nonce using `RandomString`, then pass that nonce, a pixel buffer and two
   dimension pointers to `TransferImageNormal`. The caller's default mode is 1.
+- RVA `0x2B533`: write `FXOEM_SensorConfiguration(0x32, 2, 0x00, &value)`
+  before `FXOEM_CloseStandbyChannel` and `FXOEM_End` (H37). This is the
+  vendor's shutdown value for capture illumination.
 
 The TWAIN constructor allocates only `0x4F524` (324900) bytes for its image
 buffer at RVA `0x2BC32`. That is an additional reason to implement our own
@@ -149,7 +152,7 @@ fingers.
 1. Verify SHA-256 of all three local x86 runtime DLLs before loading any.
 2. Load the explicit paths; initialize and open the scanner.
 3. Read scanner info and refuse models other than the validated type 8.
-4. Read the prior capture configuration, then apply `(0x32, 2, 0x80)`.
+4. Read the prior capture configuration for diagnosis, then apply `(0x32, 2, 0x80)`.
 5. Read the prior DPI, set 1000 and require a readback of 1000.
 6. Trigger acquisition, allow the configured settling interval, generate the
    16-byte nonce and transfer the full frame using mode 1.
@@ -158,8 +161,8 @@ fingers.
    to lossless PNG with JSON.
 8. Keep failed frames and their checks in the session's `rejected/` folder;
    continue automatically until the requested number passes or time expires.
-9. Restore the prior DPI and capture configuration, close the standby channel
-   and end the library session. Cleanup failures are reported.
+9. Switch off capture with `(0x32, 2, 0x00)` (H37), restore the prior DPI,
+   close the standby channel and end the library session. Cleanup failures are reported.
 
 The first frame after opening can be blank or nearly blank. It is rejected
 by the same checks as any later bad frame; it is never promoted by changing

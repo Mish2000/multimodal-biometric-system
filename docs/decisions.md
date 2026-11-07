@@ -653,3 +653,30 @@ enrolment and verification, and correct the handling to prevent recurrence.
   operation/status pair. No software reset that recovered the observed stuck
   state was established; physical reconnection remains the recovery for that
   state if graceful cleanup cannot prevent it. The diagnostic message says so.
+
+## 2026-11-07: switch off the scanner at the end of acquisition
+
+Approved on 2026-11-07: restore the scanner's idle illumination behavior.
+
+- **H37** The red illumination remained on with no acquisition worker running.
+  The connected HiScan PRO returned `0x80` from capture register `0x32` at
+  open, compared with `0x00` in the healthy H8 probe. Cleanup in the published
+  version and the local build restored the saved value. Once a run started
+  with `0x80`, every completed run restored the enabled state. The event that
+  first left the register enabled was not observed.
+- The vendor's TWAIN data source writes `0x00` through
+  `FXOEM_SensorConfiguration` before closing the channel (`twBiometrika.ds`
+  RVA `0x2B533`). The OEM tool now uses that shutdown write on a validated
+  HiScan PRO channel before restoring the prior DPI and closing the channel.
+  The value read at open remains available in the probe for diagnosis.
+- On the connected scanner, the first corrected close cleared `0x80` to
+  `0x00`, and the red illumination was confirmed off. Completing a lift
+  wait, cancelling it through standard input and letting it time out each
+  left the register at `0x00` and allowed the next open to reach 1000 DPI.
+  All 15 scanner self-tests passed.
+
+## 2026-11-07: live fingerprint verification check
+
+The OpenCV SIFT 1:1 verification flow (H35) passed a manual check on the
+connected HiScan PRO after H36 and H37. A read-only check of the local
+biometric database confirmed saved verification outcomes with sealed probes.

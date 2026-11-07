@@ -2,7 +2,7 @@
 
 Approved on 2026-10-20 (H11–H20 in `docs/decisions.md`),
 from the draft of 2026-10-19 as revised on 2026-10-20, and amended with his
-approval since (H24 to H36). Every decision is cited by its ID; a change needs
+approval since (H24 to H37). Every decision is cited by its ID; a change needs
 the researcher's approval and a new entry in the decision record.
 
 ## 1. Purpose and scope
@@ -88,9 +88,9 @@ FastAPI server: Python 3.12, its own environment
   new packages.
 - The acquisition mode of ScannerCapture (`oem-acquire`, H33) returns the
   image and its checks to the server on standard output and writes no file,
-  so a raw sample exists on disk only encrypted (H13); it also reports when
-  the finger is lifted. The OEM worker, its checks and the guided placements
-  stay as they are.
+  so a raw sample exists on disk only encrypted (H13). It also reports when
+  the finger is lifted. Closing a validated OEM channel switches the
+  capture illumination off before restoring the prior DPI (H37).
 
 ## 4. Data and security (H3, H4, H14)
 
@@ -425,3 +425,5 @@ themes during that work.
 - **H36** Scanner cancellation requests native cleanup, bounded by a
   10-second watchdog, and persistent open-channel status 110 is reported
   distinctly (3).
+- **H37** OEM scanner cleanup explicitly switches off the capture
+  illumination before closing the channel (3).

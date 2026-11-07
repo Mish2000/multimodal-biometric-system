@@ -12,6 +12,10 @@ namespace ScannerCapture.Oem
     /// <summary>H8: the supplied x86 OEM 3.3 ABI, recovered from its implementation and TWAIN call sites.</summary>
     sealed class OemScanner : IDisposable
     {
+        const byte CaptureRegister = 0x32;
+        const byte ReadRegister = 1, WriteRegister = 2;
+        const ushort CaptureOn = 0x80, CaptureOff = 0;
+
         [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int NoArgs();
         [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int SetInt(int value);
         [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int GetInt(out int value);
@@ -34,7 +38,7 @@ namespace ScannerCapture.Oem
         Transfer transfer;
         SensorConfig sensorConfig;
         ushort originalCaptureConfig;
-        bool captureConfigured;
+        bool disableCaptureOnClose;
         bool initialized, opened, disposed;
         int originalDpi;
 
@@ -88,11 +92,11 @@ namespace ScannerCapture.Oem
                 }
                 // H8: SetOutputDPI's type-8 branch explicitly accepts 500 and 1000; other models are not validated.
                 if (scanner.ScannerType != 8) throw new InvalidDataException("Expected HiScan PRO (OEM type 8), received type " + scanner.ScannerType + ".");
-                // H8: twBiometrika.ds RVA 0x2BC11 enables the capture configuration before acquiring.
-                // Read the existing value first so cleanup can restore it.
-                Check(scanner.sensorConfig(0x32, 1, 0, out scanner.originalCaptureConfig), "Read capture configuration");
-                Check(scanner.sensorConfig(0x32, 2, 0x80, out _), "Enable capture configuration");
-                scanner.captureConfigured = true;
+                // H8, H37: twBiometrika.ds enables capture at RVA 0x2BC11 and disables it at RVA 0x2B533.
+                // Read the starting value for diagnostics. A previous run can leave capture enabled.
+                scanner.disableCaptureOnClose = true;
+                Check(scanner.sensorConfig(CaptureRegister, ReadRegister, 0, out scanner.originalCaptureConfig), "Read capture configuration");
+                Check(scanner.sensorConfig(CaptureRegister, WriteRegister, CaptureOn, out _), "Enable capture configuration");
                 Check(scanner.getDpi(out scanner.originalDpi), "FXOEM_GetOutputDPI");
                 Check(scanner.setDpi(1000), "FXOEM_SetOutputDPI(1000)");
                 Check(scanner.getDpi(out int actual), "FXOEM_GetOutputDPI");
@@ -164,13 +168,13 @@ namespace ScannerCapture.Oem
         {
             if (disposed) return;
             disposed = true;
-            int restoreDpi = 0, restoreCapture = 0, closed = 0, ended = 0;
+            int disableCapture = 0, restoreDpi = 0, closed = 0, ended = 0;
             try
             {
                 if (opened)
                 {
+                    if (disableCaptureOnClose) disableCapture = sensorConfig(CaptureRegister, WriteRegister, CaptureOff, out _);
                     if (originalDpi == 500 || originalDpi == 1000) restoreDpi = setDpi(originalDpi);
-                    if (captureConfigured) restoreCapture = sensorConfig(0x32, 2, originalCaptureConfig, out _);
                     closed = close();
                 }
             }
@@ -179,8 +183,8 @@ namespace ScannerCapture.Oem
                 if (initialized) ended = end();
                 for (int i = modules.Length - 1; i >= 0; i--) if (modules[i] != IntPtr.Zero) FreeLibrary(modules[i]);
             }
-            if (restoreDpi != 0 || restoreCapture != 0 || closed != 0 || ended != 0)
-                Console.Error.WriteLine("OEM cleanup statuses: restore DPI=" + restoreDpi + ", restore capture=" + restoreCapture + ", close=" + closed + ", end=" + ended + ".");
+            if (disableCapture != 0 || restoreDpi != 0 || closed != 0 || ended != 0)
+                Console.Error.WriteLine("OEM cleanup statuses: disable capture=" + disableCapture + ", restore DPI=" + restoreDpi + ", close=" + closed + ", end=" + ended + ".");
         }
 
         /// <summary>Unmanaged output storage with a checked tail; this is not a substitute for a verified ABI.</summary>

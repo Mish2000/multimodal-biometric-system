@@ -118,8 +118,9 @@ check enrols a finger, verifies it and rejects another finger using those
 stored captures. Manual validation uses the real scanner in the client.
 
 Cancellation closes the acquisition worker's standard input (H36). The worker
-finishes its current native call, restores the scanner settings and closes
-the channel. A 10-second watchdog bounds cleanup. Persistent
+finishes its current native call, switches off the illumination (H37),
+restores the previous DPI and closes the channel. A 10-second watchdog bounds
+cleanup. Persistent
 `FXOEM_OpenChannel` status 110 is logged and reported as
 `scanner_connection_failed`, distinct from a generic capture failure.
 
