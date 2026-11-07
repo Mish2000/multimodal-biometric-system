@@ -10,6 +10,7 @@ deadline passes or the enrolment is cancelled. No child process opens a window.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import subprocess
 import threading
@@ -22,6 +23,8 @@ from .config import REPOSITORY
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 MAX_LINE = 1 << 16
 MAX_DATA = 64 << 20
+SCANNER_STOP_GRACE_S = 10  # H36: allow the OEM call and its native cleanup to finish before a forced stop
+logger = logging.getLogger("mbs.scanner")
 
 
 class EngineError(RuntimeError):
@@ -162,12 +165,36 @@ class ScannerRun:
     process: subprocess.Popen | None = None
     cancelled: bool = False
     _lock: threading.Lock = field(default_factory=threading.Lock)
+    _stop_timer: threading.Timer | None = field(default=None, repr=False)
 
     def cancel(self) -> None:
         with self._lock:
+            if self.cancelled:
+                return
             self.cancelled = True
             if self.process is not None and self.process.poll() is None:
-                self.process.kill()
+                # H36: EOF asks oem-acquire to leave its native `using` scope and restore/close the device.
+                # Killing here used to skip that cleanup, especially after H35 made disconnects immediate.
+                if self.process.stdin is not None:
+                    try:
+                        self.process.stdin.close()
+                    except OSError:
+                        pass
+                self._stop_timer = threading.Timer(SCANNER_STOP_GRACE_S, self._force_stop, args=(self.process,))
+                self._stop_timer.start()
+
+    def _force_stop(self, process: subprocess.Popen) -> None:
+        with self._lock:
+            if self.process is process and process.poll() is None:
+                logger.warning("Scanner did not finish native cleanup within %s seconds; forcing stop", SCANNER_STOP_GRACE_S)
+                process.kill()
+
+    def finished(self) -> None:
+        with self._lock:
+            if self._stop_timer is not None:
+                self._stop_timer.cancel()
+                self._stop_timer = None
+            self.process = None
 
 
 class Scanner:
@@ -190,15 +217,20 @@ class Scanner:
                 continue
             if "Another native scanner command" in error:
                 raise ScannerError("scanner_busy", error)
+            # H36: report only the operation/status, never a frame or its metadata.
+            if "FXOEM_OpenChannel failed with OEM status 110." in error:
+                logger.warning("FXOEM_OpenChannel failed with OEM status 110 after retry")
+                raise ScannerError("scanner_connection_failed", "FXOEM_OpenChannel failed with OEM status 110.")
+            logger.warning("Scanner operation failed (process exit %s)", code)
             raise ScannerError("scanner_failed", error.strip()[-300:])
         raise ScannerError("scanner_failed")
 
     def _once(self, wait: str, timeout_s: int, on_event, run: ScannerRun):
-        command = [*self.command, "--wait", wait, "--timeout-s", str(timeout_s)]
+        command = [*self.command, "--wait", wait, "--timeout-s", str(timeout_s), "--cancel-stdin", "yes"]
         with run._lock:
             if run.cancelled:
                 return 1, None, ""
-            process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                        cwd=REPOSITORY, creationflags=NO_WINDOW)
             run.process = process
         errors: list[bytes] = []
@@ -226,6 +258,6 @@ class Scanner:
             code = process.wait()
             timer.cancel()
             reader.join(5)
-            with run._lock:
-                run.process = None
+            run.finished()
+            process.stdin.close()
         return code, result, b"".join(errors).decode("utf-8", "replace")

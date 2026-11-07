@@ -29,6 +29,10 @@ def send(header: dict, data: bytes = b"") -> None:
 
 if step.get("hang"):
     send({"event": "ready", "wait": args["--wait"], "ppi": 1000})
+    if not step.get("ignore_cancel"):
+        sys.stdin.buffer.read()
+        script.with_suffix(".closed").write_text("native cleanup", encoding="utf-8")
+        sys.exit(4)
     time.sleep(120)
     sys.exit(0)
 if "exit" in step:

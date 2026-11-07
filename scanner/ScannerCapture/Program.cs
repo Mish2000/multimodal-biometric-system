@@ -37,7 +37,7 @@ Commands:
   oem-acquire    H33: the server's acquisition mode (H13). Wait for a placed finger and return one
                  checked image, or wait until the finger is lifted; JSON lines on standard output,
                  an image's PNG bytes right after its line; no file is written.
-                 --driver-dir DIR [--wait finger|lift] [--timeout-s 30] [--settle-ms 1500]
+                 --driver-dir DIR [--wait finger|lift] [--timeout-s 30] [--settle-ms 1500] [--cancel-stdin yes]
   probe         List TWAIN sources, describe the scanner's capabilities and try 1000 ppi;
                  every setting is returned to the driver's default at the end.
                  [--source NAME] [--resolution 1000] [--report local\scanner-probe.json]
@@ -57,7 +57,7 @@ Commands:
 Fingers: 1 right thumb, 2 right index, 3 right middle, 4 right ring, 5 right little,
          6 left thumb, 7 left index, 8 left middle, 9 left ring, 10 left little.
 Exit codes: 0 done, 1 usage or unexpected error, 2 scanner or fallback not available,
-            3 a check failed or captures are missing.";
+            3 a check failed or captures are missing, 4 acquisition cancelled after cleanup.";
 
         [STAThread]
         static int Main(string[] args)

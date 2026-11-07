@@ -12,7 +12,7 @@
   <img alt=".NET Framework 4.8" src="https://img.shields.io/badge/.NET_Framework-4.8-512BD4?logo=dotnet&logoColor=white">
 </p>
 <p align="center">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-119%20server%20%C2%B7%2075%20client%20%C2%B7%2014%20scanner%20%C2%B7%206%20engines-2EA44F">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-121%20server%20%C2%B7%2075%20client%20%C2%B7%2015%20scanner%20%C2%B7%206%20engines-2EA44F">
   <img alt="Cryptography" src="https://img.shields.io/badge/crypto-AES--256--GCM%20%C2%B7%20Argon2id%20%C2%B7%20HMAC-7C3AED">
   <img alt="Build" src="https://img.shields.io/badge/build-increment%202%20of%206-F59E0B">
 </p>
@@ -97,7 +97,7 @@ checked 1000 ppi images.
 <td valign="top">
 
 **📜 Every decision on record**<br>
-Each design choice is numbered (H1 to H35), dated, and cited in the code and the commits.
+Each design choice is numbered (H1 to H36), dated, and cited in the code and the commits.
 
 </td>
 <td valign="top">
@@ -187,7 +187,7 @@ conda activate multimodal-server
 cd server
 python -m mbs setup        # key file, local settings, cluster and databases
 python -m mbs serve        # the API on 127.0.0.1:55433
-python -m pytest           # 119 tests; the local capture check needs MBS_LIVE_CAPTURES
+python -m pytest           # 121 tests; the local capture check needs MBS_LIVE_CAPTURES
 
 # The client, from its lock file
 cd ../client

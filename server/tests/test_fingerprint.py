@@ -265,6 +265,45 @@ def test_a_cancelled_run_stops_the_scanner_at_once(script):
     run.cancel()
     worker.join(20)
     assert outcome == ["ready", "cancelled"] and time.monotonic() - started < 20
+    assert script.with_suffix(".closed").read_text(encoding="utf-8") == "native cleanup"
+    assert run.process is None and run._stop_timer is None
+
+
+def test_a_scanner_ignoring_cancellation_is_stopped_after_the_grace_period(script, monkeypatch):
+    from mbs import engines
+    monkeypatch.setattr(engines, "SCANNER_STOP_GRACE_S", 0.2)
+    plan(script, {"hang": True, "ignore_cancel": True})
+    scanner = Scanner([PYTHON, str(FAKES / "fake_scanner.py"), "--script", str(script)])
+    run = ScannerRun()
+    ready = threading.Event()
+    outcome = []
+
+    def acquire():
+        try:
+            scanner.acquire("finger", 60, lambda header: ready.set(), run)
+        except ScannerError as e:
+            outcome.append(e.code)
+
+    worker = threading.Thread(target=acquire)
+    worker.start()
+    assert ready.wait(10)
+    run.cancel()
+    run.cancel()  # repeated cancellation must not create another timer
+    worker.join(10)
+    assert not worker.is_alive() and outcome == ["cancelled"]
+    assert not script.with_suffix(".closed").exists()
+    assert run.process is None and run._stop_timer is None
+
+
+def test_a_stuck_oem_connection_is_reported_after_one_retry(script):
+    from mbs.engines import ScannerError
+    failure = {"exit": 2, "stderr": "FXOEM_OpenChannel failed with OEM status 110."}
+    plan(script, failure, failure)
+    scanner = Scanner([PYTHON, str(FAKES / "fake_scanner.py"), "--script", str(script)])
+    with pytest.raises(ScannerError) as error:
+        scanner.acquire("finger", 60, lambda header: None, ScannerRun())
+    assert error.value.code == "scanner_connection_failed"
+    assert script.with_suffix(".log").read_text(encoding="utf-8").splitlines() == ["finger", "finger"]
 
 
 def test_the_algorithms_hold_h16s_thresholds(databases):

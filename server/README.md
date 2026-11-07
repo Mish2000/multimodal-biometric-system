@@ -16,7 +16,7 @@ $python = '<conda envs>\multimodal-server\python.exe'
 & $python -m mbs create-admin --username <name> --email <address>   # prints a one-time password
 & $python -m mbs serve        # the API on 127.0.0.1; starts and stops PostgreSQL with it
 & $python -m mbs db status    # or start / stop
-& $python -m pytest           # 119 tests against a throwaway cluster (one needs MBS_LIVE_CAPTURES)
+& $python -m pytest           # 121 tests against a throwaway cluster (one needs MBS_LIVE_CAPTURES)
 ```
 
 ## Machine settings
@@ -116,6 +116,12 @@ To check the real engines against the existing second capture set, set
 `MBS_LIVE_CAPTURES` to `../captures/live002` before running pytest. The local
 check enrols a finger, verifies it and rejects another finger using those
 stored captures. Manual validation uses the real scanner in the client.
+
+Cancellation closes the acquisition worker's standard input (H36). The worker
+finishes its current native call, restores the scanner settings and closes
+the channel. A 10-second watchdog bounds cleanup. Persistent
+`FXOEM_OpenChannel` status 110 is logged and reported as
+`scanner_connection_failed`, distinct from a generic capture failure.
 
 ## Known limits
 

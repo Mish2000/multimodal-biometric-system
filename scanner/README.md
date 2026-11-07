@@ -78,6 +78,11 @@ texture). It writes one line of JSON per event to standard output (`ready`,
 `frame`, then `image`, `lifted` or `timeout`), an image's PNG bytes right
 after its line, and no file; the server is its watchdog. Exit codes as above.
 
+With `--cancel-stdin yes` (H36), closing the redirected standard input asks
+the acquisition worker to stop after its current native capture. The worker
+exits with code 4 after cleanup. The server allows 10 seconds for that cleanup
+before forcing a hung worker to stop.
+
 The older `probe`, `capture` and `save-settings` commands retain their TWAIN
 behavior. They do not use the OEM route. See
 [`docs/scanner-native-capture.md`](../docs/scanner-native-capture.md) for the

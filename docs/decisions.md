@@ -627,3 +627,29 @@ functional build. The deletion rule below was approved explicitly the same day.
 Validation on 2026-11-06 uses throwaway databases, synthetic protocol inputs
 and the real engines on existing HiScan captures. Manual validation of the
 integrated flow with a finger on the scanner follows separately.
+
+## 2026-11-07: scanner connection recovery and cancellation cleanup
+
+Approved on 2026-11-07: investigate a scanner that stopped responding in both
+enrolment and verification, and correct the handling to prevent recurrence.
+
+- **H36** The device was present and healthy according to Windows, while
+  `FXOEM_OpenChannel` returned OEM status 110. The unchanged acquisition code
+  from the last published version reproduced the error directly, including
+  its retry. Restarting the USB device through Windows did not recover it;
+  physically disconnecting and reconnecting it restored successful opening
+  and lift detection. The user then confirmed it was working again.
+- The initiating event could not be established. Five controlled forced
+  cancellations followed by reopening did not reproduce the stuck state.
+  However, cancellation used an immediate process kill, which skips native
+  disposal and can leave scanner settings and its channel unclosed. H35 made
+  disconnect cancellation immediate, exposing that existing cleanup risk.
+- The server now requests cancellation by closing the worker's standard
+  input. `oem-acquire --cancel-stdin yes` observes this between native calls,
+  restores the settings and closes the channel before exiting with code 4.
+  All native calls and disposal stay on one thread. A 10-second cleanup
+  watchdog forces termination only when the worker cannot finish.
+- Persistent open-channel status 110 is reported distinctly and logged as an
+  operation/status pair. No software reset that recovered the observed stuck
+  state was established; physical reconnection remains the recovery for that
+  state if graceful cleanup cannot prevent it. The diagnostic message says so.

@@ -2,7 +2,7 @@
 
 Approved on 2026-10-20 (H11–H20 in `docs/decisions.md`),
 from the draft of 2026-10-19 as revised on 2026-10-20, and amended with his
-approval since (H24 to H35). Every decision is cited by its ID; a change needs
+approval since (H24 to H36). Every decision is cited by its ID; a change needs
 the researcher's approval and a new entry in the decision record.
 
 ## 1. Purpose and scope
@@ -422,3 +422,6 @@ themes during that work.
   gate, guided progress and saved attempts; deleting a finger also erases its
   verification attempts and probes. Final visual design follows the functional
   build (5.1, 7, 9).
+- **H36** Scanner cancellation requests native cleanup, bounded by a
+  10-second watchdog, and persistent open-channel status 110 is reported
+  distinctly (3).

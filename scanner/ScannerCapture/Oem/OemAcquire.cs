@@ -23,13 +23,22 @@ namespace ScannerCapture.Oem
 
         public static int Run(Options options)
         {
-            options.Allow("driver-dir", "wait", "timeout-s", "settle-ms");
+            options.Allow("driver-dir", "wait", "timeout-s", "settle-ms", "cancel-stdin");
             string directory = options.Require("driver-dir");
             string wait = options.Get("wait", "finger").ToLowerInvariant();
             if (wait != "finger" && wait != "lift") throw new UsageException("--wait must be finger or lift.");
             int seconds = options.GetInt("timeout-s", 30, 1, 600);
             int settle = options.GetInt("settle-ms", 1500, 0, 10000);
             var output = Console.OpenStandardOutput();
+            // H36: the server closes stdin to request a graceful stop. Only this worker thread makes
+            // native calls; the reader sets a flag, so cleanup never races an acquisition in the OEM DLL.
+            var cancellation = new CancellationTokenSource();
+            if (options.Get("cancel-stdin", "no") == "yes")
+            {
+                if (!Console.IsInputRedirected) throw new UsageException("--cancel-stdin needs redirected input.");
+                var reader = new Thread(() => ReadCancellation(Console.In, cancellation)) { IsBackground = true };
+                reader.Start();
+            }
             try
             {
                 using (var mutex = new Mutex(false, @"Local\MultimodalBiometricSystem.HiScan.H8"))
@@ -38,7 +47,7 @@ namespace ScannerCapture.Oem
                     try { acquired = mutex.WaitOne(0); }
                     catch (AbandonedMutexException) { acquired = true; }
                     if (!acquired) throw new IOException("Another native scanner command is running.");
-                    try { return Acquire(directory, wait == "lift", seconds, settle, output); }
+                    try { return Acquire(directory, wait == "lift", seconds, settle, output, cancellation.Token); }
                     finally { mutex.ReleaseMutex(); }
                 }
             }
@@ -46,17 +55,27 @@ namespace ScannerCapture.Oem
             catch (Exception ex) { Console.Error.WriteLine(ex.Message); return 2; }
         }
 
-        static int Acquire(string directory, bool lift, int seconds, int settle, Stream output)
+        internal static void ReadCancellation(TextReader input, CancellationTokenSource cancellation)
+        {
+            try { input.ReadLine(); }
+            catch (IOException) { }
+            finally { cancellation.Cancel(); }
+        }
+
+        static int Acquire(string directory, bool lift, int seconds, int settle, Stream output, CancellationToken cancellation)
         {
             var clock = Stopwatch.StartNew();
+            if (cancellation.IsCancellationRequested) return 4;
             using (var scanner = OemScanner.Open(directory))
             {
                 Write(output, new JsonObject { { "event", "ready" }, { "wait", lift ? "lift" : "finger" }, { "ppi", scanner.OutputDpi } }, null);
                 int frames = 0, empty = 0;
                 while (clock.Elapsed.TotalSeconds < seconds)
                 {
+                    if (cancellation.IsCancellationRequested) return 4;
                     frames++;
                     var image = scanner.Capture(settle, out long captureMs);
+                    if (cancellation.IsCancellationRequested) return 4; // Dispose restores settings and closes the channel
                     var checks = CaptureChecks.Run(image, 1000, 1000, 1000, scanner.OutputDpi, scanner.OutputDpi, out var detail);
                     if (lift)
                     {

@@ -30,6 +30,7 @@ namespace ScannerCapture
                 Test("guided capture resumes after the kept placements (H9)", GuidedResume),
                 Test("a PNG in memory keeps pixels and 1000 ppi (H33)", PngInMemory),
                 Test("acquisition messages: one JSON line, then the image bytes (H33)", AcquisitionMessages),
+                Test("acquisition cancellation is requested by stdin EOF (H36)", AcquisitionCancellation),
             };
             int failed = 0;
             foreach (var t in tests)
@@ -47,6 +48,16 @@ namespace ScannerCapture
             }
             Console.WriteLine(failed == 0 ? "All " + tests.Count + " self-tests passed." : failed + " of " + tests.Count + " self-tests failed.");
             return failed == 0 ? 0 : 1;
+        }
+
+        static void AcquisitionCancellation()
+        {
+            using (var cancellation = new System.Threading.CancellationTokenSource())
+            using (var input = new StringReader(""))
+            {
+                OemAcquire.ReadCancellation(input, cancellation);
+                Assert(cancellation.IsCancellationRequested, "stdin EOF must request native cleanup");
+            }
         }
 
         static KeyValuePair<string, Action> Test(string name, Action body) => new KeyValuePair<string, Action>(name, body);
