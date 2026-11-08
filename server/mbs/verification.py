@@ -140,15 +140,26 @@ def _match_bytes(reply: dict, parts: list[bytes], score: int) -> bytes:
 
 
 def _reference_image(databases: Databases, keys: Keys, subject: uuid.UUID, enrolment_id: uuid.UUID,
-                      placement: int) -> bytes:
-    """H18, H43: one capture of the caller's current enrolment for the winning comparison."""
+                      placement: int, pores_version: str | None = None) -> tuple[bytes, bytes | None]:
+    """H18, H43: one capture of the caller's current enrolment for the winning comparison.
+
+    H44: with `pores_version`, also the stored Pore SIFT template of that capture, whose points the
+    learned descriptor was described from (H39, H42), when it exists in that version."""
     with Session(databases.biometric) as db:
         row = db.execute(select(Sample.id, Sample.data).join(Enrolment).where(
             Enrolment.id == enrolment_id, Enrolment.subject_id == subject, Enrolment.modality == fp.FINGERPRINT,
             Enrolment.replaced_at.is_(None), Sample.placement == placement)).first()
         if row is None:
             raise VerificationError("enrolment_changed")
-    return keyring.open_sealed(keys, keyring.SAMPLE, row.id.bytes + subject.bytes, row.data)
+        stored = None
+        if pores_version is not None:
+            stored = db.execute(select(Template.id, Template.version, Template.data).where(
+                Template.sample_id == row.id, Template.algorithm == fp.PORE_SIFT)).first()
+    image = keyring.open_sealed(keys, keyring.SAMPLE, row.id.bytes + subject.bytes, row.data)
+    if stored is None or stored.version != pores_version:
+        return image, None
+    return image, keyring.open_sealed(keys, keyring.TEMPLATE,
+                                      stored.id.bytes + subject.bytes + fp.PORE_SIFT.encode("ascii"), stored.data)
 
 
 async def verify(service: fp.FingerprintService, databases: Databases, keys: Keys, subject: uuid.UUID,
@@ -192,10 +203,16 @@ async def _verify(service, databases, keys, subject, finger, run, algorithm) -> 
     ready = await run_in_threadpool(engine.start)
     if ready["version"] != reference.version:
         raise VerificationError("template_version_mismatch")
+    described_from: dict[int, bytes] = {}  # H44: the pores of learned templates prepared in this run
     if reference.pending:
         generated = []
         for sample_id, placement, png in reference.pending:
-            native = await run_in_threadpool(fp.extract_native, service, algorithm, png, reference.pore_sources.get(sample_id))
+            pores = reference.pore_sources.get(sample_id)
+            if algorithm == fp.LEARNED_PORE:
+                if pores is None:
+                    pores = await run_in_threadpool(fp.detect_pores, service, png)
+                described_from[placement] = pores
+            native = await run_in_threadpool(fp.extract_native, service, algorithm, png, pores)
             generated.append((sample_id, placement, native))
             yield {"type": "preparing_templates", "completed": len(generated), "total": len(reference.pending)}
         reference.templates = await run_in_threadpool(_store_templates, databases, keys, subject, reference, generated)
@@ -219,34 +236,50 @@ async def _verify(service, databases, keys, subject, finger, run, algorithm) -> 
 
     yield {"type": "captured", "image": image, "checks": checks}
     yield {"type": "comparing", "completed": 0, "total": len(reference.templates)}
-    native = await run_in_threadpool(fp.extract_native, service, algorithm, png)
+    probe_pores = None
+    if algorithm == fp.LEARNED_PORE:
+        probe_pores = await run_in_threadpool(fp.detect_pores, service, png)
+    native = await run_in_threadpool(fp.extract_native, service, algorithm, png, probe_pores)
     comparisons = []
-    show_matches = algorithm == fp.OPENCV_SIFT
-    best_score, best_placement, best_pairs = -1, None, b""
+    # H43, H44: OpenCV SIFT and Pore SIFT templates hold their points, so each scoring comparison also
+    # returns the pairs it counts. Learned templates hold descriptors only (see below).
+    pairs_in_comparison = algorithm in (fp.OPENCV_SIFT, fp.PORE_SIFT)
+    best_score, best_placement, best_template, best_pairs = -1, None, b"", b""
     for placement, template in reference.templates:
-        request = {"op": "compare", "view": True} if show_matches else {"op": "compare"}
+        request = {"op": "compare", "view": True} if pairs_in_comparison else {"op": "compare"}
         result, parts = await run_in_threadpool(engine.request, request, [native, template])
         # H10 counts the research's defined comparison failures as zero. Process/protocol failures
         # raise EngineError and never become a non-match decision.
         value = fp.comparison_score(result)
-        if show_matches:
-            pairs = _match_bytes(result, parts, value)
-            if value > best_score:
-                best_score, best_placement, best_pairs = value, placement, pairs
+        pairs = _match_bytes(result, parts, value) if pairs_in_comparison else b""
+        if value > best_score:
+            best_score, best_placement, best_template, best_pairs = value, placement, template, pairs
         comparisons.append({"placement": placement, "score": int(value),
                             "accepted": value > reference.threshold, "computed": result.get("status") == "ok"})
         yield {"type": "comparing", "completed": len(comparisons), "total": len(reference.templates)}
     score = max(item["score"] for item in comparisons)
     duration_ms = round((time.perf_counter() - started) * 1000)
-    match_view = None
-    if show_matches:
-        stored_image = await run_in_threadpool(_reference_image, databases, keys, subject, reference.enrolment_id, best_placement)
-        match_view = {"placement": best_placement, "reference_image": base64.b64encode(stored_image).decode("ascii"),
-                      "count": score, "pairs": base64.b64encode(best_pairs).decode("ascii")}
+    pores_version = reference.version if algorithm == fp.LEARNED_PORE else None
+    stored_image, stored_pores = await run_in_threadpool(_reference_image, databases, keys, subject,
+                                                         reference.enrolment_id, best_placement, pores_version)
+    if algorithm == fp.LEARNED_PORE:
+        # H44: repeat the winning comparison once with the pores each template was described from: this
+        # run's detection for the probe, and for the stored capture this run's preparation, its Pore SIFT
+        # template, or the pinned detector. The repeated score must equal the deciding one.
+        reference_pores = described_from.get(best_placement) or stored_pores
+        if reference_pores is None:
+            reference_pores = await run_in_threadpool(fp.detect_pores, service, stored_image)
+        result, parts = await run_in_threadpool(engine.request, {"op": "compare", "view": True},
+                                                [native, best_template, probe_pores, reference_pores])
+        if fp.comparison_score(result) != best_score:
+            raise EngineError("the repeated comparison changed its score")
+        best_pairs = _match_bytes(result, parts, best_score)
+    match_view = {"placement": best_placement, "reference_image": base64.b64encode(stored_image).decode("ascii"),
+                  "count": score, "pairs": base64.b64encode(best_pairs).decode("ascii")}
     yield {"type": "saving"}
     attempt = await run_in_threadpool(_save, databases, keys, subject, reference, png, at, score, duration_ms)
     yield {"type": "verified", "attempt_id": str(attempt.id), "at": attempt.at.isoformat(),
            "finger": finger, "algorithm": algorithm, "score": score, "threshold": attempt.threshold,
            "threshold_provisional": reference.provisional,
            "threshold_origin": reference.origin, "accepted": attempt.accepted, "duration_ms": duration_ms,
-           "comparisons": comparisons, **({"match_view": match_view} if match_view is not None else {})}
+           "comparisons": comparisons, "match_view": match_view}

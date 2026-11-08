@@ -172,6 +172,19 @@ def engine_for(service: FingerprintService, code: str) -> Engine | None:
     return None
 
 
+def detect_pores(service: FingerprintService, png: bytes) -> bytes:
+    """H39: the shared detector's points for one capture, without computing SIFT descriptors."""
+    engine = engine_for(service, LEARNED_PORE)
+    if engine is None:
+        raise EngineError("method is unavailable")
+    if service.pore.start()["version"] != engine.start()["version"]:
+        raise EngineError("detector and descriptor versions differ")
+    _, detected = service.pore.request({"op": "detect"}, [png])
+    if not detected or not detected[0]:
+        raise EngineError("missing pore coordinates")
+    return detected[0]
+
+
 def extract_native(service: FingerprintService, code: str, png: bytes, pores: bytes | None = None) -> bytes:
     """H39: reuse Pore SIFT's points when present, otherwise detect once without computing SIFT."""
     engine = engine_for(service, code)
@@ -180,10 +193,7 @@ def extract_native(service: FingerprintService, code: str, png: bytes, pores: by
     parts = [png]
     if code == LEARNED_PORE:
         if pores is None:
-            if service.pore.start()["version"] != engine.start()["version"]:
-                raise EngineError("detector and descriptor versions differ")
-            _, detected = service.pore.request({"op": "detect"}, [png])
-            pores = detected[0]
+            pores = detect_pores(service, png)
         parts.append(pores)
     _, native = engine.request({"op": "extract"}, parts)
     if not native or not native[0]:

@@ -199,7 +199,7 @@ export function Verification({ finger, enrolled, algorithm, onLeave, onEnrol, on
           {result !== null && (
             <>
               {result.match_view && run.latest && (
-                <MatchView key={result.attempt_id} view={result.match_view} image={run.latest.image} />
+                <MatchView key={result.attempt_id} view={result.match_view} image={run.latest.image} algorithm={result.algorithm} />
               )}
               <div className="table-wrap">
                 <table>

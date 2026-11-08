@@ -1011,6 +1011,8 @@ button.danger {
 .match-selected .match-halo { stroke: white; stroke-width: 4; opacity: 0.8; }
 .match-selected circle { fill: white; fill-opacity: 0.45; stroke-width: 2; }
 .match-view figcaption { margin-block: 0.5rem; color: var(--muted); font-size: 0.9rem; }
+/* H44: how the method counts its pairs, so crossing pore lines are read correctly. */
+.match-rule { color: var(--muted); font-size: 0.9rem; }
 .match-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 1.5rem; margin-block: 1rem; }
 .match-toggle { display: flex; align-items: center; gap: 0.5rem; }
 .match-toggle input { width: auto; }

@@ -1,8 +1,9 @@
-"""Pore SIFT in its existing research environment (H10, H13, H38).
+"""Pore SIFT in its existing research environment (H10, H13, H38, H44).
 
 The project Python verifies the research pin and resolves its settings once at startup. Python 3.10
 then imports the unchanged research worker, detector, NMS, descriptors and basic matcher. The NMS file
 outputs are redirected to memory. Native templates keep the research's points/descriptors NPZ layout.
+A comparison with `view` also returns the pore pairs that its score counts, in native coordinates.
 """
 
 from __future__ import annotations
@@ -89,6 +90,29 @@ def from_template(data: bytes):
         return arrays["points"], arrays["descriptors"]
 
 
+class CorrespondenceCapture:
+    """H18, H44: observe the correspondence list that the research's basic matcher counts."""
+
+    def __init__(self, utils):
+        self.utils = utils
+        self.found = None
+
+    def __getattr__(self, name):
+        return getattr(self.utils, name)
+
+    def find_correspondences(self, *args, **kwargs):
+        self.found = self.utils.find_correspondences(*args, **kwargs)
+        return self.found
+
+
+def pair_coordinates(found, probe_points, reference_points) -> bytes:
+    """Upstream tuples are (probe index, reference index, distance); points are (row, column)."""
+    import numpy as np
+    rows = [(probe_points[p][1], probe_points[p][0], reference_points[r][1], reference_points[r][0])
+            for p, r, _ in found]
+    return np.asarray(rows, "<f4").reshape(-1, 4).tobytes()
+
+
 class PoreSift:
     def __init__(self, settings: dict):
         path = Path(settings["repository"]) / "src" / "fpl3" / "algorithms" / "pore_sift_worker.py"
@@ -122,6 +146,25 @@ class PoreSift:
         points2, descriptors2 = from_template(reference)
         return int(self.up.matching.basic(descriptors1, descriptors2, points1, points2, thr=self.worker.RATIO))
 
+    def compare_with_pairs(self, probe: bytes, reference: bytes) -> tuple[int, bytes]:
+        """H44: the unchanged comparison, observing only the correspondences it counts.
+
+        An engine serves one request at a time. The scoped module binding is restored on every exit."""
+        points1, descriptors1 = from_template(probe)
+        points2, descriptors2 = from_template(reference)
+        matching = self.up.matching
+        original = matching.utils
+        capture = CorrespondenceCapture(original)
+        try:
+            matching.utils = capture
+            score = int(matching.basic(descriptors1, descriptors2, points1, points2, thr=self.worker.RATIO))
+        finally:
+            matching.utils = original
+        found = capture.found if capture.found is not None else []
+        if len(found) != score:
+            raise ValueError("the observed correspondences do not agree with the research score")
+        return score, pair_coordinates(found, points1, points2)
+
 
 def main(project_python: str) -> None:
     import protocol
@@ -141,6 +184,9 @@ def main(project_python: str) -> None:
     def compare(_header, parts):
         if len(parts) != 2:
             raise ValueError("compare needs two templates")
+        if _header.get("view") is True:
+            score, pairs = method.compare_with_pairs(parts[0], parts[1])
+            return {"status": "ok", "score": score, "matches": len(pairs) // 16}, pairs
         return {"status": "ok", "score": method.compare(parts[0], parts[1])}, b""
 
     def detect(_header, parts):

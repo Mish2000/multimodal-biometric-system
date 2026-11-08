@@ -1,6 +1,7 @@
 """H39: shared detection, native method separation and atomic preparation of the learned descriptor."""
 
 import json
+import struct
 from datetime import datetime, timezone
 
 import anyio
@@ -149,10 +150,16 @@ def test_failed_preparation_retries_without_partial_rows_or_a_new_scan(fp_client
 def test_learned_threshold_is_strict_and_uses_the_highest_of_three(fp_client, script, service, monkeypatch):
     add_learned(service)
     token = enrolled(fp_client, script)
-    engine, scores = service.learned, iter([20, 21, 21, 20, 21, 22])
+    engine, scores, seen = service.learned, iter([20, 21, 21, 20, 21, 22]), []
     original = engine.request
     def boundary(header, parts):
-        return ({"status": "ok", "score": next(scores)}, []) if header["op"] == "compare" else original(header, parts)
+        if header["op"] != "compare":
+            return original(header, parts)
+        if header.get("view") is True:  # H44: the winning comparison, repeated once with its pores
+            best = max(seen[-3:])
+            return {"status": "ok", "score": best, "matches": best}, [struct.pack("<4f", 10, 20, 30, 40) * best]
+        seen.append(next(scores))
+        return {"status": "ok", "score": seen[-1]}, []
     monkeypatch.setattr(engine, "request", boundary)
     for accepted in (False, True):
         plan(script, finger("q60:A4"))

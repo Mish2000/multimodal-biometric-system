@@ -17,7 +17,7 @@ $python = '<conda envs>\multimodal-server\python.exe'
 & $python -m mbs create-admin --username <name> --email <address>   # prints a one-time password
 & $python -m mbs serve        # the API on 127.0.0.1; starts and stops PostgreSQL with it
 & $python -m mbs db status    # or start / stop
-& $python -m pytest           # 206 tests against a throwaway cluster (four need MBS_LIVE_CAPTURES)
+& $python -m pytest           # 211 tests against a throwaway cluster (four need MBS_LIVE_CAPTURES)
 ```
 
 ## Machine settings
@@ -137,6 +137,13 @@ the deciding score. The image is restricted to the caller's current
 enrolment and sent with the committed result. Its presentation data stays
 in the page for that result. The processing timer ends after the comparisons,
 before opening the stored image for presentation.
+
+H44 returns `match_view` for Pore SIFT and the learned descriptor too. Pore
+SIFT pairs come from each scoring comparison, as in H43. For the learned
+descriptor, the server repeats the winning comparison once with the pores
+both templates were described from: the probe's detection in this run, and
+for the stored capture this run's preparation, its Pore SIFT template, or
+the pinned detector. The repeated score must equal the deciding score.
 
 Identification requires the caller to have an enrolled finger (H15). It fixes
 the gallery of current enrolments belonging to active user accounts and the

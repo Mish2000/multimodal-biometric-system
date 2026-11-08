@@ -944,3 +944,49 @@ languages and themes. Manual scanner validation follows separately.
 
 The OpenCV SIFT 1:1 match illustration (H43) passed a manual check on the
 connected HiScan PRO.
+
+## 2026-11-08: pore match illustrations in verification
+
+Approved on 2026-11-08. Extend the H43 illustration to Pore SIFT and the
+learned pore descriptor in 1:1 verification (H18, H43).
+
+- **H44** Both pore scores count mutual nearest descriptor pairs that pass
+  the 0.7 distance ratio check, without a geometric check. The illustration
+  shows exactly those pairs at their native pores, and the page states the
+  counting rule of each method, so crossing pore lines are read correctly.
+- Pore SIFT templates hold their points. With `view = true`, a scoped
+  binding observes the list that the pinned matcher's
+  `find_correspondences` returns and its score counts, and is restored on
+  exit. The list's length must equal the score. Each tuple's probe and
+  reference indices map to (row, column) pores, sent as x and y.
+  Verification asks for this in each scoring comparison, as H43 does.
+- Learned templates hold descriptors only. After the three scoring
+  comparisons, the server repeats the winning one once with the pores that
+  each template was described from: the probe's from this run's detection,
+  and the stored capture's from this run's preparation, its Pore SIFT
+  template (H39, H42), or the pinned detector on that capture. The engine
+  scores with the unchanged `batched_scores`, recomputes the counted rows
+  with the same operations for that one reference, and maps the rows to
+  pores by running the research's `image_patches` on an image of pixel
+  positions. The pair count must equal the score, the described pores must
+  match the template rows, and the repeated score must equal the deciding
+  score. Otherwise the run fails before saving, as in H43.
+- The server validates the pairs as in H43 and sends the illustration with
+  the committed result, for matches and non-matches. The client names
+  pores or points by method and adds one sentence with the method's
+  counting rule, OpenCV SIFT's RANSAC requirement included.
+
+Validation reproduced all 435 second-set H10 scores for both pore methods
+with the illustration requested. Every pair count equalled its score, and
+every coordinate lay on a native pore of its template: 10,087 Pore SIFT
+pairs and 9,128 learned pairs. The full server run passed 211 tests,
+including the four local checks with stored captures. All 15 engine tests,
+including the real pore engines on synthetic images, 109 client tests, type
+checks and the build passed. The built client passed 71 offscreen checks
+with real engines and stored captures, including both pore illustrations
+and the Hebrew page. Manual scanner validation follows separately.
+
+## 2026-11-08: live pore match illustration check
+
+The Pore SIFT and learned pore 1:1 match illustrations (H44) passed a
+manual check on the connected HiScan PRO.

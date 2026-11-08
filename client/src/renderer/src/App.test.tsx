@@ -1207,9 +1207,42 @@ describe('OpenCV SIFT match illustration (H43)', () => {
     }]
     await startVerification()
     expect(await screen.findByText('No point pairs contributed to this comparison’s score.')).toBeTruthy()
+    expect(screen.getByText(/as RANSAC requires/)).toBeTruthy()
     expect(screen.queryByRole('slider')).toBeNull()
     expect(document.querySelectorAll('.match-selected circle')).toHaveLength(0)
   })
+})
+
+describe('pore match illustrations (H44)', () => {
+  const coordinates = [120, 700, 130, 690, 400, 300, 410, 310]
+  const data = new Uint8Array(coordinates.length * 4)
+  coordinates.forEach((value, index) => new DataView(data.buffer).setFloat32(index * 4, value, true))
+  const encoded = btoa(String.fromCharCode(...data))
+
+  it.each([['pore-sift', 'Pore SIFT', 'en'], ['learned-pore', 'המתאר הנלמד', 'he']] as const)(
+    'names the pores of %s and how they are counted', async (algorithm, method, language) => {
+      const he = language === 'he'
+      server.current = server.add('dana', 'user', { language })
+      server.fingers = [7]
+      server.verification = [{ type: 'captured', image: 'PROBE', checks: CHECKS }, {
+        ...VERIFIED, algorithm, score: 2, threshold: 1,
+        match_view: { placement: 3, reference_image: 'REFERENCE', count: 2, pairs: encoded },
+      }]
+      open('/fingerprint')
+      fireEvent.click(within(await screen.findByRole('group', { name: he ? 'יד שמאל' : 'Left hand' })).getByRole('button', { name: he ? /מורה/ : /Index/ }))
+      fireEvent.click(screen.getByRole('button', { name: he ? 'אימות האצבע הזו (1:1)' : 'Verify this finger (1:1)' }))
+      fireEvent.click(await screen.findByRole('radio', { name: method }))
+      fireEvent.click(screen.getByRole('button', { name: he ? 'התחלת האימות' : 'Start verification' }))
+      expect(await screen.findByRole('heading', { name: he ? 'התאמות הנקבוביות בהשוואה הזו' : 'Pore matches in this comparison' })).toBeTruthy()
+      expect(server.verifications[0]?.algorithm).toBe(algorithm)
+      const drawing = screen.getByRole('img', { name: he ? 'טביעת האצבע החדשה והשמורה עם 2 זוגות נקבוביות תואמות' : 'New and stored fingerprints with 2 matched pore pairs' })
+      expect(drawing.querySelector('.match-connections')?.getAttribute('d')).toBe('M120 700L1230 690 M400 300L1510 310')
+      expect(screen.getByText(he ? /חלק מהקווים עשויים להצטלב/ : /so some lines may cross/)).toBeTruthy()
+      expect(screen.getByText(he ? 'הנחה שמורה 3' : 'Stored placement 3')).toBeTruthy()
+      fireEvent.click(screen.getByRole('checkbox', { name: he ? 'הצגת כל זוגות הנקבוביות התואמות' : 'Show all matching pore pairs' }))
+      expect(drawing.querySelector('.match-connections')).toBeNull()
+      expect(drawing.querySelectorAll('.match-selected circle')).toHaveLength(2)
+    })
 })
 
 describe('deleting a finger’s enrolment (H34)', () => {

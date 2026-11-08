@@ -49,6 +49,20 @@ inliers must equal the score, and the binding is restored when the call
 ends. The engine serves one request at a time. Local checks reproduced all
 435 H10 scores and verified that each coordinate belongs to its template.
 
+For H44, both pore engines accept `view = true` and return the same rows for
+the pore pairs that their score counts: mutual nearest descriptors that pass
+the 0.7 ratio check, with no geometric check. Pore SIFT observes the list
+returned by the pinned matcher's `find_correspondences` through a scoped
+binding and maps its probe and reference indices to the template's (row,
+column) pores as (x, y). A learned template holds descriptors only, so its
+viewed comparison also takes the pores that each template was described
+from. The engine scores with the unchanged `batched_scores`, recomputes the
+counted rows with the same operations for that one reference, and finds each
+row's pore by running the research's `image_patches` on an image of pixel
+positions. The pair count must equal the score, and the described pores must
+match the template's rows. For both methods, local checks reproduced all 435
+H10 scores and placed every pair on a native pore of its template.
+
 ## NFIQ 2
 
 The released NFIQ 2.3.0 C interface cannot load its own 2.3 model (a stale

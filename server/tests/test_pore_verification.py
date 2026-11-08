@@ -1,6 +1,7 @@
 """H38: selected methods, new enrolments and safe preparation of existing encrypted findings."""
 
 import json
+import struct
 
 import anyio
 import pytest
@@ -155,7 +156,8 @@ def test_pore_threshold_is_strict_and_comparison_uses_all_three_references(fp_cl
 
     def compare(header, parts):
         if header["op"] == "compare":
-            return {"status": "ok", "score": next(scores)}, []
+            value = next(scores)  # H44: each scoring comparison also returns the pairs it counts
+            return {"status": "ok", "score": value, "matches": value}, [struct.pack("<4f", 10, 20, 30, 40) * value]
         return original(header, parts)
 
     monkeypatch.setattr(engine, "request", compare)

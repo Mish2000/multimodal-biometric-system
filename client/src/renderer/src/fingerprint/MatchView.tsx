@@ -1,4 +1,5 @@
-// H18, H43: the counted inliers of the highest-scoring comparison, in the two native image frames.
+// H18, H43, H44: the pairs counted by the highest-scoring comparison, in the two native image frames:
+// OpenCV SIFT's RANSAC inliers, or the pore pairs of Pore SIFT and the learned descriptor.
 import { useMemo, useState, type PointerEvent } from 'react'
 import type { MatchViewData } from '../../../shared/bridge'
 import { useSession } from '../session'
@@ -8,9 +9,10 @@ const IMAGE_SIZE = 1000
 const REFERENCE_X = 1100
 const VIEW_WIDTH = REFERENCE_X + IMAGE_SIZE
 
-export function MatchView({ view, image }: { view: MatchViewData; image: string }) {
+export function MatchView({ view, image, algorithm }: { view: MatchViewData; image: string; algorithm: string }) {
   const { t } = useSession()
   const m = t.fingerprint.matches
+  const kind = algorithm === 'opencv-sift' ? m.points : m.pores
   const pairs = useMemo(() => decodeMatchPairs(view.pairs, view.count), [view.pairs, view.count])
   const [selected, setSelected] = useState(0)
   const [showAll, setShowAll] = useState(true)
@@ -39,18 +41,19 @@ export function MatchView({ view, image }: { view: MatchViewData; image: string 
     : ''
 
   return (
-    <section className="match-view" aria-label={m.title}>
-      <h2>{m.title}</h2>
+    <section className="match-view" aria-label={kind.title}>
+      <h2>{kind.title}</h2>
       {pairs === null ? <p className="notice">{m.unavailable}</p> : (
         <>
-          <p>{m.explanation(view.placement, view.count)}</p>
+          <p>{kind.explanation(view.placement, view.count)}</p>
+          <p className="match-rule">{kind.rule}</p>
           <figure>
             <div className="match-labels" dir="ltr">
               <span dir="auto">{m.probe}</span>
               <span dir="auto">{m.reference(view.placement)}</span>
             </div>
             <svg className="match-drawing" viewBox={`0 0 ${VIEW_WIDTH} ${IMAGE_SIZE}`} width={VIEW_WIDTH} height={IMAGE_SIZE}
-              role="img" aria-label={m.drawing(view.count)} onPointerMove={pick} onPointerDown={pick}>
+              role="img" aria-label={kind.drawing(view.count)} onPointerMove={pick} onPointerDown={pick}>
               <image href={`data:image/png;base64,${image}`} x={0} y={0} width={IMAGE_SIZE} height={IMAGE_SIZE} />
               <image href={`data:image/png;base64,${view.reference_image}`} x={REFERENCE_X} y={0} width={IMAGE_SIZE} height={IMAGE_SIZE} />
               {showAll && <path className="match-connections" d={path} vectorEffect="non-scaling-stroke" />}
@@ -63,13 +66,13 @@ export function MatchView({ view, image }: { view: MatchViewData; image: string 
                 </g>
               )}
             </svg>
-            <figcaption>{view.count === 0 ? m.empty : m.hint}</figcaption>
+            <figcaption>{view.count === 0 ? kind.empty : m.hint}</figcaption>
           </figure>
           {chosen !== null && (
             <div className="match-controls">
               <label className="match-toggle">
                 <input type="checkbox" checked={showAll} onChange={(event) => setShowAll(event.target.checked)} />
-                {m.showAll}
+                {kind.showAll}
               </label>
               <label className="match-picker">
                 <span>{m.selected(chosen + 1, view.count)}</span>

@@ -52,16 +52,19 @@ def compare(_header, parts):
     if "--hang-compare" in sys.argv:
         Path(sys.argv[sys.argv.index("--hang-compare") + 1]).write_text("comparing", encoding="utf-8")
         time.sleep(120)
+    view = _header.get("view") is True
     if PORE:
-        assert all(part.startswith(b"PORE:") for part in parts)
+        assert len(parts) == 2 and all(part.startswith(b"PORE:") for part in parts)
     if LEARNED:
-        assert all(part.startswith(b"LEARNED:") for part in parts)
-    probe, reference = (p.decode().split(":", 1)[1] for p in parts)
+        assert len(parts) == (4 if view else 2) and all(part.startswith(b"LEARNED:") for part in parts[:2])
+    probe, reference = (p.decode().split(":", 1)[1] for p in parts[:2])
+    if LEARNED and view:
+        # H44: the pores each learned template was described from, the probe's first.
+        assert parts[2:] == [b"PORE:" + probe.encode(), b"PORE:" + reference.encode()], parts[2:]
     same, other = (30, 2) if LEARNED else (45, 3) if PORE else (90, 5)
     score = same if probe[0] == reference[0] else other
     reply = {"status": "ok", "reason": "", "score": score, "good": 12}
-    if _header.get("view") is True:
-        assert not PORE and not LEARNED
+    if view:
         return {**reply, "matches": score}, struct.pack("<4f", 10, 20, 30, 40) * score
     return reply, b""
 
