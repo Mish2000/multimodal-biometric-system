@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import base64
 import logging
+import math
+import struct
 import time
 import uuid
 from collections.abc import AsyncIterator
@@ -127,6 +129,28 @@ def _save(databases: Databases, keys: Keys, subject: uuid.UUID, reference: Refer
     return attempt
 
 
+def _match_bytes(reply: dict, parts: list[bytes], score: int) -> bytes:
+    """H43: exactly one native-coordinate pair per point counted in the score."""
+    if type(reply.get("matches")) is not int or reply["matches"] != score or len(parts) != 1 or len(parts[0]) != score * 16:
+        raise EngineError("invalid match illustration")
+    if any(not math.isfinite(value) or not 0 <= value < 1000
+           for pair in struct.iter_unpack("<4f", parts[0]) for value in pair):
+        raise EngineError("invalid match coordinates")
+    return parts[0]
+
+
+def _reference_image(databases: Databases, keys: Keys, subject: uuid.UUID, enrolment_id: uuid.UUID,
+                      placement: int) -> bytes:
+    """H18, H43: one capture of the caller's current enrolment for the winning comparison."""
+    with Session(databases.biometric) as db:
+        row = db.execute(select(Sample.id, Sample.data).join(Enrolment).where(
+            Enrolment.id == enrolment_id, Enrolment.subject_id == subject, Enrolment.modality == fp.FINGERPRINT,
+            Enrolment.replaced_at.is_(None), Sample.placement == placement)).first()
+        if row is None:
+            raise VerificationError("enrolment_changed")
+    return keyring.open_sealed(keys, keyring.SAMPLE, row.id.bytes + subject.bytes, row.data)
+
+
 async def verify(service: fp.FingerprintService, databases: Databases, keys: Keys, subject: uuid.UUID,
                  finger: int, algorithm: str = fp.OPENCV_SIFT) -> AsyncIterator[dict]:
     if not service._busy.acquire(blocking=False):
@@ -197,20 +221,32 @@ async def _verify(service, databases, keys, subject, finger, run, algorithm) -> 
     yield {"type": "comparing", "completed": 0, "total": len(reference.templates)}
     native = await run_in_threadpool(fp.extract_native, service, algorithm, png)
     comparisons = []
+    show_matches = algorithm == fp.OPENCV_SIFT
+    best_score, best_placement, best_pairs = -1, None, b""
     for placement, template in reference.templates:
-        result, _ = await run_in_threadpool(engine.request, {"op": "compare"}, [native, template])
+        request = {"op": "compare", "view": True} if show_matches else {"op": "compare"}
+        result, parts = await run_in_threadpool(engine.request, request, [native, template])
         # H10 counts the research's defined comparison failures as zero. Process/protocol failures
         # raise EngineError and never become a non-match decision.
         value = fp.comparison_score(result)
+        if show_matches:
+            pairs = _match_bytes(result, parts, value)
+            if value > best_score:
+                best_score, best_placement, best_pairs = value, placement, pairs
         comparisons.append({"placement": placement, "score": int(value),
                             "accepted": value > reference.threshold, "computed": result.get("status") == "ok"})
         yield {"type": "comparing", "completed": len(comparisons), "total": len(reference.templates)}
     score = max(item["score"] for item in comparisons)
     duration_ms = round((time.perf_counter() - started) * 1000)
+    match_view = None
+    if show_matches:
+        stored_image = await run_in_threadpool(_reference_image, databases, keys, subject, reference.enrolment_id, best_placement)
+        match_view = {"placement": best_placement, "reference_image": base64.b64encode(stored_image).decode("ascii"),
+                      "count": score, "pairs": base64.b64encode(best_pairs).decode("ascii")}
     yield {"type": "saving"}
     attempt = await run_in_threadpool(_save, databases, keys, subject, reference, png, at, score, duration_ms)
     yield {"type": "verified", "attempt_id": str(attempt.id), "at": attempt.at.isoformat(),
            "finger": finger, "algorithm": algorithm, "score": score, "threshold": attempt.threshold,
            "threshold_provisional": reference.provisional,
            "threshold_origin": reference.origin, "accepted": attempt.accepted, "duration_ms": duration_ms,
-           "comparisons": comparisons}
+           "comparisons": comparisons, **({"match_view": match_view} if match_view is not None else {})}

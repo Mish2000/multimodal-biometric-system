@@ -2,7 +2,7 @@
 
 Approved on 2026-10-20 (H11–H20 in `docs/decisions.md`),
 from the draft of 2026-10-19 as revised on 2026-10-20, and amended with his
-approval since (H24 to H42). Every decision is cited by its ID; a change needs
+approval since (H24 to H43). Every decision is cited by its ID; a change needs
 the researcher's approval and a new entry in the decision record.
 
 ## 1. Purpose and scope
@@ -204,6 +204,12 @@ flow of 2026-10-18).
   the fixed referee's approval.
   A matched result offers a method-change shortcut that keeps the finger;
   the next capture still requires an explicit start (H40).
+  H43 adds an OpenCV SIFT illustration from the same comparison that produced
+  the score. The result shows the new capture, the caller's highest-scoring
+  stored capture and its counted inlier pairs. Equal scores use the earliest
+  stored placement. The server validates the coordinates and count, and
+  sends the illustration with the committed result. It lives in the page
+  while that result is open, with pointer and keyboard pair selection.
 - **Identification (1:N, H15):** the new capture is compared with every
   enrolled fingerprint template; candidates are ranked by their highest
   score, and the top one is reported only when it passes the threshold, else
@@ -477,3 +483,5 @@ themes during that work.
 - **H42** Pore SIFT and learned pore identification, method selection before
   capture and preparation of missing gallery templates from sealed captures
   (5.1, 7).
+- **H43** OpenCV SIFT 1:1 illustration with the caller's winning stored
+  capture and the inlier pairs counted in that comparison (5.1, 6).

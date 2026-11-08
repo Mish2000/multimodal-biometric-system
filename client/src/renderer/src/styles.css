@@ -999,3 +999,20 @@ button.danger {
 .gallery-sweep { display: grid; grid-template-columns: repeat(12, 1fr); gap: 0.35rem; margin-top: 0.6rem; }
 .gallery-sweep span { height: 1.25rem; border-radius: var(--radius); background: var(--accent); opacity: 0.12; transition: opacity 150ms ease-out; }
 .gallery-sweep span.complete { opacity: 0.8; }
+
+/* H43: the two native image frames stay left-to-right so coordinates are identical in either language. */
+.match-view { margin-block: 2rem; }
+.match-view figure { margin: 0; }
+.match-labels { display: grid; grid-template-columns: 1fr 1fr; gap: 4.76%; margin-bottom: 0.5rem; }
+.match-labels span { text-align: center; font-weight: 600; }
+.match-drawing { display: block; width: 100%; height: auto; direction: ltr; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.match-connections { fill: none; stroke: var(--accent); stroke-width: 0.7; opacity: 0.22; }
+.match-selected { fill: none; stroke: var(--accent); stroke-width: 2; pointer-events: none; }
+.match-selected .match-halo { stroke: white; stroke-width: 4; opacity: 0.8; }
+.match-selected circle { fill: white; fill-opacity: 0.45; stroke-width: 2; }
+.match-view figcaption { margin-block: 0.5rem; color: var(--muted); font-size: 0.9rem; }
+.match-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 1.5rem; margin-block: 1rem; }
+.match-toggle { display: flex; align-items: center; gap: 0.5rem; }
+.match-toggle input { width: auto; }
+.match-picker { display: flex; flex: 1 1 17rem; flex-direction: column; gap: 0.4rem; }
+.match-picker input { width: 100%; accent-color: var(--accent); }

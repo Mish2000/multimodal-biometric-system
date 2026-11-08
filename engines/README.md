@@ -41,6 +41,14 @@ and a capture never reaches the disk unsealed (H13), so the engine decodes the
 PNG in memory and makes the same OpenCV call; `test_engines.py` shows the
 result equals the research function's.
 
+For H43, `compare` accepts `view = true` and returns the counted matches
+as binary float32 rows `(probe_x, probe_y, reference_x, reference_y)`, with
+their count in `matches`. A scoped OpenCV binding observes the arguments and
+returned mask of the research's own `findHomography` call. The observed
+inliers must equal the score, and the binding is restored when the call
+ends. The engine serves one request at a time. Local checks reproduced all
+435 H10 scores and verified that each coordinate belongs to its template.
+
 ## NFIQ 2
 
 The released NFIQ 2.3.0 C interface cannot load its own 2.3 model (a stale

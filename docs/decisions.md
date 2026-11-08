@@ -900,3 +900,47 @@ gallery, real engines and existing captures. Manual scanner validation follows.
 
 Pore SIFT and learned pore 1:N identification (H42) passed manual checks
 on the connected HiScan PRO.
+
+## 2026-11-08: OpenCV SIFT verification match illustration
+
+Approved on 2026-11-08. Add a functional illustration of the OpenCV SIFT 1:1
+comparison, with the new capture, the highest-scoring stored capture and
+the point pairs included in that score (H18, H35).
+
+- **H43** The engine observes the pinned comparison's call to OpenCV and
+  its returned RANSAC mask. A scoped OpenCV binding delegates the calls and
+  records the coordinates selected by that mask. The original binding is
+  restored on exit. The comparison's returned score determines the result.
+  With `view = true`, the response includes one little-endian float32 row
+  per counted inlier, containing probe x/y and reference x/y coordinates.
+- Verification requests this data for its three OpenCV SIFT comparisons.
+  It keeps the highest-scoring set of pairs. Equal scores use the earliest
+  stored placement. The server validates the pair count against the score
+  and validates the coordinates in the native 1000-pixel frames. It opens
+  the corresponding sealed sample only from the caller's current enrolment.
+  Technical or encryption failures follow H35's failed-run handling.
+- The final response includes the stored image and match pairs after the
+  attempt commits. The illustration is available for both matches and
+  completed non-matches. A zero score shows the two images with an empty
+  set of counted pairs. The page keeps the illustration for the current
+  result and clears it on retry, method change or navigation.
+- The client shows the two native image frames side by side, with all
+  counted connections and one highlighted pair. A pointer over either
+  image selects its nearest matched point. A keyboard-accessible slider
+  selects a pair, and a checkbox controls the full set of lines. The image
+  coordinate frames run left to right in both interface languages. The
+  controls use the existing light and dark themes, following H35.
+
+Validation reproduced all 435 second-set H10 scores. Each comparison's
+reported pair count equalled its score, and every reported coordinate
+belonged to the corresponding native template. The full server run passed
+206 tests. After the processing-time boundary adjustment, 26 focused
+verification tests passed. All 11 engine tests, 107 client tests, type
+checks and the build passed. The offscreen client passed 69 checks with
+real engines and stored captures, including the match illustration in both
+languages and themes. Manual scanner validation follows separately.
+
+## 2026-11-08: live OpenCV SIFT match illustration check
+
+The OpenCV SIFT 1:1 match illustration (H43) passed a manual check on the
+connected HiScan PRO.

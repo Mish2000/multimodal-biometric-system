@@ -1165,6 +1165,53 @@ describe('pore-method identification (H42)', () => {
   })
 })
 
+describe('OpenCV SIFT match illustration (H43)', () => {
+  const coordinates = [10, 20, 30, 40, 800, 900, 700, 600]
+  const data = new Uint8Array(coordinates.length * 4)
+  coordinates.forEach((value, index) => new DataView(data.buffer).setFloat32(index * 4, value, true))
+  const encoded = btoa(String.fromCharCode(...data))
+
+  it.each(['en', 'he'] as const)('shows the winning image and counted pairs with keyboard controls in %s', async (language) => {
+    const he = language === 'he'
+    server.current = server.add('dana', 'user', { language })
+    server.fingers = [7]
+    server.verification = [{ type: 'captured', image: 'PROBE', checks: CHECKS }, {
+      ...VERIFIED, score: 2, threshold: 1,
+      match_view: { placement: 2, reference_image: 'REFERENCE', count: 2, pairs: encoded },
+    }]
+    open('/fingerprint')
+    fireEvent.click(within(await screen.findByRole('group', { name: he ? 'יד שמאל' : 'Left hand' })).getByRole('button', { name: he ? /מורה/ : /Index/ }))
+    fireEvent.click(screen.getByRole('button', { name: he ? 'אימות האצבע הזו (1:1)' : 'Verify this finger (1:1)' }))
+    fireEvent.click(screen.getByRole('button', { name: he ? 'התחלת האימות' : 'Start verification' }))
+    const drawing = await screen.findByRole('img', { name: he ? 'טביעת האצבע החדשה והשמורה עם 2 זוגות נקודות תואמות' : 'New and stored fingerprints with 2 matched point pairs' })
+    expect([...drawing.querySelectorAll('image')].map((image) => image.getAttribute('href'))).toEqual([
+      'data:image/png;base64,PROBE', 'data:image/png;base64,REFERENCE',
+    ])
+    expect(drawing.querySelector('.match-connections')?.getAttribute('d')).toBe('M10 20L1130 40 M800 900L1800 600')
+    const slider = screen.getByRole('slider', { name: he ? 'בחירת הזוג המודגש' : 'Choose the highlighted pair' })
+    fireEvent.change(slider, { target: { value: '2' } })
+    expect(drawing.querySelector('.match-selected path:not(.match-halo)')?.getAttribute('d')).toBe('M800 900L1800 600')
+    fireEvent.click(screen.getByRole('checkbox', { name: he ? 'הצגת כל זוגות הנקודות התואמות' : 'Show all matching pairs' }))
+    expect(drawing.querySelector('.match-connections')).toBeNull()
+    expect(drawing.querySelectorAll('.match-selected circle')).toHaveLength(2)
+    server.verification = [{ type: 'place', capture: 1, maximum: 12 }]
+    fireEvent.click(screen.getByRole('button', { name: he ? 'אימות נוסף' : 'Verify again' }))
+    await waitFor(() => expect(screen.queryByRole('slider')).toBeNull())
+    expect(document.querySelector('image[href="data:image/png;base64,REFERENCE"]')).toBeNull()
+  })
+
+  it('shows a zero-score comparison without drawing any match', async () => {
+    server.fingers = [7]
+    server.verification = [{ type: 'captured', image: 'PROBE', checks: CHECKS }, {
+      ...VERIFIED, score: 0, accepted: false, match_view: { placement: 1, reference_image: 'REFERENCE', count: 0, pairs: '' },
+    }]
+    await startVerification()
+    expect(await screen.findByText('No point pairs contributed to this comparison’s score.')).toBeTruthy()
+    expect(screen.queryByRole('slider')).toBeNull()
+    expect(document.querySelectorAll('.match-selected circle')).toHaveLength(0)
+  })
+})
+
 describe('deleting a finger’s enrolment (H34)', () => {
   it('asks first, then deletes it without a new enrolment', async () => {
     server.fingers = [2, 7]

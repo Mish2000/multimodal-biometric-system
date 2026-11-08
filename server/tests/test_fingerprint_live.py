@@ -7,7 +7,9 @@ folder (captures/live002, git-ignored) and this machine has the NFIQ 2 build and
 
 from __future__ import annotations
 
+import base64
 import json
+import struct
 import os
 from pathlib import Path
 
@@ -58,10 +60,16 @@ def test_the_real_engines_enrol_a_finger_of_the_second_set(databases, keys, outb
             assert matched["type"] == "verified" and matched["accepted"] is True
             assert [p["score"] for p in matched["comparisons"][:2]] == [384, 562]
             assert matched["score"] == max(p["score"] for p in matched["comparisons"])
+            view = matched["match_view"]
+            assert view["placement"] == 3 and view["count"] == matched["score"]
+            assert base64.b64decode(view["reference_image"]) == files[2].read_bytes()
+            pairs = list(struct.iter_unpack("<4f", base64.b64decode(view["pairs"])))
+            assert len(pairs) == matched["score"] and all(pair[:2] == pair[2:] for pair in pairs)
             other = sorted(LIVE.glob("live002_f02_p*.png"))[0]
             plan(script, {"wait": "finger", "file": str(other)})
             different = verify(client, token)[-1]
             assert different["type"] == "verified" and different["accepted"] is False
+            assert different["match_view"]["count"] == different["score"]
             service.pore = pore
             plan(script, {"wait": "finger", "file": str(files[2])})
             pore_events = verify(client, token, algorithm="pore-sift")

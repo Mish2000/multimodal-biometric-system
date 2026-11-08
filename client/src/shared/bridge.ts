@@ -131,7 +131,14 @@ export type EnrolmentEvent =
   | ({ type: 'saved' } & SavedEnrolment)
   | { type: 'failed'; error: string }
 
-// H35: only the new capture is sent to the page. The three stored templates stay with the engines.
+// H35, H43: the captured image and the caller's highest-scoring stored image can be shown with match coordinates.
+export interface MatchViewData {
+  placement: number
+  reference_image: string
+  count: number
+  pairs: string // little-endian float32: probe x/y, reference x/y, one row per counted inlier
+}
+
 export interface VerificationResult {
   attempt_id: string
   at: string
@@ -144,6 +151,7 @@ export interface VerificationResult {
   accepted: boolean
   duration_ms: number
   comparisons: Array<{ placement: number; score: number; accepted: boolean; computed: boolean }>
+  match_view?: MatchViewData
 }
 
 export type VerificationEvent =

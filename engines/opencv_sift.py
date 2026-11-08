@@ -66,6 +66,42 @@ def view_bytes(points: np.ndarray, descriptors: np.ndarray) -> tuple[bytes, byte
     return points.astype("<f4").tobytes(), descriptors.astype(np.uint8).tobytes()
 
 
+class MatchCapture:
+    """H18, H43: observe the research call's coordinates and returned inlier mask."""
+
+    def __init__(self, opencv):
+        self.opencv = opencv
+        self.pairs = np.empty((0, 4), dtype="<f4")
+
+    def __getattr__(self, name):
+        return getattr(self.opencv, name)
+
+    def findHomography(self, source, destination, *args, **kwargs):
+        transform, mask = self.opencv.findHomography(source, destination, *args, **kwargs)
+        if mask is not None:
+            keep = mask.reshape(-1).astype(bool)
+            self.pairs = np.column_stack((source.reshape(-1, 2)[keep], destination.reshape(-1, 2)[keep])).astype("<f4")
+        return transform, mask
+
+
+def compare_with_matches(research, probe, reference, seed):
+    """H43: use the unchanged comparison, observing only the data it passes to and receives from OpenCV.
+
+    An engine serves one request at a time. The scoped binding is restored on every exit.
+    """
+    original = research.cv2
+    capture = MatchCapture(original)
+    try:
+        research.cv2 = capture
+        result = research.compare(probe, reference, seed)
+    finally:
+        research.cv2 = original
+    score = result["score"] or 0
+    if len(capture.pairs) != score or not np.isfinite(capture.pairs).all():
+        raise ValueError("the observed matches do not agree with the research score")
+    return result, capture.pairs.tobytes()
+
+
 def main() -> None:
     link = research_link.load()
     research_link.verify(link)
@@ -86,9 +122,12 @@ def main() -> None:
     def compare(_header: dict, parts: list[bytes]):
         if len(parts) != 2:
             raise ValueError("compare needs a probe and a reference template")
-        result = opencv_sift.compare(from_template(parts[0]), from_template(parts[1]), seed)
-        return {"status": result["status"], "reason": result["reason"], "score": result["score"],
-                "good": result["good"]}, b""
+        probe, reference = from_template(parts[0]), from_template(parts[1])
+        if _header.get("view") is True:
+            result, pairs = compare_with_matches(opencv_sift, probe, reference, seed)
+            return {**result, "matches": len(pairs) // 16}, pairs
+        result = opencv_sift.compare(probe, reference, seed)
+        return result, b""
 
     protocol.serve({"algorithm": ALGORITHM, "version": link.commit, "opencv": cv2.__version__},
                    {"extract": extract, "compare": compare})

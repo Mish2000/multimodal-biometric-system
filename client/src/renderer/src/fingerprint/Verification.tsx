@@ -6,6 +6,7 @@ import type { VerificationEvent, VerificationResult, FingerprintAlgorithm } from
 import { useSession } from '../session'
 import { errorText } from '../texts'
 import { Checks, type Captured } from './Journey'
+import { MatchView } from './MatchView'
 
 type Phase = 'starting' | 'preparing' | 'place' | 'checking' | 'lift' | 'comparing' | 'saving' | 'verified' | 'failed' | 'cancelled'
 interface Run {
@@ -197,6 +198,9 @@ export function Verification({ finger, enrolled, algorithm, onLeave, onEnrol, on
           </div>
           {result !== null && (
             <>
+              {result.match_view && run.latest && (
+                <MatchView key={result.attempt_id} view={result.match_view} image={run.latest.image} />
+              )}
               <div className="table-wrap">
                 <table>
                   <caption>{v.comparisons}</caption>

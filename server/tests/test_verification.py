@@ -1,6 +1,7 @@
 """H35: verification from the authenticated API to the migrated database and child-process protocols."""
 
 import json
+import struct
 import time
 import uuid
 
@@ -64,7 +65,8 @@ def test_highest_of_three_decides_and_equality_does_not_pass(fp_client, script, 
 
     def compare(header, parts):
         if header["op"] == "compare":
-            return {"status": "ok", "score": next(scores)}, []
+            score = next(scores)
+            return {"status": "ok", "score": score, "matches": score}, [struct.pack("<4f", 10, 20, 30, 40) * score]
         return original(header, parts)
 
     monkeypatch.setattr(service.sift, "request", compare)
@@ -225,7 +227,7 @@ def test_a_research_comparison_failure_scores_zero(fp_client, script, databases,
 
     def insufficient(header, parts):
         if header["op"] == "compare":
-            return {"status": "failure", "reason": "insufficient_features", "score": None}, []
+            return {"status": "failure", "reason": "insufficient_features", "score": None, "matches": 0}, [b""]
         return original(header, parts)
 
     monkeypatch.setattr(service.sift, "request", insufficient)

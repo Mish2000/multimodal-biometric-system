@@ -58,7 +58,12 @@ def compare(_header, parts):
         assert all(part.startswith(b"LEARNED:") for part in parts)
     probe, reference = (p.decode().split(":", 1)[1] for p in parts)
     same, other = (30, 2) if LEARNED else (45, 3) if PORE else (90, 5)
-    return {"status": "ok", "reason": "", "score": same if probe[0] == reference[0] else other, "good": 12}, b""
+    score = same if probe[0] == reference[0] else other
+    reply = {"status": "ok", "reason": "", "score": score, "good": 12}
+    if _header.get("view") is True:
+        assert not PORE and not LEARNED
+        return {**reply, "matches": score}, struct.pack("<4f", 10, 20, 30, 40) * score
+    return reply, b""
 
 
 if sys.argv[1] == "quality":
