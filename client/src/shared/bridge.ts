@@ -27,6 +27,7 @@ export const ROUTES = {
   checkFace: ['POST', '/api/face/checks'],
   enrolFace: ['POST', '/api/face/enrolments'],
   deleteFace: ['DELETE', '/api/face/enrolment'],
+  verifyFace: ['POST', '/api/face/verifications'], // H49
 } as const satisfies Record<string, readonly ['GET' | 'POST' | 'DELETE', string]>
 
 export type RouteName = keyof typeof ROUTES
@@ -265,6 +266,23 @@ export type FaceEnrolmentAnswer =
   | FaceSaved
   | { status: 'another'; pairs: FacePair[]; threshold: number; kept: number }
   | { status: 'failed'; error: string; pairs: FacePair[]; threshold: number; kept: number }
+
+// H49: a face verification's answer. A rejected image made no attempt; a verified one was saved first.
+export interface FaceVerificationResult {
+  status: 'verified'
+  attempt_id: string
+  at: string
+  score: number
+  threshold: number
+  threshold_origin: string
+  threshold_provisional: boolean
+  accepted: boolean
+  duration_ms: number
+  comparisons: Array<{ placement: number; score: number; accepted: boolean }>
+  view: { placement: number; probe: string; reference: string } // aligned faces, PNG in base64
+}
+
+export type FaceVerificationAnswer = FaceVerificationResult | ({ status: 'rejected'; checks: FaceCheck[] } & FaceDetection)
 
 // H48: whether the laptop's own screen is in use. With the lid closed and external monitors on, Windows turns
 // it off, and the built-in camera sees only the inside of the lid.

@@ -3,7 +3,9 @@ image is b"FAKEFACE" followed by JSON: the image's size, its faces ({"box": [x, 
 whose face it is ("person", "variant"). The embedding is a fixed random direction per person with a small
 change per variant, so images of one person match and images of two people do not.
 
-    python fake_face_engine.py [--sface-sha256 HEX] [--broken]
+    python fake_face_engine.py [--sface-sha256 HEX] [--broken] [--drift]
+
+--drift changes the embedding slightly on every extraction, so a repeated extraction differs (H49).
 """
 
 import json
@@ -17,6 +19,7 @@ import protocol  # noqa: E402
 
 SFACE_SHA256 = "0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79"
 LENGTH = 128
+EXTRACTIONS: list[int] = []
 
 
 def option(name: str, default=None):
@@ -24,6 +27,8 @@ def option(name: str, default=None):
 
 
 def read(data: bytes) -> dict | None:
+    while data.startswith(b"PNG:"):  # an image this engine made again from its pixels (a stored one, H49)
+        data = data[len(b"PNG:"):]
     if not data.startswith(b"FAKEFACE"):
         return None
     return json.loads(data[len(b"FAKEFACE"):])
@@ -58,6 +63,9 @@ def extract(_header, parts):
     values = embedding(spec.get("person", "a"), spec.get("variant", 0))
     if "--broken" in sys.argv:
         values[0] = float("nan")
+    if "--drift" in sys.argv:
+        EXTRACTIONS.append(1)
+        values[0] += 0.01 * len(EXTRACTIONS)
     return reply, [b"PNG:" + parts[0], b"ALIGNED:" + spec.get("person", "a").encode(), struct.pack(f"<{LENGTH}f", *values)]
 
 

@@ -350,6 +350,11 @@ equals `score > threshold`, and another keeps a fingerprint source to `device`.
 Deleting a finger erases the attempts and probes of its current and replaced
 enrolments. Re-enrolment retains the old enrolment and its attempts.
 
+Face verification (H49) stores the same row with `modality = face`,
+`algorithm = sface` and `source = device`; its probe is the engine's PNG of
+the image's pixels. Deleting the face erases its verification attempts, and
+a new enrolment keeps the earlier ones with the enrolment they compared.
+
 Identification uses `mode = identify`, `enrolment_id = null` and the number
 of compared templates in `gallery_size` (H41). The selected method is
 `opencv-sift`, `pore-sift` or `learned-pore` (H42). It stores the

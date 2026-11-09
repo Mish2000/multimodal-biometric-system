@@ -3,8 +3,9 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { StrictMode } from 'react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import type { Account, ApiResult, DisplayState, EnrolmentEvent, Language, MbsBridge, OpenedLink, RouteName, Theme, VerificationEvent, FingerprintAlgorithm, IdentificationEvent } from '../../shared/bridge'
+import type { Account, ApiResult, DisplayState, FaceVerificationResult, EnrolmentEvent, Language, MbsBridge, OpenedLink, RouteName, Theme, VerificationEvent, FingerprintAlgorithm, IdentificationEvent } from '../../shared/bridge'
 import { App } from './App'
+import { FaceVerificationView } from './face/FaceVerification'
 import { SessionProvider } from './session'
 
 interface Stored extends Account {
@@ -47,6 +48,7 @@ class FakeServer implements MbsBridge {
   face: { enrolled: boolean; enrolled_at?: string } = { enrolled: false }
   faceAvailable = true
   faceDeletes = 0
+  faceVerifications = 0
 
   displays = async (): Promise<DisplayState> => ({ internalDisplay: false })
 
@@ -231,6 +233,9 @@ class FakeServer implements MbsBridge {
       case 'faceMethod':
         return ok({ code: 'sface', threshold: 0.363, threshold_provisional: false, threshold_origin: "OpenCV's SFace sample, cosine similarity",
           available: this.faceAvailable, images: 3, most_kept: 6, score_minimum: 0.9, width_minimum: 112, embedding_length: 128 })
+      case 'verifyFace':
+        this.faceVerifications++
+        return ok(FACE_VERIFIED)
       case 'deleteFace':
         if (!this.face.enrolled) return no(404, 'not_enrolled')
         this.face = { enrolled: false }
@@ -279,6 +284,15 @@ class FakeServer implements MbsBridge {
     }
     return no(404, 'unknown_route')
   }
+}
+
+// H49: a face verification's answer, as the server sends it after saving the attempt.
+const FACE_VERIFIED: FaceVerificationResult = {
+  status: 'verified', attempt_id: '7c1d7c2e-0000-4000-8000-000000000001', at: '2026-11-09T16:00:00+00:00', score: 0.712,
+  threshold: 0.363, threshold_origin: "OpenCV's SFace sample, cosine similarity", threshold_provisional: false, accepted: true,
+  duration_ms: 118, comparisons: [{ placement: 1, score: 0.655, accepted: true }, { placement: 2, score: 0.712, accepted: true },
+    { placement: 3, score: 0.301, accepted: false }],
+  view: { placement: 2, probe: 'AAAA', reference: 'AAAA' },
 }
 
 let server: FakeServer
@@ -1345,7 +1359,7 @@ describe('the face (H48)', () => {
     expect(enrol.disabled).toBe(false)
     expect(screen.getByRole('heading', { name: 'SFace' })).toBeTruthy()
     expect(screen.getByText(/Accepts above 0.363/)).toBeTruthy()
-    expect(screen.getByText(/Verification \(1:1\) and identification \(1:N\) by face come in the next build steps/)).toBeTruthy()
+    expect(screen.getByText(/Identification \(1:N\) by face comes in the next build step/)).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Delete the face enrolment' })).toBeNull()
   })
 
@@ -1377,5 +1391,63 @@ describe('the face (H48)', () => {
     expect(await screen.findByText('עוד לא נרשמו.')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'רישום הפנים שלי' })).toBeTruthy()
     expect(document.documentElement.dir).toBe('rtl')
+  })
+})
+
+describe('face verification (H49)', () => {
+  async function openFaceAs(enrolled: boolean) {
+    if (enrolled) server.face = { enrolled: true, enrolled_at: '2026-11-09T13:00:00+00:00' }
+    server.add('dana', 'user')
+    open('/sign-in')
+    await signIn('dana', 'dana password 1')
+    fireEvent.click(await cardLink('Face'))
+    await screen.findByText(/Accepts above 0.363/)
+  }
+
+  it('offers the enrolment first when the face is not enrolled (H15)', async () => {
+    await openFaceAs(false)
+    fireEvent.click(screen.getByRole('button', { name: 'Verify my face (1:1)' }))
+    expect(screen.getByText(/Face verification is not available yet/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Enrol my face' }))
+    expect(await screen.findByRole('heading', { name: 'Enrolling your face' })).toBeTruthy()
+    // jsdom has no camera interface: the panel says so instead of failing.
+    expect(await screen.findByText('No camera is connected. Connect a USB camera.')).toBeTruthy()
+    expect(server.faceVerifications).toBe(0)
+  })
+
+  it('shows SFace without a choice and starts the camera only on an explicit start (H40)', async () => {
+    await openFaceAs(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Verify my face (1:1)' }))
+    expect(screen.getByRole('heading', { name: 'Verify your face' })).toBeTruthy()
+    expect(screen.getByText(/About a tenth of a second/)).toBeTruthy()
+    expect(screen.queryByText('No camera is connected. Connect a USB camera.')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Start verification' }))
+    expect(await screen.findByText('No camera is connected. Connect a USB camera.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(await screen.findByRole('button', { name: 'Verify my face (1:1)' })).toBeTruthy()
+  })
+
+  it('shows the new face beside the closest enrolled one, the similarity against the threshold and every comparison', async () => {
+    let again = 0
+    render(<MemoryRouter><SessionProvider><FaceVerificationView result={FACE_VERIFIED} onAgain={() => again++} onLeave={() => undefined} /></SessionProvider></MemoryRouter>)
+    expect(await screen.findByRole('heading', { name: 'Your face matches' })).toBeTruthy()
+    expect(screen.getByRole('img', { name: 'New image' })).toBeTruthy()
+    expect(screen.getByRole('img', { name: 'Enrolled image 2' })).toBeTruthy()
+    expect(screen.getByText('Similarity 0.712; a match needs more than 0.363.')).toBeTruthy()
+    expect(screen.getByText(/Processing took 0.12 s. The result and its encrypted image were saved./)).toBeTruthy()
+    expect(screen.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+      '✓ Enrolled image 1 0.655 above the threshold', '✓ Enrolled image 2 0.712 above the threshold',
+      '✗ Enrolled image 3 0.301 not above the threshold'])
+    fireEvent.click(screen.getByRole('button', { name: 'Verify again' }))
+    expect(again).toBe(1)
+  })
+
+  it('words a non-match, and the deletion says that verification attempts go with the enrolment', async () => {
+    render(<MemoryRouter><SessionProvider><FaceVerificationView result={{ ...FACE_VERIFIED, score: 0.12, accepted: false }} onAgain={() => undefined} onLeave={() => undefined} /></SessionProvider></MemoryRouter>)
+    expect(await screen.findByRole('heading', { name: 'Your face does not match' })).toBeTruthy()
+    cleanup()
+    await openFaceAs(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Delete the face enrolment' }))
+    expect(screen.getByRole('alertdialog').textContent).toContain('their verification attempts with their images')
   })
 })

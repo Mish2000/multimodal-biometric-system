@@ -21,6 +21,7 @@ import logging
 import math
 import struct
 import threading
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -35,7 +36,7 @@ from .db import Databases
 from .engines import Engine, EngineError, conda_environment
 from .fingerprint import best_three
 from .keys import Keys
-from .models import Algorithm, Enrolment, Sample, Template, vector_text
+from .models import Algorithm, Attempt, Enrolment, Sample, Template, vector_text, vector_values
 
 logger = logging.getLogger("mbs.face")
 FACE = "face"
@@ -317,3 +318,75 @@ def delete_face(databases: Databases, subject: uuid.UUID) -> bool:
         db.execute(delete(Sample).where(Sample.enrolment_id.in_(enrolments)))
         db.execute(delete(Enrolment).where(Enrolment.id.in_(enrolments)))
     return True
+
+
+# Face verification (H49): one taken image against the caller's current face enrolment, as H35 does for a
+# finger. The highest of the three cosine similarities decides, strictly above the threshold, and equal
+# scores go to the earliest image (H43). A rejected image makes no attempt; a completed comparison is saved,
+# match or not, with its image sealed, and the answer is sent only after that.
+
+COMPARISONS = """
+SELECT s.id AS sample_id, s.placement, t.version, t.embedding::text AS embedding,
+       1 - (t.embedding <=> CAST(:probe AS vector)) AS score
+FROM template t JOIN sample s ON s.id = t.sample_id
+WHERE s.enrolment_id = :enrolment AND t.algorithm = 'sface'
+ORDER BY s.placement
+"""
+
+
+def _repeat_view(service: FaceService, keys: Keys, databases: Databases, subject: uuid.UUID, sample_id: uuid.UUID,
+                 stored: list[float]) -> bytes:
+    """The aligned face of the caller's own winning image, for the result screen: the sealed image is opened for
+    its owner only and extracted again, and the repeated embedding must equal the stored one."""
+    with _db(databases.biometric) as db:
+        sample = db.get(Sample, sample_id)
+    png = keyring.open_sealed(keys, keyring.SAMPLE, sample.id.bytes + subject.bytes, sample.data)
+    again = _extract(service, png)
+    if not again.passed or again.embedding is None or vector_values(vector_text(again.embedding)) != stored:
+        raise EngineError("the stored face did not give its stored embedding again")
+    return again.aligned
+
+
+def verify(service: FaceService, databases: Databases, keys: Keys, subject: uuid.UUID, image: bytes) -> dict:
+    at = datetime.now(timezone.utc)
+    started = time.perf_counter()
+    with _db(databases.biometric) as db:
+        algorithm = db.get(Algorithm, SFACE)
+        version, threshold = algorithm.version, algorithm.threshold
+        origin, provisional = algorithm.threshold_origin, algorithm.threshold_provisional
+    enrolment = current_enrolment(databases, subject)
+    if enrolment is None:
+        raise FaceError("not_enrolled", 409)  # H15: the client offers the enrolment
+    if service.engine.start().get("sface_sha256") != version:
+        raise FaceError("method_version_differs", 503)
+    probe = _extract(service, image)
+    if not probe.passed:
+        return {"status": "rejected", "width": probe.width, "height": probe.height, "faces": probe.faces,
+                "checks": probe.checks}
+    with _db(databases.biometric) as db:
+        rows = db.execute(text(COMPARISONS), {"probe": vector_text(probe.embedding), "enrolment": enrolment.id}).all()
+    if len(rows) != IMAGES:
+        raise FaceError("enrolment_changed", 409)
+    if any(row.version != version for row in rows):
+        raise FaceError("method_version_differs", 503)
+    comparisons = [{"placement": row.placement, "score": float(row.score), "accepted": float(row.score) > threshold}
+                   for row in rows]
+    best = sorted(rows, key=lambda row: (-float(row.score), row.placement))[0]
+    score = float(best.score)
+    duration_ms = round((time.perf_counter() - started) * 1000)  # receipt through the comparisons (H35)
+    reference = _repeat_view(service, keys, databases, subject, best.sample_id, vector_values(best.embedding))
+    attempt = Attempt(id=uuid.uuid4(), at=at, subject_id=subject, modality=FACE, mode="verify", algorithm=SFACE,
+                      enrolment_id=enrolment.id, score=score, threshold=threshold, accepted=score > threshold,
+                      duration_ms=duration_ms, source="device")
+    attempt.probe = keyring.seal(keys, keyring.PROBE, attempt.id.bytes + subject.bytes, probe.png)
+    with _db(databases.biometric) as db, db.begin():
+        # A deletion or a new enrolment since the comparison invalidates it (H35); a later deletion cascades.
+        locked = db.scalar(select(Enrolment).where(Enrolment.id == enrolment.id, Enrolment.subject_id == subject)
+                           .with_for_update())
+        if locked is None or locked.replaced_at is not None:
+            raise FaceError("enrolment_changed", 409)
+        db.add(attempt)
+    return {"status": "verified", "attempt_id": str(attempt.id), "at": at.isoformat(), "score": score,
+            "threshold": threshold, "threshold_origin": origin, "threshold_provisional": provisional,
+            "accepted": attempt.accepted, "duration_ms": duration_ms, "comparisons": comparisons,
+            "view": {"placement": best.placement, "probe": _b64(probe.aligned), "reference": _b64(reference)}}

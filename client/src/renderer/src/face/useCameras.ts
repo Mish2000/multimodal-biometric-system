@@ -8,6 +8,7 @@ interface Facing {
 }
 
 async function listCameras(): Promise<Camera[]> {
+  if (!navigator.mediaDevices) return [] // a page without the camera interface has no camera
   const devices = await navigator.mediaDevices.enumerateDevices()
   return devices
     .filter((device) => device.kind === 'videoinput')
@@ -65,10 +66,10 @@ export function useCameras(): Cameras {
         })
     }
     load()
-    navigator.mediaDevices.addEventListener('devicechange', load)
+    navigator.mediaDevices?.addEventListener('devicechange', load)
     return () => {
       active = false
-      navigator.mediaDevices.removeEventListener('devicechange', load)
+      navigator.mediaDevices?.removeEventListener('devicechange', load)
     }
   }, [search])
 

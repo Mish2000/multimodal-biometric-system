@@ -346,7 +346,18 @@ def create_app(databases: Databases, keys: Keys, outbox: Outbox, fingerprints: F
         result = engine_work(lambda: face.enrol(service, databases, keys, subject, images))
         return JSONResponse(result, status_code=201 if result["status"] == "saved" else 200)
 
-    # As H34 for a finger: the face's enrolment is erased with its images and embeddings.
+    # H49: one taken image against the caller's current face enrolment; a completed comparison is saved with
+    # its sealed image before the answer, a rejected image is not.
+    @app.post("/api/face/verifications")
+    @allow(USER)
+    def verify_face(body: FaceImage, account: SignedIn = Depends(signed_in)) -> dict:
+        service = face_service()
+        image = face.decode_image(body.image, face.IMAGE_BYTES)
+        subject = accounts.subject_of(databases, keys, account.id)
+        return engine_work(lambda: face.verify(service, databases, keys, subject, image))
+
+    # As H34 for a finger: the face's enrolment is erased with its images and embeddings, and (H49) with its
+    # verification attempts and their sealed images.
     @app.delete("/api/face/enrolment", status_code=204)
     @allow(USER)
     def delete_face(account: SignedIn = Depends(signed_in)) -> None:

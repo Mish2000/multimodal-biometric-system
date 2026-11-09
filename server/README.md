@@ -18,7 +18,7 @@ $python = '<conda envs>\multimodal-server\python.exe'
 & $python -m mbs create-admin --username <name> --email <address>   # prints a one-time password
 & $python -m mbs serve        # the API on 127.0.0.1; starts and stops PostgreSQL with it
 & $python -m mbs db status    # or start / stop
-& $python -m pytest           # 237 tests against a throwaway cluster (four need MBS_LIVE_CAPTURES)
+& $python -m pytest           # 247 tests against a throwaway cluster (four need MBS_LIVE_CAPTURES)
 ```
 
 ## Machine settings
@@ -112,7 +112,8 @@ to their defaults when `local/server.toml` does not name them; without them the 
 | `POST /api/face/detect` | user | the faces of one small frame of the live view (`{"image": base64}`, at most 1 MB): boxes, landmarks and scores; nothing is kept |
 | `POST /api/face/checks` | user | one taken image (a PNG of the camera's frame, at most 8 MB): its checks and, when it passes, its aligned face; nothing is kept |
 | `POST /api/face/enrolments` | user | three to six taken images with their times, in order: 201 `saved` when three match each other, otherwise 200 `another`, or `failed` after six |
-| `DELETE /api/face/enrolment` | user | delete the face's current and replaced enrolments with their images and embeddings; 404 when it is not enrolled |
+| `POST /api/face/verifications` | user | verify the face with one taken image (H49): `rejected` with its checks and no attempt, or `verified` with the three scores, the decision and the two aligned faces, sent after the attempt is saved; 409 `not_enrolled` before an enrolment |
+| `DELETE /api/face/enrolment` | user | delete the face's current and replaced enrolments with their images, embeddings and verification attempts; 404 when it is not enrolled |
 | `GET /api/admin/accounts`, `POST /api/admin/accounts/{id}/status` | administrator | accounts; disable or enable |
 | `POST /api/admin/administrators`, `GET /api/admin/audit` | administrator | a new administrator; the audit log |
 
@@ -195,6 +196,14 @@ above SFace's threshold of 0.363, as H15 does for fingerprints. The kept images 
 `mbs/sample/v1` with their checks; their embeddings are `vector` values of 128 numbers, unsealed (H14),
 under the SFace model's SHA-256 as their version. A face engine that reports another SFace file is refused
 (`method_version_differs`). Migration `biometric_0005` adds SFace's row to the algorithm table.
+
+Face verification (H49) compares one taken image that passes H48's checks with the caller's three
+current SFace embeddings in one SQL statement (pgvector's cosine similarity). The highest score decides,
+strictly above 0.363; equal scores go to the earliest image. The time runs from the image's receipt to the
+end of the comparisons. The winning stored image is then opened for its owner only and extracted again:
+its embedding must equal the stored one, or the run ends unsaved. The attempt is saved with its image
+sealed under `mbs/probe/v1`, while the enrolment is locked and still current (otherwise
+`enrolment_changed`), and only then is the answer sent.
 
 Cancellation closes the acquisition worker's standard input (H36). The worker
 finishes its current native call, switches off the illumination (H37),

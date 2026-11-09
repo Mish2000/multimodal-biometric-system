@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { FaceMethod, FaceSaved } from '../../../shared/bridge'
 import { FaceEnrolment } from '../face/FaceEnrolment'
 import { FaceResult } from '../face/FaceResult'
+import { FaceVerification } from '../face/FaceVerification'
 import { errorText } from '../texts'
 import { useSession } from '../session'
 
@@ -15,6 +16,7 @@ export function Face() {
   const [state, setState] = useState<FaceState | null>(null)
   const [method, setMethod] = useState<FaceMethod | null>(null)
   const [enrolling, setEnrolling] = useState(false)
+  const [verifying, setVerifying] = useState(false) // H49
   const [saved, setSaved] = useState<FaceSaved | null>(null)
   const [confirming, setConfirming] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -44,6 +46,21 @@ export function Face() {
 
   if (saved !== null)
     return <FaceResult saved={saved} onDone={() => { setSaved(null); load() }} />
+  if (verifying && method !== null && state !== null)
+    return (
+      <FaceVerification
+        method={method}
+        enrolled={state.enrolled}
+        onEnrol={() => {
+          setVerifying(false)
+          setEnrolling(true)
+        }}
+        onLeave={() => {
+          setVerifying(false)
+          load()
+        }}
+      />
+    )
   if (enrolling && method !== null)
     return (
       <FaceEnrolment
@@ -95,12 +112,24 @@ export function Face() {
               </div>
             ) : (
               <div className="actions">
-                <button type="button" disabled={!method.available} onClick={() => {
+                {state.enrolled && (
+                  <button type="button" disabled={!method.available} onClick={() => {
+                    setMessage(null)
+                    setVerifying(true)
+                  }}>{f.verify.open}</button>
+                )}
+                <button type="button" className={state.enrolled ? 'secondary' : ''} disabled={!method.available} onClick={() => {
                   setMessage(null)
                   setEnrolling(true)
                 }}>
                   {state.enrolled ? f.enrolAgain : f.enrol}
                 </button>
+                {!state.enrolled && (
+                  <button type="button" className="secondary" disabled={!method.available} onClick={() => {
+                    setMessage(null)
+                    setVerifying(true)
+                  }}>{f.verify.open}</button>
+                )}
                 {state.enrolled && (
                   <button type="button" className="secondary" onClick={() => setConfirming(true)}>{f.deleteEnrolment}</button>
                 )}

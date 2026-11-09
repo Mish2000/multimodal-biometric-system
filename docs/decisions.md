@@ -1128,3 +1128,42 @@ local database holds one face enrolment with three sealed 1280 x 720 images
 of about 1 MB each, every check passed (YuNet scores of 0.945 to 0.948, faces
 230 to 235 pixels wide), and three SFace embeddings of 128 values under the
 pinned model's SHA-256.
+
+## 2026-11-09: face verification
+
+Approved on 2026-11-09. Verify the face with one image from the PC's cameras,
+the second step of increment 4 (H15, H20), as H35 does for a finger.
+
+- **H49** After SFace's card, without a choice, and an explicit start (H40),
+  the camera of H48 takes one image that must pass H48's four checks; a
+  rejected image is taken again and makes no attempt, at most twelve per run.
+  In one SQL statement, pgvector's cosine similarity compares it with the
+  user's three current embeddings; the highest decides, strictly above 0.363,
+  and equal scores go to the earliest image (H43). Templates of another model
+  version are refused.
+- Every completed comparison, match or not, is saved as H35's attempt:
+  `face`, `verify`, `sface`, the enrolment compared, the score and the
+  threshold used, the decision, the time from the image's receipt through
+  the comparisons, `source = device`, and the image sealed under
+  `mbs/probe/v1`. It is saved while the enrolment is locked and still
+  current; a new enrolment or a deletion meanwhile ends the run unsaved.
+  The answer is sent only after the save. Deleting the face erases its
+  verification attempts; a new enrolment keeps the earlier ones.
+- The result shows the new aligned face beside the closest enrolled one, the
+  similarity with its threshold, the decision, the time and all three scores.
+  The winning stored image is opened for its owner only and extracted again,
+  and its embedding must equal the stored one; SFace gave the same 128 values
+  in five repeats and in two processes. Otherwise the run ends unsaved.
+
+The full server run passed 247 tests, including the four local checks with
+stored captures; all 130 client tests, type checks and the build passed. The
+built client passed 79 offscreen checks, among them verification before an
+enrolment, which offers the enrolment first. Verification of a real face is
+checked by hand.
+
+## 2026-11-09: live face verification check
+
+Face verification (H49) passed a manual check on the researcher's PC: six
+attempts, all matches, with similarities of 0.570 to 0.894 against the
+threshold of 0.363 and 66 to 83 ms of processing, each saved with its image
+sealed (about 1 MB).

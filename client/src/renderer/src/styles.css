@@ -1032,3 +1032,9 @@ button.danger {
 .faces img { width: 112px; height: 112px; border-radius: var(--radius); }
 .method-card h2 { direction: ltr; text-align: start; }
 .face-enrolment .prompt:empty { padding: 0; margin: 0; border: 0; background: none; }
+/* H49: the new face beside the closest enrolled one, left to right in either language. */
+.face-pair { display: flex; gap: 1.5rem; margin-block: 1rem; }
+.face-pair figure { margin: 0; text-align: center; }
+.face-pair img { width: 140px; height: 140px; border-radius: var(--radius); }
+.face-score { width: min(100%, 420px); height: 1.25rem; }
+.face-verification .prompt:empty { padding: 0; margin: 0; border: 0; background: none; }

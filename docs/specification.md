@@ -307,8 +307,15 @@ flow of 2026-10-18).
   pass or twelve are taken. The server keeps nothing between requests and
   checks every image again before it saves. Every face score is pgvector's
   cosine similarity.
-- **1:1 and 1:N:** the highest cosine similarity over a user's embeddings;
-  1:N searches the embeddings with pgvector.
+- **1:1 (H49):** after SFace's card and an explicit start, one taken image
+  that passes the checks is compared with the user's three current embeddings;
+  the highest cosine similarity decides, strictly above the threshold, and
+  equal scores go to the earliest image. A rejected image is taken again, at
+  most twelve per run. The result shows the new aligned face beside the
+  closest enrolled one, whose stored image is extracted again for its owner
+  only and must give its stored embedding.
+- **1:N:** the highest cosine similarity over a user's embeddings; 1:N
+  searches the embeddings with pgvector.
 
 ### 5.3 Voice
 
@@ -341,7 +348,7 @@ SHA-256.
 | Stored template (H33) | after an enrolment, once: the captures with their checks, OpenCV SIFT's points, one point's 128 numbers in SIFT's 4 x 4 x 8 layout, the whole template as a picture, its row with the sealed value's parts, and the pair scores against the threshold; sent from the server's memory before sealing, kept by the page only while the screen is open |
 | Face capture | live camera view with the detected face box and what to do next; the camera chosen by the client, with a selector when more than one can be used; after an enrolment, the three aligned faces and their pair scores (H48) |
 | Voice capture | the sentence to read, a level meter and a timer |
-| 1:1 result | the new print beside the enrolled one with lines between matched points or pores, a score gauge marked with the threshold, the decision and the time it took |
+| 1:1 result | the new print beside the enrolled one with lines between matched points or pores, or the new aligned face beside the closest enrolled one (H49), a score gauge marked with the threshold, the decision and the time it took |
 | 1:N result | an animated pass over the enrolled gallery, the ranked candidates with their scores, the top one marked when it passes the threshold |
 | Administration area (H12) | accounts with role and status, new administrators, disabling and enabling; the attempt history with filters; thresholds; the audit log; never national IDs or samples |
 
@@ -380,6 +387,11 @@ Fingerprint verification stores completed comparisons, accepted or rejected
 failures create no comparison record. Its processing time covers quality,
 extraction and the three comparisons, excluding the wait for the finger and
 database storage. The administrative history screen follows in increment 6.
+
+Face verification follows the same rules (H49): a completed comparison is
+stored with its sealed image, a rejected image is not, the time runs from the
+image's receipt through the comparisons, and deleting the face erases its
+verification attempts.
 
 Fingerprint identification follows the same quality and attempt-storage rules
 (H41, H42), with the selected method and processing time from receipt of the
@@ -524,3 +536,6 @@ themes during that work.
   pinned models, the live view and the image checks, three images matching
   pairwise, pgvector's cosine similarity as every face score, and the camera
   chosen by the client (1, 3, 5.2, 6, 8).
+- **H49** Face verification (1:1): the comparison with the three current
+  embeddings, the attempt as H35's, and the result with the closest enrolled
+  face (5.2, 6, 7).

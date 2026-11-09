@@ -5,9 +5,7 @@ import { useState } from 'react'
 import type { ApiResult, FaceCheck, FaceCheckResult, FaceEnrolmentAnswer, FaceMethod, FacePair, FaceSaved } from '../../../shared/bridge'
 import { errorText, type Texts } from '../texts'
 import { useSession } from '../session'
-import type { Camera } from './camera'
-import { CameraView, type CameraProblem } from './CameraView'
-import { useCameras } from './useCameras'
+import { CameraPanel } from './CameraPanel'
 
 export const MOST_TAKEN = 12 // images taken in one enrolment, kept or not (as H33's captures)
 
@@ -53,14 +51,11 @@ export function FacePairs({ pairs, threshold }: { pairs: FacePair[]; threshold: 
 export function FaceEnrolment({ method, onSaved, onLeave }: { method: FaceMethod; onSaved: (saved: FaceSaved) => void; onLeave: () => void }) {
   const { call, t } = useSession()
   const f = t.face
-  const choice = useCameras()
   const [kept, setKept] = useState<KeptImage[]>([])
   const [taken, setTaken] = useState(0)
   const [phase, setPhase] = useState<'live' | 'checking' | 'saving' | 'failed'>('live')
   const [shown, setShown] = useState<Shown>(null)
   const [pairs, setPairs] = useState<FacePair[]>([])
-  const [notice, setNotice] = useState('')
-  const [problem, setProblem] = useState<{ camera: string; text: string } | null>(null)
   const [failure, setFailure] = useState('')
 
   function fail(code: string, result?: ApiResult) {
@@ -99,18 +94,6 @@ export function FaceEnrolment({ method, onSaved, onLeave }: { method: FaceMethod
     next(count)
   }
 
-  function cameraLost(camera: Camera, text: string) {
-    setNotice(text)
-    setProblem(null)
-    choice.markCovered(camera)
-  }
-
-  function cameraProblem(camera: Camera, kind: CameraProblem) {
-    const text = kind === 'busy' ? f.cameraBusy : kind === 'denied' ? f.cameraDenied : f.cameraFailed
-    setProblem({ camera: camera.key, text })
-  }
-
-  const current = choice.current
   const restart = () => {
     setKept([])
     setTaken(0)
@@ -140,53 +123,8 @@ export function FaceEnrolment({ method, onSaved, onLeave }: { method: FaceMethod
         </>
       ) : (
         <>
-          {choice.usable.length > 1 && current !== null && (
-            <div className="camera-picker">
-              <label>
-                {f.camera}{' '}
-                <select value={current.key} onChange={(event) => {
-                  const camera = choice.usable.find((item) => item.key === event.target.value)
-                  if (camera) {
-                    setNotice('')
-                    choice.pick(camera)
-                  }
-                }}>
-                  {choice.usable.map((camera) => (
-                    <option key={camera.key} value={camera.key}>
-                      {camera.name}{camera.builtIn ? ` (${f.builtIn})` : ''}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-          )}
-          {notice && <p className="notice" role="status">{notice}</p>}
-          {choice.cameras === null ? (
-            <p className="aside">{f.starting}</p>
-          ) : current === null ? (
-            <>
-              <p className="error" role="alert">
-                {choice.cameras.some((camera) => camera.builtIn) && !choice.cameras.some((camera) => !camera.builtIn) ? f.lidClosed : f.noCamera}
-              </p>
-              <button type="button" onClick={() => { setNotice(''); choice.retry() }}>{f.retryCameras}</button>
-            </>
-          ) : problem !== null && problem.camera === current.key ? (
-            <>
-              <p className="error" role="alert">{problem.text}</p>
-              <button type="button" onClick={() => { setProblem(null); choice.retry() }}>{f.retryCameras}</button>
-            </>
-          ) : (
-            <CameraView
-              key={current.deviceId}
-              camera={current}
-              busy={phase !== 'live'}
-              minimumWidth={method.width_minimum}
-              onTaken={(image, capturedAt) => void check(image, capturedAt)}
-              onCovered={() => cameraLost(current, f.covered(current.name))}
-              onEnded={() => cameraLost(current, f.disconnected(current.name))}
-              onProblem={(kind) => cameraProblem(current, kind)}
-            />
-          )}
+          <CameraPanel busy={phase !== 'live'} minimumWidth={method.width_minimum}
+            onTaken={(image, capturedAt) => void check(image, capturedAt)} />
           <p className="notice prompt" role="status" aria-live="polite">
             {phase === 'checking' ? f.checking : phase === 'saving' ? f.saving : shown?.kind === 'kept' ? f.kept(shown.number) : shown?.kind === 'another' ? f.another : ''}
           </p>
