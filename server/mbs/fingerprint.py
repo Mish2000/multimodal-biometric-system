@@ -19,6 +19,7 @@ import itertools
 import json
 import logging
 import math
+import struct
 import threading
 import uuid
 from collections.abc import AsyncIterator
@@ -199,6 +200,16 @@ def extract_native(service: FingerprintService, code: str, png: bytes, pores: by
     if not native or not native[0]:
         raise EngineError("missing native template")
     return native[0]
+
+
+def match_pairs(reply: dict, parts: list[bytes], score: int) -> bytes:
+    """H43, H44, H45: exactly one native-coordinate pair per point or pore counted in the score."""
+    if type(reply.get("matches")) is not int or reply["matches"] != score or len(parts) != 1 or len(parts[0]) != score * 16:
+        raise EngineError("invalid match illustration")
+    if any(not math.isfinite(value) or not 0 <= value < 1000
+           for pair in struct.iter_unpack("<4f", parts[0]) for value in pair):
+        raise EngineError("invalid match coordinates")
+    return parts[0]
 
 
 def comparison_score(result: dict) -> int:

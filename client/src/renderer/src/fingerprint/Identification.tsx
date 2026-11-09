@@ -5,6 +5,7 @@ import type { FingerprintAlgorithm, FingerprintMethod, IdentificationEvent, Iden
 import { useSession } from '../session'
 import { errorText } from '../texts'
 import { Checks, type Captured } from './Journey'
+import { MatchView } from './MatchView'
 import { MethodChoices } from './MethodChoices'
 
 type Phase = 'ready' | 'starting' | 'preparing' | 'place' | 'checking' | 'lift' | 'extracting' | 'searching' | 'saving' | 'identified' | 'failed' | 'cancelled'
@@ -245,6 +246,13 @@ export function Identification({ enrolled, methods, methodError, onReloadMethods
                 </table>
               </div>
               <p className="aside">{f.verification.duration} {f.verification.seconds(result.duration_ms)}</p>
+              {/* H45: the caller's own highest-ranked print only (H18). */}
+              {result.match_view && run.latest ? (
+                <>
+                  <p>{i.drawingOf(f.fingers[result.match_view.finger] ?? '', result.match_view.rank)}</p>
+                  <MatchView key={result.attempt_id} view={result.match_view} image={run.latest.image} algorithm={result.algorithm} />
+                </>
+              ) : !result.candidates.some((candidate) => candidate.own) && <p className="aside">{i.noDrawing}</p>}
             </>
           )}
           {run.latest && (

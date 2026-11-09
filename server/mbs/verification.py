@@ -6,8 +6,6 @@ from __future__ import annotations
 
 import base64
 import logging
-import math
-import struct
 import time
 import uuid
 from collections.abc import AsyncIterator
@@ -129,14 +127,7 @@ def _save(databases: Databases, keys: Keys, subject: uuid.UUID, reference: Refer
     return attempt
 
 
-def _match_bytes(reply: dict, parts: list[bytes], score: int) -> bytes:
-    """H43: exactly one native-coordinate pair per point counted in the score."""
-    if type(reply.get("matches")) is not int or reply["matches"] != score or len(parts) != 1 or len(parts[0]) != score * 16:
-        raise EngineError("invalid match illustration")
-    if any(not math.isfinite(value) or not 0 <= value < 1000
-           for pair in struct.iter_unpack("<4f", parts[0]) for value in pair):
-        raise EngineError("invalid match coordinates")
-    return parts[0]
+_match_bytes = fp.match_pairs  # H43: shared with identification (H45)
 
 
 def _reference_image(databases: Databases, keys: Keys, subject: uuid.UUID, enrolment_id: uuid.UUID,

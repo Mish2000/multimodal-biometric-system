@@ -17,7 +17,7 @@ $python = '<conda envs>\multimodal-server\python.exe'
 & $python -m mbs create-admin --username <name> --email <address>   # prints a one-time password
 & $python -m mbs serve        # the API on 127.0.0.1; starts and stops PostgreSQL with it
 & $python -m mbs db status    # or start / stop
-& $python -m pytest           # 211 tests against a throwaway cluster (four need MBS_LIVE_CAPTURES)
+& $python -m pytest           # 217 tests against a throwaway cluster (four need MBS_LIVE_CAPTURES)
 ```
 
 ## Machine settings
@@ -162,7 +162,11 @@ The terminal `identified` event carries
 the five leading enrolments and their scores, the total number of enrolments
 and templates, and the number of equal leaders. Other candidates have only
 per-attempt ranks and anonymous labels. The caller's own finger positions
-are included. The attempt stores its leading enrolment even for a non-match.
+are included. H45 adds `match_view` for the caller's highest-ranked own
+enrolment among those five, with its rank, finger and placement: the server
+repeats that enrolment's winning comparison once with `view` (the learned
+descriptor with its pores, as in H44) and requires the same score. No other
+user's capture is opened for it. The attempt stores its leading enrolment even for a non-match.
 Deleting that enrolment sets the link to null and retains the attempt and
 its sealed probe, as stated in the client confirmation (H41).
 

@@ -1033,6 +1033,39 @@ describe('fingerprint identification (H41)', () => {
     expect(screen.queryByRole('meter')).toBeNull()
   })
 
+  it.each(['en', 'he'] as const)('draws only the caller’s own highest-ranked print (H45) in %s', async (language) => {
+    const he = language === 'he'
+    const data = new Uint8Array(16)
+    ;[10, 20, 30, 40].forEach((value, index) => new DataView(data.buffer).setFloat32(index * 4, value, true))
+    server.current = server.add('dana', 'user', { language })
+    server.fingers = [7]
+    server.identification = [{ type: 'captured', image: 'PROBE', checks: CHECKS }, {
+      ...IDENTIFIED, match_view: { rank: 2, finger: 7, placement: 3, reference_image: 'OWN', count: 1, pairs: btoa(String.fromCharCode(...data)) },
+    }]
+    open('/fingerprint', true)
+    fireEvent.click(await screen.findByRole('button', { name: he ? 'זיהוי טביעת אצבע (1:N)' : 'Identify a fingerprint (1:N)' }))
+    fireEvent.click(screen.getByRole('button', { name: he ? 'התחלת הזיהוי' : 'Start identification' }))
+    expect(await screen.findByText(he ? /לאצבע שלך: מורה שמאל, במקום 2 ברשימה/ : /with your left index, rank 2 in the list/)).toBeTruthy()
+    const drawing = screen.getByRole('img', { name: he ? 'טביעת האצבע החדשה והשמורה עם 1 זוגות נקודות תואמות' : 'New and stored fingerprints with 1 matched point pairs' })
+    expect([...drawing.querySelectorAll('image')].map((image) => image.getAttribute('href'))).toEqual([
+      'data:image/png;base64,PROBE', 'data:image/png;base64,OWN',
+    ])
+    expect(drawing.querySelector('.match-connections')?.getAttribute('d')).toBe('M10 20L1130 40')
+    expect(screen.queryByText(he ? /אף אחת מהטביעות שלך/ : /None of your own prints/)).toBeNull()
+  })
+
+  it('explains the missing drawing when none of the shown candidates is the caller’s', async () => {
+    server.fingers = [7]
+    server.identification = [{ type: 'captured', image: 'PROBE', checks: CHECKS }, {
+      ...IDENTIFIED, candidates: [{ rank: 1, own: false, finger: null, score: 90, accepted: true }],
+    }]
+    await openFingerprint()
+    fireEvent.click(screen.getByRole('button', { name: 'Identify a fingerprint (1:N)' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start identification' }))
+    expect(await screen.findByText('None of your own prints is among the candidates shown, so there is no drawing. Other users’ prints are never drawn.')).toBeTruthy()
+    expect(screen.queryByRole('img', { name: /matched point pairs/ })).toBeNull()
+  })
+
   it('requires enrolment before starting identification', async () => {
     await openFingerprint()
     fireEvent.click(screen.getByRole('button', { name: 'Identify a fingerprint (1:N)' }))

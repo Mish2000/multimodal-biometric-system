@@ -2,7 +2,7 @@
 
 Approved on 2026-10-20 (H11–H20 in `docs/decisions.md`),
 from the draft of 2026-10-19 as revised on 2026-10-20, and amended with his
-approval since (H24 to H44). Every decision is cited by its ID; a change needs
+approval since (H24 to H45). Every decision is cited by its ID; a change needs
 the researcher's approval and a new entry in the decision record.
 
 ## 1. Purpose and scope
@@ -236,6 +236,10 @@ flow of 2026-10-18).
   for each enrolled finger. The client reports progress and allows cancellation.
   Completed preparations are reused on retry. Pore SIFT compares in bounded
   CPU groups, and the learned descriptor uses one comparison runtime.
+  H45 draws the matches of the caller's highest-ranked own print among the
+  shown candidates, never another user's: its winning comparison is
+  repeated once with the pairs (for the learned descriptor, with its pores,
+  as H44), and the repeated score must equal the ranked score.
 - **Thresholds (H16):** settings per algorithm, kept in the biometric
   database; a comparison is accepted when its score is above its threshold.
   Administrators can change them in the client, each change enters the audit
@@ -493,3 +497,5 @@ themes during that work.
   capture and the inlier pairs counted in that comparison (5.1, 6).
 - **H44** Pore SIFT and learned pore 1:1 illustrations with the pore pairs
   counted in the winning comparison (5.1, 6).
+- **H45** 1:N illustration of the caller's own highest-ranked shown print,
+  from its winning comparison repeated once (5.1, 6).

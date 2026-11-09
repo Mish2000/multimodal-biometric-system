@@ -1,6 +1,7 @@
 """H41: 1:N gallery membership, privacy, cancellation and persistence through the real API and database."""
 
 import json
+import struct
 import threading
 import time
 import uuid
@@ -97,12 +98,14 @@ def test_gallery_uses_only_current_enrolments_of_active_accounts(fp_client, scri
     assert identify(fp_client, token)[-1]["accepted"] is False
 
 
-def test_probe_is_extracted_once_and_reference_comparisons_run_in_parallel(fp_client, script, service, databases, monkeypatch):
+def test_probe_is_extracted_once_and_reference_comparisons_run_in_parallel(fp_client, script, service, databases, keys, monkeypatch):
     token = enrolled(fp_client, script)
+    subject = subject_of(fp_client, databases, keys, token)
     other_enrolled(fp_client, script)
     with Session(databases.biometric) as db, db.begin():
-        for sample in db.scalars(select(Sample)):
-            sample.data = b"unavailable raw capture"  # identification needs only the stored templates
+        for sample in db.scalars(select(Sample).join(Enrolment).where(Enrolment.subject_id != subject)):
+            # The search needs only stored templates; H45 opens only the caller's own winning capture.
+            sample.data = b"unavailable raw capture"
     state = {"active": 0, "peak": 0, "extract": 0, "compared": 0}
     guard = threading.Lock()
     for engine in service.search_engines():
@@ -126,8 +129,10 @@ def test_probe_is_extracted_once_and_reference_comparisons_run_in_parallel(fp_cl
                         state["active"] -= 1
         monkeypatch.setattr(engine, "request", observe)
     plan(script, finger("q60:A4"))
-    assert identify(fp_client, token)[-1]["accepted"] is True
-    assert state["extract"] == 1 and state["compared"] == 6 and 1 < state["peak"] <= 4
+    result = identify(fp_client, token)[-1]
+    assert result["accepted"] is True and result["match_view"]["rank"] == 1
+    # Six gallery comparisons, then the caller's winning one repeated once for its illustration (H45).
+    assert state["extract"] == 1 and state["compared"] == 7 and 1 < state["peak"] <= 4
 
 
 @pytest.mark.parametrize("highest,accepted", [(57, False), (58, True)])
@@ -137,7 +142,10 @@ def test_highest_score_and_strict_threshold(fp_client, script, service, monkeypa
         original = engine.request
         def scores(header, parts, request=original):
             if header["op"] == "compare":
-                return {"status": "ok", "score": highest if parts[1].endswith(b"A2") else 1}, []
+                value = highest if parts[1].endswith(b"A2") else 1
+                if header.get("view") is True:  # H45: the caller's winning comparison, repeated once
+                    return {"status": "ok", "score": value, "matches": value}, [struct.pack("<4f", 1, 2, 3, 4) * value]
+                return {"status": "ok", "score": value}, []
             return request(header, parts)
         monkeypatch.setattr(engine, "request", scores)
     plan(script, finger("q60:A4"))
@@ -247,7 +255,11 @@ def test_quality_retry_and_defined_comparison_failures(fp_client, script, servic
     for engine in service.search_engines():
         original = engine.request
         def fail_comparison(header, parts, request=original):
-            return ({"status": "failure", "score": None}, []) if header["op"] == "compare" else request(header, parts)
+            if header["op"] != "compare":
+                return request(header, parts)
+            # A defined failure counts zero; with `view` it has zero pairs, as the engines reply (H43).
+            return ({"status": "failure", "score": None, "matches": 0}, [b""]) if header.get("view") else (
+                {"status": "failure", "score": None}, [])
         monkeypatch.setattr(engine, "request", fail_comparison)
     plan(script, finger("q20:A4"), LIFT, finger("q255:A5"), LIFT, finger("q35:A6"))
     events = identify(fp_client, token)

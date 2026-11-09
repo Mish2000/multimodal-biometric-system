@@ -182,6 +182,8 @@ export interface IdentificationResult {
   enrolments: number
   tied_leaders: number
   candidates: Array<{ rank: number; own: boolean; finger: number | null; score: number; accepted: boolean }>
+  // H45: only for the caller's own highest-ranked print among the shown candidates.
+  match_view?: MatchViewData & { rank: number; finger: number }
 }
 
 export type IdentificationEvent =

@@ -990,3 +990,39 @@ and the Hebrew page. Manual scanner validation follows separately.
 
 The Pore SIFT and learned pore 1:1 match illustrations (H44) passed a
 manual check on the connected HiScan PRO.
+
+## 2026-11-08: 1:N match illustration of the caller's own print
+
+Approved on 2026-11-08. Draw a 1:N result's matches for the caller's own
+print only, completing the match drawings of increment 3 (H18, H41, H42).
+
+- **H45** The illustrated candidate is the caller's highest-ranked own
+  enrolment among the five shown candidates. Another user's capture is never
+  opened for presentation or sent; when no own print is shown, the page says
+  that there is no drawing and why.
+- The search records each enrolment's earliest highest-scoring placement.
+  After ranking, the server repeats that one comparison with `view = true`,
+  for all three methods, and requires the repeated score to equal the
+  ranked score. For the learned descriptor it supplies the pores both
+  templates were described from, as H44 does: the probe's detection in this
+  run, and for the stored capture this run's preparation of the caller's own
+  captures, its Pore SIFT template, or the pinned detector. Pairs are
+  validated as in H43. A failure ends the run before saving.
+- The result carries the illustration with its rank, finger and placement,
+  sent with the committed attempt. The page names the finger and rank above
+  the H43/H44 drawing, which keeps the method's counting rule. The search,
+  ranking, anonymity and attempt retention of H41 and H42 are unchanged; the
+  processing time still ends after the ranking.
+
+The full server run passed 217 tests, including the four local checks with
+stored captures. All 112 client tests, type checks and the build passed.
+The built client passed 71 offscreen checks with the real OpenCV SIFT engine
+in a two-account gallery of stored captures: the caller's leading print is
+drawn, and when the other account leads, only the caller's own print at
+rank 2 is drawn. Manual scanner validation follows separately.
+
+## 2026-11-09: live 1:N match illustration check
+
+The 1:N match illustration of the caller's own print (H45) passed a manual
+check on the connected HiScan PRO. Increment 3 is complete: all three
+fingerprint methods in 1:1 and 1:N, with their match drawings (H20).

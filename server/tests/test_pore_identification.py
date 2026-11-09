@@ -1,6 +1,7 @@
 """H42: selected-method gallery templates, atomic preparation and cancellation before capture."""
 
 import json
+import struct
 import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
@@ -204,7 +205,10 @@ def test_each_method_uses_its_strict_threshold(fp_client, script, service, monke
         original = engine.request
         def boundary(header, parts, request=original):
             if header["op"] == "compare":
-                return {"status": "ok", "score": score if parts[1].endswith(b"A2") else 0}, []
+                value = score if parts[1].endswith(b"A2") else 0
+                if header.get("view") is True:  # H45: the caller's winning comparison, repeated once
+                    return {"status": "ok", "score": value, "matches": value}, [struct.pack("<4f", 1, 2, 3, 4) * value]
+                return {"status": "ok", "score": value}, []
             return request(header, parts)
         monkeypatch.setattr(engine, "request", boundary)
     plan(script, finger("q60:A4"))

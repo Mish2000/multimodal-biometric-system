@@ -1,9 +1,11 @@
-"""Fingerprint 1:N with the selected research method (H13, H15, H18, H25, H41, H42).
+"""Fingerprint 1:N with the selected research method (H13, H15, H18, H25, H41, H42, H45).
 
 A gallery snapshots current enrolments of active user accounts. Only metadata spans the full gallery.
 At most four encrypted references are opened and compared at once, each in its own engine process.
 The probe is extracted once. The final transaction rechecks gallery membership and account status.
-Results expose only per-attempt ranks, scores and the caller's own finger positions.
+Results expose only per-attempt ranks, scores and the caller's own finger positions. H45 adds the
+match illustration of the caller's own highest-ranked print among the shown candidates, never another
+user's: its winning comparison is repeated once with `view`, and the repeated score must equal it.
 """
 
 from __future__ import annotations
@@ -293,7 +295,33 @@ async def _extract(service: fp.FingerprintService, algorithm: str, png: bytes, p
     return await _engine_call(engine, lambda: fp.extract_native(service, algorithm, png, pores))
 
 
-async def _prepare_gallery(service, databases, keys, gallery: Gallery) -> AsyncIterator[dict]:
+async def _detect(service: fp.FingerprintService, png: bytes) -> bytes:
+    return await _engine_call(service.pore, lambda: fp.detect_pores(service, png))
+
+
+async def _match_view(service, engine: Engine, databases, keys, gallery: Gallery, candidate: Candidate,
+                      reference: Reference, rank: int, score: int, probe: bytes, probe_pores: bytes | None,
+                      described_from: dict[uuid.UUID, bytes]) -> dict:
+    """H18, H45: the caller's own print only. Its winning comparison is repeated once with `view` and, for
+    the learned descriptor, the pores both templates were described from (H44)."""
+    png, stored_pores = await run_in_threadpool(_preparation_source, databases, keys, candidate, reference, gallery)
+    native = await run_in_threadpool(_open_reference, databases, keys, candidate, reference, gallery.algorithm)
+    parts = [probe, native]
+    if gallery.algorithm == fp.LEARNED_PORE:
+        reference_pores = described_from.get(reference.sample_id) or stored_pores
+        if reference_pores is None:
+            reference_pores = await _detect(service, png)
+        parts += [probe_pores, reference_pores]
+    result, data = await _engine_call(engine, lambda: engine.request({"op": "compare", "view": True}, parts))
+    if fp.comparison_score(result) != score:
+        raise EngineError("the repeated comparison changed its score")
+    pairs = fp.match_pairs(result, data, score)
+    return {"rank": rank, "finger": candidate.finger, "placement": reference.placement,
+            "reference_image": fp._b64(png), "count": score, "pairs": fp._b64(pairs)}
+
+
+async def _prepare_gallery(service, databases, keys, gallery: Gallery, subject: uuid.UUID | None = None,
+                           described_from: dict[uuid.UUID, bytes] | None = None) -> AsyncIterator[dict]:
     missing = sum(reference.template_id is None for reference in gallery.references)
     if not missing:
         return
@@ -308,6 +336,11 @@ async def _prepare_gallery(service, databases, keys, gallery: Gallery) -> AsyncI
         for reference in references:
             if reference.template_id is None:
                 png, pores = await run_in_threadpool(_preparation_source, databases, keys, candidate, reference, gallery)
+                if gallery.algorithm == fp.LEARNED_PORE and pores is None:
+                    pores = await _detect(service, png)
+                    if described_from is not None and candidate.subject_id == subject:
+                        # H45: only the caller's own detected points, for a possible illustration.
+                        described_from[reference.sample_id] = pores
                 generated[reference.sample_id] = await _extract(service, gallery.algorithm, png, pores)
                 completed += 1
                 yield {"type": "preparing_templates", "algorithm": gallery.algorithm, "completed": completed, "total": missing}
@@ -333,7 +366,8 @@ async def _identify(service, databases, keys, subject, run, algorithm) -> AsyncI
         if ready["version"] != gallery.version:
             raise IdentificationError("template_version_mismatch")
     await _engine_call(service.quality, service.quality.start)
-    async for event in _prepare_gallery(service, databases, keys, gallery):
+    described_from: dict[uuid.UUID, bytes] = {}
+    async for event in _prepare_gallery(service, databases, keys, gallery, subject, described_from):
         yield event
     for capture in range(1, fp.MOST_CAPTURES + 1):
         yield {"type": "place", "capture": capture, "maximum": fp.MOST_CAPTURES}
@@ -352,20 +386,31 @@ async def _identify(service, databases, keys, subject, run, algorithm) -> AsyncI
 
     yield {"type": "captured", "image": image, "checks": checks}
     yield {"type": "extracting"}
-    probe = await _extract(service, algorithm, png)
+    probe_pores = await _detect(service, png) if algorithm == fp.LEARNED_PORE else None
+    probe = await _extract(service, algorithm, png, probe_pores)
     candidates = {candidate.id: candidate for candidate in gallery.candidates}
     scores = dict.fromkeys(candidates, 0)
+    winners: dict[uuid.UUID, Reference] = {}  # H45: each enrolment's earliest highest-scoring placement
     yield {"type": "searching", "completed": 0, "total": total}
     for offset in range(0, total, len(engines)):
         batch = gallery.references[offset:offset + len(engines)]
         results = await _compare_batch(engines, databases, keys, candidates, batch, probe, algorithm)
         for reference, value in zip(batch, results):
+            if reference.enrolment_id not in winners or value > scores[reference.enrolment_id]:
+                winners[reference.enrolment_id] = reference
             scores[reference.enrolment_id] = max(scores[reference.enrolment_id], value)
         yield {"type": "searching", "completed": offset + len(batch), "total": total}
     # UUID orders equal scores deterministically. The response reports ties explicitly.
     ranked = sorted(gallery.candidates, key=lambda candidate: (-scores[candidate.id], candidate.id))
     best, score = ranked[0], scores[ranked[0].id]
     duration_ms = round((time.perf_counter() - started) * 1000)
+    shown = ranked[:SHOWN_CANDIDATES]
+    own = next(((rank, candidate) for rank, candidate in enumerate(shown, 1) if candidate.subject_id == subject), None)
+    match_view = None
+    if own is not None:
+        rank, candidate = own
+        match_view = await _match_view(service, engines[0], databases, keys, gallery, candidate, winners[candidate.id],
+                                       rank, scores[candidate.id], probe, probe_pores, described_from)
     yield {"type": "saving"}
     attempt = await run_in_threadpool(_save, databases, keys, subject, gallery, best, score, png, at, duration_ms)
     yield {"type": "identified", "attempt_id": str(attempt.id), "at": attempt.at.isoformat(),
@@ -376,4 +421,5 @@ async def _identify(service, databases, keys, subject, run, algorithm) -> AsyncI
            "candidates": [{"rank": rank, "own": candidate.subject_id == subject,
                            "finger": candidate.finger if candidate.subject_id == subject else None,
                            "score": scores[candidate.id], "accepted": scores[candidate.id] > attempt.threshold}
-                          for rank, candidate in enumerate(ranked[:SHOWN_CANDIDATES], 1)]}
+                          for rank, candidate in enumerate(shown, 1)],
+           **({"match_view": match_view} if match_view is not None else {})}
