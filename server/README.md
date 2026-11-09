@@ -1,23 +1,24 @@
-# Server (increments 1 to 3 of H20)
+# Server (increments 1 to 4 of H20)
 
 The FastAPI server of the system: the local PostgreSQL cluster, the key file, registration with the
 national ID and the mobile phone, sign-in, password recovery, roles and the accounts part of the
 administration (H3, H11, H12, H14, H19, H29 to H32), fingerprint enrolment (H33)
 and 1:1 verification with OpenCV SIFT, Pore SIFT and Pore CNN
-(H35, H38, H39) and 1:N identification (H41, H42) with all three methods.
+(H35, H38, H39) and 1:N identification (H41, H42) with all three methods, and face enrolment (H48).
 It runs with the `multimodal-server` environment and starts PostgreSQL from the
-`multimodal-postgres` environment (`environments/`).
+`multimodal-postgres` environment (`environments/`); the face engine runs in `multimodal-face`.
 
 ```powershell
 conda create -n multimodal-server --file environments/server-win-64.lock
 conda create -n multimodal-postgres --file environments/postgres-win-64.lock
+conda create -n multimodal-face --file environments/face-win-64.lock   # and the two models: engines/README.md
 cd server
 $python = '<conda envs>\multimodal-server\python.exe'
 & $python -m mbs setup        # key file, local/server.toml, cluster, both databases (safe to rerun)
 & $python -m mbs create-admin --username <name> --email <address>   # prints a one-time password
 & $python -m mbs serve        # the API on 127.0.0.1; starts and stops PostgreSQL with it
 & $python -m mbs db status    # or start / stop
-& $python -m pytest           # 217 tests against a throwaway cluster (four need MBS_LIVE_CAPTURES)
+& $python -m pytest           # 237 tests against a throwaway cluster (four need MBS_LIVE_CAPTURES)
 ```
 
 ## Machine settings
@@ -34,10 +35,14 @@ $python = '<conda envs>\multimodal-server\python.exe'
 | `scanner_driver_dir` | none: the supplied `fx_hs_windows_10_driver_v3.3` folder (H8), for fingerprint enrolment |
 | `scanner_exe` | `scanner/ScannerCapture/bin/Release/net48/ScannerCapture.exe`, built from `scanner/` |
 | `nfiq2_bin` | `local/nfiq2/2.3.0-fix/bin` when it holds `Nfiq2Api.dll`: the NFIQ 2 build of `engines/README.md` |
+| `face_python` | `python.exe` of the `multimodal-face` environment beside the server's, when it exists (H48) |
+| `face_models` | `local/models/face` when it exists: YuNet and SFace, pinned by SHA-256 (`engines/README.md`) |
 
 Fingerprint enrolment also needs the research project environment of `local/research.toml` (H10),
 which runs the engines (`engines/`). Without any of these the server runs as before, says at its start
-what is missing, and answers enrolment requests with `fingerprint_unavailable`.
+what is missing, and answers enrolment requests with `fingerprint_unavailable`. The face settings fall back
+to their defaults when `local/server.toml` does not name them; without them the face routes answer
+`face_unavailable`.
 
 ## Keys and data
 
@@ -103,13 +108,18 @@ what is missing, and answers enrolment requests with `fingerprint_unavailable`.
 | `POST /api/fingerprint/verifications` | user | verify the chosen finger (`{"finger": 1-10, "algorithm": "opencv-sift"}`) against the selected method's three current templates, with H33 quality checks. Streamed events end in `verified` or `failed` (H35, H38) |
 | `GET /api/fingerprint/methods` | user | implemented methods with their threshold, origin, provisional flag and local availability (H38) |
 | `POST /api/fingerprint/identifications` | user | identify a new fingerprint against current active enrolments using `opencv-sift` (default), `pore-sift` or `learned-pore`, with streamed progress ending in `identified` or `failed` (H41, H42) |
+| `GET /api/face/method` | user | SFace's threshold, its origin, whether the face engine is set up, and the enrolment's rules (H48) |
+| `POST /api/face/detect` | user | the faces of one small frame of the live view (`{"image": base64}`, at most 1 MB): boxes, landmarks and scores; nothing is kept |
+| `POST /api/face/checks` | user | one taken image (a PNG of the camera's frame, at most 8 MB): its checks and, when it passes, its aligned face; nothing is kept |
+| `POST /api/face/enrolments` | user | three to six taken images with their times, in order: 201 `saved` when three match each other, otherwise 200 `another`, or `failed` after six |
+| `DELETE /api/face/enrolment` | user | delete the face's current and replaced enrolments with their images and embeddings; 404 when it is not enrolled |
 | `GET /api/admin/accounts`, `POST /api/admin/accounts/{id}/status` | administrator | accounts; disable or enable |
 | `POST /api/admin/administrators`, `GET /api/admin/audit` | administrator | a new administrator; the audit log |
 
 Errors answer `{"error": "<code>"}`; the client turns codes into English or Hebrew text.
 
 Verification uses the existing capture and engine settings. On startup, `serve`
-applies the biometric migrations through `biometric_0004`, preserving enrolled
+applies the biometric migrations through `biometric_0005` (H48), preserving enrolled
 fingers and attempts while updating identification retention (H41).
 The highest of the three scores decides, strictly above the threshold; a result
 is sent only after storage. Its probe is sealed under `mbs/probe/v1`, bound to
@@ -176,6 +186,15 @@ checks cover enrolment, verification and identification with all three methods.
 Search results must equal serial comparison of the same native templates.
 Prepared pore templates are compared with the H10 reference templates.
 Manual validation uses the real scanner in the client.
+
+Face enrolment (H48) keeps nothing between requests: the page sends the images that passed their checks,
+in the order they were taken, and the server checks each again (exactly one face, YuNet's score of at
+least 0.9, the whole face inside the image, at least 112 pixels wide). It compares every pair by
+pgvector's cosine similarity and keeps the three whose lowest pair is highest, when all three pairs are
+above SFace's threshold of 0.363, as H15 does for fingerprints. The kept images are sealed under
+`mbs/sample/v1` with their checks; their embeddings are `vector` values of 128 numbers, unsealed (H14),
+under the SFace model's SHA-256 as their version. A face engine that reports another SFace file is refused
+(`method_version_differs`). Migration `biometric_0005` adds SFace's row to the algorithm table.
 
 Cancellation closes the acquisition worker's standard input (H36). The worker
 finishes its current native call, switches off the illumination (H37),

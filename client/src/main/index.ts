@@ -3,9 +3,10 @@
 import { join, resolve } from 'node:path'
 import { app, BrowserWindow, nativeTheme, session } from 'electron'
 import { registerBridge } from './bridge'
+import { watchDisplays } from './displays'
 import { findResetLink, PROTOCOL, type ResetLink } from './links'
 import type { ServerClient } from './server'
-import { confine, denyPermissions, webPreferences } from './window'
+import { appPageMatcher, confine, permitCamera, webPreferences } from './window'
 
 // During development the server runs on its own (`python -m mbs serve`); its address can be overridden.
 const SERVER_URL = process.env.MBS_SERVER_URL ?? 'http://127.0.0.1:55433'
@@ -68,7 +69,8 @@ if (!app.requestSingleInstanceLock()) {
   app.on('web-contents-created', (_event, contents) => confine(contents))
 
   app.whenReady().then(() => {
-    denyPermissions(session.defaultSession)
+    permitCamera(session.defaultSession, appPageMatcher(process.env.ELECTRON_RENDERER_URL)) // H48
+    watchDisplays()
     server = registerBridge(SERVER_URL)
     if (waiting !== null) server.openLink(waiting)
     openLink(process.argv)

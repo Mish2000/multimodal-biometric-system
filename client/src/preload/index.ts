@@ -7,6 +7,14 @@ const bridge: MbsBridge = {
   call: (route, body, id) => ipcRenderer.invoke('mbs:call', route, body, id),
   setTheme: (theme) => ipcRenderer.send('mbs:theme', theme),
   takeLink: () => ipcRenderer.invoke('mbs:take-link'),
+  displays: () => ipcRenderer.invoke('mbs:displays'),
+  onDisplays: (listener) => {
+    const pass = (_event: unknown, state: Parameters<typeof listener>[0]) => listener(state)
+    ipcRenderer.on('mbs:displays', pass)
+    return () => {
+      ipcRenderer.removeListener('mbs:displays', pass)
+    }
+  },
   onLink: (listener) => {
     const notify = () => listener()
     ipcRenderer.on('mbs:link', notify)

@@ -1,8 +1,9 @@
-"""Machine-specific settings, kept in the git-ignored local/server.toml (H11, H14, H19, H33).
+"""Machine-specific settings, kept in the git-ignored local/server.toml (H11, H14, H19, H33, H48).
 
 The repository is public, so none of its files holds a local path: `python -m mbs setup` writes
-this file with this machine's defaults, and it can be edited afterwards. The fingerprint settings are
-optional: without them the server runs, and fingerprint enrolment answers that it is unavailable.
+this file with this machine's defaults, and it can be edited afterwards. The fingerprint and face settings
+are optional: without them the server runs, and that modality answers that it is unavailable. The face
+settings default to the face environment next to the server's and to local/models/face.
 """
 
 from __future__ import annotations
@@ -18,6 +19,17 @@ LOCAL = REPOSITORY / "local" / "server.toml"
 RESEARCH_LOCAL = REPOSITORY / "local" / "research.toml"  # the research link's machine paths (H10)
 SCANNER_EXE = REPOSITORY / "scanner" / "ScannerCapture" / "bin" / "Release" / "net48" / "ScannerCapture.exe"
 NFIQ2_BIN = REPOSITORY / "local" / "nfiq2" / "2.3.0-fix" / "bin"
+FACE_MODELS = REPOSITORY / "local" / "models" / "face"  # YuNet and SFace from OpenCV Zoo (H48)
+
+
+def face_python_default() -> Path | None:
+    """The multimodal-face environment beside the server's (environments/face.yml)."""
+    candidate = Path(sys.prefix).parent / "multimodal-face" / "python.exe"
+    return candidate if candidate.exists() else None
+
+
+def face_models_default() -> Path | None:
+    return FACE_MODELS if FACE_MODELS.is_dir() else None
 
 
 @dataclass(frozen=True)
@@ -30,6 +42,8 @@ class Config:
     scanner_driver_dir: Path | None = None  # the supplied OEM 3.3 driver folder (H8)
     scanner_exe: Path = SCANNER_EXE  # ScannerCapture, built from scanner/ (H33)
     nfiq2_bin: Path | None = None  # NFIQ 2.3.0 built with NIST's fix (engines/README.md, H33)
+    face_python: Path | None = None  # the face environment's python.exe (H48)
+    face_models: Path | None = None  # the folder with the two pinned ONNX models (H48)
 
     @property
     def postgres_log(self) -> Path:
@@ -48,6 +62,8 @@ def defaults() -> Config:
         key_file=appdata / "multimodal-biometric-system" / "keys.json",
         server_port=55433,
         nfiq2_bin=NFIQ2_BIN if (NFIQ2_BIN / "Nfiq2Api.dll").exists() else None,
+        face_python=face_python_default(),
+        face_models=face_models_default(),
     )
 
 
@@ -68,6 +84,8 @@ def load(path: Path = LOCAL) -> Config:
         scanner_driver_dir=_path(values.get("scanner_driver_dir")),
         scanner_exe=_path(values.get("scanner_exe")) or SCANNER_EXE,
         nfiq2_bin=_path(values.get("nfiq2_bin")),
+        face_python=_path(values.get("face_python")) or face_python_default(),
+        face_models=_path(values.get("face_models")) or face_models_default(),
     )
 
 
@@ -85,6 +103,11 @@ def write(config: Config, path: Path = LOCAL) -> None:
         else '# scanner_driver_dir = "<the supplied fx_hs_windows_10_driver_v3.3 folder>"',
         f'nfiq2_bin = "{config.nfiq2_bin.as_posix()}"' if config.nfiq2_bin
         else '# nfiq2_bin = "<the folder with Nfiq2Api.dll and nist_plain_tir-ink.yaml>"',
+        "# Face (H48): the face environment's python.exe and the folder of the two pinned models.",
+        f'face_python = "{config.face_python.as_posix()}"' if config.face_python
+        else '# face_python = "<the multimodal-face environment>/python.exe"',
+        f'face_models = "{config.face_models.as_posix()}"' if config.face_models
+        else '# face_models = "<the folder with the two OpenCV Zoo models>"',
     ]
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 

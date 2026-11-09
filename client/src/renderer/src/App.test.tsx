@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { StrictMode } from 'react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import type { Account, ApiResult, EnrolmentEvent, Language, MbsBridge, OpenedLink, RouteName, Theme, VerificationEvent, FingerprintAlgorithm, IdentificationEvent } from '../../shared/bridge'
+import type { Account, ApiResult, DisplayState, EnrolmentEvent, Language, MbsBridge, OpenedLink, RouteName, Theme, VerificationEvent, FingerprintAlgorithm, IdentificationEvent } from '../../shared/bridge'
 import { App } from './App'
 import { SessionProvider } from './session'
 
@@ -43,6 +43,14 @@ class FakeServer implements MbsBridge {
   identificationMethods: FingerprintAlgorithm[] = []
   identificationCancels: string[] = []
   private identificationListeners = new Map<string, (event: IdentificationEvent) => void>()
+  // The face (H48): its enrolment state, whether the engine is set up, and deletions asked for.
+  face: { enrolled: boolean; enrolled_at?: string } = { enrolled: false }
+  faceAvailable = true
+  faceDeletes = 0
+
+  displays = async (): Promise<DisplayState> => ({ internalDisplay: false })
+
+  onDisplays = (_listener: (state: DisplayState) => void): (() => void) => () => undefined
 
   identifyFingerprint = async (runId: string, algorithm: FingerprintAlgorithm = 'opencv-sift'): Promise<ApiResult<null>> => {
     this.identifications.push(runId)
@@ -217,9 +225,17 @@ class FakeServer implements MbsBridge {
     switch (route) {
       case 'me': {
         const fingerprint = { enrolled: this.fingers.length > 0, fingers: [...this.fingers].sort((a, b) => a - b) }
-        const modalities = { fingerprint, face: { enrolled: false }, voice: { enrolled: false } }
+        const modalities = { fingerprint, face: this.face, voice: { enrolled: false } }
         return ok({ account: view(me), modalities: me.role === 'user' ? modalities : null })
       }
+      case 'faceMethod':
+        return ok({ code: 'sface', threshold: 0.363, threshold_provisional: false, threshold_origin: "OpenCV's SFace sample, cosine similarity",
+          available: this.faceAvailable, images: 3, most_kept: 6, score_minimum: 0.9, width_minimum: 112, embedding_length: 128 })
+      case 'deleteFace':
+        if (!this.face.enrolled) return no(404, 'not_enrolled')
+        this.face = { enrolled: false }
+        this.faceDeletes++
+        return ok()
       case 'changePassword':
         if (body.current !== me.password) return no(403, 'wrong_password')
         me.password = body.new ?? ''
@@ -634,11 +650,18 @@ const SAVED: EnrolmentEvent = {
   not_kept: [],
 }
 
+// A modality card's link on the home screen.
+async function cardLink(modality: string) {
+  const heading = await screen.findByRole('heading', { name: modality, level: 2 })
+  const hebrew = /[֐-׿]/.test(modality)
+  return within(heading.closest('li')!).getByRole('link', { name: hebrew ? 'פתיחה' : 'Open' })
+}
+
 async function openFingerprint() {
   server.add('dana', 'user')
   open('/sign-in')
   await signIn('dana', 'dana password 1')
-  fireEvent.click(await screen.findByRole('link', { name: 'Open' }))
+  fireEvent.click(await cardLink('Fingerprint'))
   await screen.findByRole('heading', { name: 'Fingerprint' })
 }
 
@@ -721,7 +744,7 @@ describe('fingerprint enrolment (H33)', () => {
     server.add('noa', 'user', { language: 'he' })
     open('/sign-in')
     await signIn('noa', 'noa password 1')
-    fireEvent.click(await screen.findByRole('link', { name: 'פתיחה' }))
+    fireEvent.click(await cardLink('טביעת אצבע'))
     expect(await screen.findByRole('heading', { name: 'טביעת אצבע' })).toBeTruthy()
     expect(screen.getByRole('group', { name: 'יד שמאל' })).toBeTruthy()
   })
@@ -878,7 +901,7 @@ describe('fingerprint verification (H35)', () => {
     fireEvent.click(screen.getByRole('link', { name: 'Home' }))
     await screen.findByRole('heading', { name: /Hello/ })
     expect(server.verificationCancels).toEqual([previous])
-    fireEvent.click(await screen.findByRole('link', { name: 'Open' }))
+    fireEvent.click(await cardLink('Fingerprint'))
     fireEvent.click(within(await screen.findByRole('group', { name: 'Left hand' })).getByRole('button', { name: /Index/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Verify this finger (1:1)' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Start verification' }))
@@ -1091,7 +1114,7 @@ describe('fingerprint identification (H41)', () => {
     const previous = server.identifications[0]!
     fireEvent.click(screen.getByRole('link', { name: 'Home' }))
     expect(server.identificationCancels).toEqual([previous])
-    fireEvent.click(await screen.findByRole('link', { name: 'Open' }))
+    fireEvent.click(await cardLink('Fingerprint'))
     fireEvent.click(await screen.findByRole('button', { name: 'Identify a fingerprint (1:N)' }))
     act(() => server.emitIdentification(IDENTIFIED, previous))
     expect(screen.queryByText('A matching fingerprint was found')).toBeNull()
@@ -1304,5 +1327,55 @@ describe('deleting a finger’s enrolment (H34)', () => {
     fireEvent.click(within(screen.getByRole('group', { name: 'Right hand' })).getByRole('button', { name: 'Thumb' }))
     expect(screen.getByRole('button', { name: 'Enrol this finger' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Delete this finger’s enrolment' })).toBeNull()
+  })
+})
+
+describe('the face (H48)', () => {
+  async function openFace(language: Language = 'en') {
+    server.add('dana', 'user', { language })
+    open('/sign-in')
+    await signIn('dana', 'dana password 1')
+    fireEvent.click(await cardLink(language === 'he' ? 'פנים' : 'Face'))
+  }
+
+  it('opens from its home card; a user who is not enrolled can enrol, and sees SFace and its threshold', async () => {
+    await openFace()
+    expect(await screen.findByText('Not enrolled yet.')).toBeTruthy()
+    const enrol = screen.getByRole('button', { name: 'Enrol my face' }) as HTMLButtonElement
+    expect(enrol.disabled).toBe(false)
+    expect(screen.getByRole('heading', { name: 'SFace' })).toBeTruthy()
+    expect(screen.getByText(/Accepts above 0.363/)).toBeTruthy()
+    expect(screen.getByText(/Verification \(1:1\) and identification \(1:N\) by face come in the next build steps/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Delete the face enrolment' })).toBeNull()
+  })
+
+  it('shows when the face was enrolled, and deletes the enrolment only after a confirmation', async () => {
+    server.face = { enrolled: true, enrolled_at: '2026-11-09T13:00:00+00:00' }
+    await openFace()
+    expect(await screen.findByText(/^Enrolled on .*2026/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Enrol my face again' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete the face enrolment' }))
+    expect(screen.getByRole('alertdialog').textContent).toContain('Delete your face enrolment?')
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(server.faceDeletes).toBe(0)
+    fireEvent.click(screen.getByRole('button', { name: 'Delete the face enrolment' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    expect(await screen.findByText(/The face enrolment was deleted/)).toBeTruthy()
+    expect(server.faceDeletes).toBe(1)
+    expect(await screen.findByText('Not enrolled yet.')).toBeTruthy()
+  })
+
+  it('cannot start an enrolment when the face engine is not set up', async () => {
+    server.faceAvailable = false
+    await openFace()
+    expect(await screen.findByText(/The face engine is not set up on this computer/)).toBeTruthy()
+    expect((screen.getByRole('button', { name: 'Enrol my face' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('speaks Hebrew, right to left', async () => {
+    await openFace('he')
+    expect(await screen.findByText('עוד לא נרשמו.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'רישום הפנים שלי' })).toBeTruthy()
+    expect(document.documentElement.dir).toBe('rtl')
   })
 })

@@ -22,7 +22,8 @@ Out of scope: liveness detection (H6), SD302 images in the system's databases
 One PC runs everything (H11): the researcher's PC with the HiScan PRO, its
 integrated camera and its microphones (all present on 2026-10-19 and reported
 OK by Windows; the camera and microphones are first tried in their
-increments). The server listens on 127.0.0.1 only.
+increments). A USB camera serves too, and the client chooses between the
+cameras itself (H48). The server listens on 127.0.0.1 only.
 
 ## 2. Accounts and roles (H12)
 
@@ -62,7 +63,7 @@ FastAPI server: Python 3.12, its own environment
               fingerprint: OpenCV SIFT, Pore SIFT, Pore CNN
                            (research code through the pinned link, H10),
                            and NFIQ 2's quality score of every capture (H33)
-              face: YuNet detection + SFace recognition
+              face: YuNet detection + SFace recognition (H48, its own environment)
               voice: SpeechBrain ECAPA-TDNN
 ```
 
@@ -277,17 +278,35 @@ flow of 2026-10-18).
 
 ### 5.2 Face
 
-- **Capture:** the integrated camera, through the client.
+- **Capture:** the PC's cameras, through the client (H48): the built-in one
+  or a USB camera, chosen by the client. A camera is known by the USB model in
+  its label; the built-in one faces the user (Windows' panel location). With
+  the lid closed Windows turns the built-in screen off, and the built-in
+  camera, still listed, sends a flat dark picture: it is then tried last, and a
+  second of flat frames marks any camera as covered. Cameras plugged in or out
+  are followed at once. The order is the user's last choice, then a USB
+  camera, then the built-in one; a selector appears when more than one can be
+  used. Both are asked for 1280 x 720 at 30 frames a second. The live view is
+  mirrored and sends a 320-pixel copy of a frame about five times a second for
+  YuNet's face box; frames are never stored. A taken image is the camera's
+  frame as a PNG, unmirrored.
+- **Checks (H48):** exactly one face, YuNet's score of at least 0.9 (its
+  demo's threshold), the whole face inside the image, and at least 112 pixels
+  wide (SFace's input, so no face is enlarged); no standard face quality score
+  is used yet.
 - **Files (H27):** for 1:1 and 1:N only, never for enrolment: JPEG or PNG up
   to 10 MB, at least 240 pixels on the short side and at most 50 million
   pixels, with exactly one face; kept as its pixels, as PNG.
 - **Models:** YuNet for detection (MIT) and SFace for recognition (Apache
-  2.0), from OpenCV Zoo, run with OpenCV in the system's face environment.
-  SFace gives an embedding of fixed length (128 values according to secondary
-  sources; read from the model file when the face engine is built); OpenCV's
-  sample decides "same person" at cosine similarity 0.363 or more. OpenCV Zoo
-  reports 99.4 % accuracy for SFace in its own evaluation.
-- **Enrolment (H17):** three images, three embeddings.
+  2.0), from OpenCV Zoo, pinned by SHA-256 and run with OpenCV 5.0.0 in the
+  face environment (H48). SFace gives an embedding of 128 values, read from
+  the model; OpenCV's sample decides "same person" at cosine similarity 0.363
+  or more. OpenCV Zoo reports 99.4 % accuracy for SFace in its own evaluation.
+- **Enrolment (H17, H48):** three images whose three pairs are all above the
+  threshold, as H15 does for fingerprints: another image is taken until six
+  pass or twelve are taken. The server keeps nothing between requests and
+  checks every image again before it saves. Every face score is pgvector's
+  cosine similarity.
 - **1:1 and 1:N:** the highest cosine similarity over a user's embeddings;
   1:N searches the embeddings with pgvector.
 
@@ -320,7 +339,7 @@ SHA-256.
 | Algorithm choice | one card per algorithm: accuracy, speed, what its template holds and how two templates are compared (H2), in two or three sentences with a small drawing, and whether its threshold is provisional; OpenCV SIFT first, then Pore CNN, Pore SIFT and the fusions (H18); face and voice have one model each, shown on its card without a choice |
 | Fingerprint capture | scanner status, finger and placement guide, "lift the finger" between placements, the captured print and its checks with its NFIQ 2 score (H33), the pair scores of the kept placements |
 | Stored template (H33) | after an enrolment, once: the captures with their checks, OpenCV SIFT's points, one point's 128 numbers in SIFT's 4 x 4 x 8 layout, the whole template as a picture, its row with the sealed value's parts, and the pair scores against the threshold; sent from the server's memory before sealing, kept by the page only while the screen is open |
-| Face capture | live camera view with the detected face box |
+| Face capture | live camera view with the detected face box and what to do next; the camera chosen by the client, with a selector when more than one can be used; after an enrolment, the three aligned faces and their pair scores (H48) |
 | Voice capture | the sentence to read, a level meter and a timer |
 | 1:1 result | the new print beside the enrolled one with lines between matched points or pores, a score gauge marked with the threshold, the decision and the time it took |
 | 1:N result | an animated pass over the enrolled gallery, the ranked candidates with their scores, the top one marked when it passes the threshold |
@@ -385,7 +404,8 @@ docs/      this specification, decisions, validations
 ```
 
 New environments, each with exact versions: the server (Python 3.12,
-FastAPI, a PostgreSQL driver, `cryptography`), face (OpenCV), voice
+FastAPI, a PostgreSQL driver, `cryptography`), face (OpenCV;
+`environments/face.yml`, H48), voice
 (SpeechBrain with PyTorch), PostgreSQL with pgvector, and the client's npm
 packages. Node.js 24 is installed (24.18.0); PostgreSQL is not. PostgreSQL
 and pgvector come from conda-forge, like the research environments (H19). The
@@ -500,3 +520,7 @@ themes during that work.
   from its winning comparison repeated once (5.1, 6).
 - **H46** "Pore CNN" as the display name of the learned pore descriptor;
   identifiers and stored data unchanged (6).
+- **H48** Face enrolment from the PC's cameras: the face environment and the
+  pinned models, the live view and the image checks, three images matching
+  pairwise, pgvector's cosine similarity as every face score, and the camera
+  chosen by the client (1, 3, 5.2, 6, 8).

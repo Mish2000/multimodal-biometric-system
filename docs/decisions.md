@@ -1068,3 +1068,63 @@ and keep a dated copy of each outside GitHub.
   public archive of source code, as a dated copy held by a third party. The
   archive keeps what it saves permanently, which suits repositories that stay
   public.
+
+## 2026-11-09: face enrolment from the PC's cameras
+
+Approved on 2026-11-09. Enrol the face from the PC's own cameras, the first
+step of increment 4 (H17, H20); verification, identification and the files of
+H27 follow as steps of their own.
+
+- **H48** The face engine runs in a new environment, `multimodal-face`, from
+  conda-forge: Python 3.12.16, numpy 2.5.4 and OpenCV 5.0.0 without its GUI,
+  each the newest version published at least 14 days earlier (H23). YuNet
+  (MIT) finds faces and SFace (Apache 2.0) describes one. Both come from OpenCV
+  Zoo and are pinned by SHA-256 (`engines/README.md`); SFace's embedding of 128
+  values is read from the model.
+- The page owns the camera. Its live view is mirrored and sends a 320-pixel
+  copy of a frame about five times a second, so the face box it draws comes
+  from the detector that decides; frames are never stored. A taken image is
+  the camera's frame as a PNG. It must have exactly one face with YuNet's score
+  of at least 0.9 (its demo's threshold), wholly inside the image and at least
+  112 pixels wide (SFace's input, so no face is enlarged). No standard face
+  quality score is used in this step.
+- As H15 does for fingerprints, the enrolment keeps three images whose three
+  pairs are all above SFace's threshold of 0.363, and another image is taken
+  until six pass or twelve are taken. Every face score is pgvector's cosine
+  similarity, the computation that 1:1 and 1:N will use. The images are sealed
+  with their checks in `sample.checks`; the embeddings are unsealed `vector`
+  values under the model's SHA-256 (H14). The server keeps nothing between
+  requests and checks every image again before it saves. A new enrolment
+  replaces the current one, and the face's enrolments can be deleted, as H34
+  does for a finger. Migration `biometric_0005` adds SFace's row.
+- The client chooses the camera itself. A camera is known by the USB model in
+  its label, so a choice survives another port; the built-in camera is the one
+  that faces the user (Windows' panel location). With the laptop's lid closed
+  Windows turns the built-in screen off, which the main process reports; the
+  built-in camera, still listed and sending a flat dark picture, is then tried
+  last, and a second of flat frames marks any camera as covered. Cameras
+  plugged in or out are followed at once. The order is the user's last choice,
+  then a USB camera, then the built-in one; a selector appears when more than
+  one camera can be used. Both are asked for 1280 x 720 at 30 frames a second.
+  The camera is granted to the app's own page, for video only.
+
+Checked on 2026-11-09 with the laptop's lid closed: the USB camera (a
+Microsoft LifeCam HD-3000) gave 1280 x 720 at 30 frames a second; the
+built-in camera, which reaches 2560 x 1440, opened but sent a flat picture
+(a luma spread of 1.2, against 51 to 72 for a room), and Windows reported
+only the two external monitors. OpenCV 5.0.0 ran both models: YuNet found
+one face on the USB camera, at a score of 0.928 and 223 pixels wide, and
+SFace returned 128 values. The full server run passed 237 tests, including
+the four local checks with stored captures; all 126 client tests, type checks
+and the build passed, and 21 engine tests. The built client passed 78
+offscreen checks with the real face engine and Chromium's synthetic camera,
+in both languages and themes. Enrolment of a real face is checked by hand on
+both cameras.
+
+## 2026-11-09: live face enrolment check
+
+The face enrolment (H48) passed a manual check on the researcher's PC. The
+local database holds one face enrolment with three sealed 1280 x 720 images
+of about 1 MB each, every check passed (YuNet scores of 0.945 to 0.948, faces
+230 to 235 pixels wide), and three SFace embeddings of 128 values under the
+pinned model's SHA-256.

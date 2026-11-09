@@ -21,6 +21,12 @@ export const ROUTES = {
   // H34: a finger's position, 1 to 10, in place of {finger}.
   deleteFingerprint: ['DELETE', '/api/fingerprint/fingers/{finger}'],
   fingerprintMethods: ['GET', '/api/fingerprint/methods'],
+  // H48: the face. The page owns the camera; the server finds faces, checks taken images and enrols them.
+  faceMethod: ['GET', '/api/face/method'],
+  detectFace: ['POST', '/api/face/detect'],
+  checkFace: ['POST', '/api/face/checks'],
+  enrolFace: ['POST', '/api/face/enrolments'],
+  deleteFace: ['DELETE', '/api/face/enrolment'],
 } as const satisfies Record<string, readonly ['GET' | 'POST' | 'DELETE', string]>
 
 export type RouteName = keyof typeof ROUTES
@@ -197,8 +203,80 @@ export type IdentificationEvent =
   | ({ type: 'identified' } & IdentificationResult)
   | { type: 'failed'; error: string }
 
+// H48: a face as YuNet reports it, in the pixels of the image it was found in: its box (x, y, width, height),
+// five landmarks (the eyes, the nose tip and the mouth's corners) and the detector's score.
+export interface FaceBox {
+  box: [number, number, number, number]
+  landmarks: Array<[number, number]>
+  score: number
+}
+
+export interface FaceDetection {
+  width: number
+  height: number
+  faces: FaceBox[]
+}
+
+// The checks of a taken image: one_face (count), detector_score (score, minimum), inside, face_size (width, minimum).
+export interface FaceCheck extends Check {
+  count?: number
+  minimum?: number
+  width?: number
+}
+
+export interface FaceCheckResult extends FaceDetection {
+  checks: FaceCheck[]
+  passed: boolean
+  aligned: string | null // SFace's 112 x 112 input, PNG in base64, when the image passed
+}
+
+export interface FaceMethod {
+  code: 'sface'
+  threshold: number
+  threshold_provisional: boolean
+  threshold_origin: string
+  available: boolean
+  images: number
+  most_kept: number
+  score_minimum: number
+  width_minimum: number
+  embedding_length: number
+}
+
+// Images are numbered in the order they were taken, from 1; probe is the later one.
+export interface FacePair {
+  probe: number
+  reference: number
+  score: number
+  accepted: boolean
+}
+
+export interface FaceSaved {
+  status: 'saved'
+  enrolment: { id: string; created_at: string; replaced_previous: boolean }
+  samples: Array<{ id: string; placement: number; captured_at: string; width: number; height: number; sealed_length: number; aligned: string }>
+  templates: Array<{ id: string; sample_id: string; algorithm: string; version: string; embedding_length: number }>
+  pairs: FacePair[]
+  threshold: number
+  not_kept: number[]
+}
+
+export type FaceEnrolmentAnswer =
+  | FaceSaved
+  | { status: 'another'; pairs: FacePair[]; threshold: number; kept: number }
+  | { status: 'failed'; error: string; pairs: FacePair[]; threshold: number; kept: number }
+
+// H48: whether the laptop's own screen is in use. With the lid closed and external monitors on, Windows turns
+// it off, and the built-in camera sees only the inside of the lid.
+export interface DisplayState {
+  internalDisplay: boolean
+}
+
 export interface MbsBridge {
   call<T = unknown>(route: RouteName, body?: unknown, id?: string): Promise<ApiResult<T>>
+  // H48: the built-in screen's state now, and whenever it changes (the lid opened or closed).
+  displays(): Promise<DisplayState>
+  onDisplays(listener: (state: DisplayState) => void): () => void
   setTheme(theme: Theme): void
   // The link that opened the client since the last call, once; `onLink` tells when one arrives.
   takeLink(): Promise<OpenedLink | null>

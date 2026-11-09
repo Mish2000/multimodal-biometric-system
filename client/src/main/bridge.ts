@@ -3,6 +3,7 @@
 // made here.
 import { ipcMain, nativeTheme, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
 import { THEMES, type Theme } from '../shared/bridge'
+import { displayState } from './displays'
 import { ServerClient } from './server'
 
 function fromTopFrame(event: IpcMainEvent | IpcMainInvokeEvent): boolean {
@@ -21,6 +22,8 @@ export function registerBridge(serverUrl: string): ServerClient {
   })
   // The page asks when it starts and whenever the main process says that a link came ('mbs:link').
   ipcMain.handle('mbs:take-link', (event) => (fromTopFrame(event) ? server.takeLink() : null))
+  // H48: whether the built-in screen is on; changes reach the page as 'mbs:displays'.
+  ipcMain.handle('mbs:displays', (event) => (fromTopFrame(event) ? displayState() : null))
   // A fingerprint enrolment (H33): its events go back to the page that started it, one by one.
   ipcMain.handle('mbs:enrol', (event, finger: unknown) => {
     if (!fromTopFrame(event)) return { ok: false, status: 0, error: 'unknown_route' }

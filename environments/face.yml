@@ -1,0 +1,14 @@
+# The face engine's environment (H48), conda-forge only, exact versions: OpenCV 5.0.0 without its GUI
+# (headless) runs YuNet and SFace from OpenCV Zoo. Each version is the newest published at least 14 days
+# before 2026-11-09 (H23); the two OpenCV builds are pinned to those uploaded on 2026-10-21.
+# The full solved set, with SHA-256 per package, is face-win-64.lock:
+#   conda create -n multimodal-face --file environments/face-win-64.lock
+name: multimodal-face
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python=3.12.16
+  - numpy=2.5.4
+  - libopencv=5.0.0=headless_hc8dfccb_11
+  - py-opencv=5.0.0=headless_h4e446eb_11

@@ -5,6 +5,7 @@ client shows (H12)."""
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import Annotated, Literal
 
 import anyio
@@ -14,9 +15,11 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
-from . import accounts, fingerprint, verification, identification
+from . import accounts, face, fingerprint, verification, identification
 from .accounts import AccountError, SignedIn, Throttle
 from .db import Databases
+from .engines import EngineError
+from .face import FaceError, FaceService
 from .fingerprint import FingerprintService
 from .keys import Keys
 from .models import ADMIN, USER
@@ -141,23 +144,68 @@ class FingerprintIdentification(BaseModel):
     algorithm: Literal["opencv-sift", "pore-sift", "learned-pore"] = "opencv-sift"  # H41, H42
 
 
+def _base64_length(size: int) -> int:
+    return (size + 2) // 3 * 4
+
+
+class FaceFrame(BaseModel):
+    """A frame of the camera's live view (H48), made small by the page, in base64."""
+    model_config = {"extra": "forbid"}
+    image: str = Field(max_length=_base64_length(face.LIVE_BYTES))
+
+
+class FaceImage(BaseModel):
+    """An image the user took, as a PNG of the camera's frame, in base64 (H48)."""
+    model_config = {"extra": "forbid"}
+    image: str = Field(max_length=_base64_length(face.IMAGE_BYTES))
+
+
+class FaceTaken(FaceImage):
+    captured_at: datetime
+
+
+class FaceEnrolment(BaseModel):
+    model_config = {"extra": "forbid"}
+    images: list[FaceTaken] = Field(min_length=face.IMAGES, max_length=face.MOST_KEPT)
+
+
 def account_json(account: SignedIn) -> dict:
     return {"id": str(account.id), "username": account.username, "email": account.email, "role": account.role,
             "must_change_password": account.must_change_password, "theme": account.theme,
             "language": account.language}
 
 
-def create_app(databases: Databases, keys: Keys, outbox: Outbox, fingerprints: FingerprintService | None = None) -> FastAPI:
+def create_app(databases: Databases, keys: Keys, outbox: Outbox, fingerprints: FingerprintService | None = None,
+               faces: FaceService | None = None) -> FastAPI:
     # The policy runs for every route of the application, also for routes added later.
     app = FastAPI(title="Multimodal biometric system", docs_url=None, redoc_url=None, openapi_url=None,
                   dependencies=[Depends(policy)])
     app.state.databases, app.state.keys, app.state.throttle = databases, keys, Throttle()
     app.state.fingerprints = fingerprints
+    app.state.faces = faces
 
     @app.exception_handler(AccountError)
     def account_error(request: Request, error: AccountError) -> JSONResponse:
         headers = {"Retry-After": str(int(error.retry_after) + 1)} if error.retry_after else None
         return JSONResponse({"error": error.code}, status_code=error.status, headers=headers)
+
+    @app.exception_handler(FaceError)
+    def face_error(request: Request, error: FaceError) -> JSONResponse:
+        return JSONResponse({"error": error.code, **error.extra}, status_code=error.status)
+
+    def face_service() -> FaceService:
+        service = app.state.faces
+        if service is None:
+            raise FaceError("face_unavailable", 503)
+        return service
+
+    def engine_work(work):
+        """H48: an engine that cannot answer is the server's failure, reported without the image."""
+        try:
+            return work()
+        except EngineError:
+            face.logger.warning("the face engine failed a request")
+            raise FaceError("engine_unavailable", 503) from None
 
     @app.get("/api/health")
     @allow(PUBLIC)
@@ -266,6 +314,45 @@ def create_app(databases: Databases, keys: Keys, outbox: Outbox, fingerprints: F
             raise AccountError("fingerprint_unavailable", 503)
         subject = await run_in_threadpool(accounts.subject_of, databases, keys, account.id)
         return FingerprintResponse(identification.identify(service, databases, keys, subject, body.algorithm))
+
+    # Face (H48): the page owns the camera. It asks where the faces of its live view are, has each taken image
+    # checked at once, then sends the images that passed to be enrolled; the server keeps nothing between
+    # these requests and checks everything again before it saves.
+    @app.get("/api/face/method")
+    @allow(USER)
+    def face_method() -> dict:
+        return face.method(databases, app.state.faces)
+
+    @app.post("/api/face/detect")
+    @allow(USER)
+    def detect_face(body: FaceFrame) -> dict:
+        service = face_service()
+        image = face.decode_image(body.image, face.LIVE_BYTES)
+        return engine_work(lambda: face.detect(service, image))
+
+    @app.post("/api/face/checks")
+    @allow(USER)
+    def check_face(body: FaceImage) -> dict:
+        service = face_service()
+        image = face.decode_image(body.image, face.IMAGE_BYTES)
+        return engine_work(lambda: face.check(service, image))
+
+    @app.post("/api/face/enrolments")
+    @allow(USER)
+    def enrol_face(body: FaceEnrolment, account: SignedIn = Depends(signed_in)) -> JSONResponse:
+        service = face_service()
+        images = [(face.decode_image(taken.image, face.IMAGE_BYTES), taken.captured_at) for taken in body.images]
+        subject = accounts.subject_of(databases, keys, account.id)
+        result = engine_work(lambda: face.enrol(service, databases, keys, subject, images))
+        return JSONResponse(result, status_code=201 if result["status"] == "saved" else 200)
+
+    # As H34 for a finger: the face's enrolment is erased with its images and embeddings.
+    @app.delete("/api/face/enrolment", status_code=204)
+    @allow(USER)
+    def delete_face(account: SignedIn = Depends(signed_in)) -> None:
+        subject = accounts.subject_of(databases, keys, account.id)
+        if not face.delete_face(databases, subject):
+            raise AccountError("not_enrolled", 404)
 
     @app.get("/api/admin/accounts")
     @allow(ADMIN)

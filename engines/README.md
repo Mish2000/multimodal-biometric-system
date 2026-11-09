@@ -6,7 +6,8 @@ between requests. A message is one line of JSON with `length` (and `parts`
 when the data has several), followed by its bytes (`protocol.py`, standard
 library only). The server runs OpenCV SIFT and NFIQ 2 in the research project
 environment, Pore SIFT in its existing research environment, and Pore CNN in the research GPU environment.
-They add no package.
+They add no package. The face engine runs in its own environment,
+`multimodal-face` (`environments/face.yml`, H48).
 
 | Engine | Operations | Decision |
 | --- | --- | --- |
@@ -14,6 +15,7 @@ They add no package.
 | `nfiq2_quality.py` | `quality` of a PNG: NIST's NFIQ 2.3 score, 0 to 100, of a 500 ppi copy made in memory | H33 |
 | `pore_sift.py` | `extract` a native PNG to the research's NPZ template; `compare` two templates by its basic matcher, with the research's detector, NMS and descriptor functions | H10, H38 |
 | `learned_pore.py` | `extract` a native PNG and shared pore coordinates to the second model's native float16 NPY template; `compare` by the research's batched matcher | H6, H10, H39 |
+| `face.py` | `detect` the faces of an image: boxes, five landmarks and YuNet's scores; `extract` for exactly one face: the image again as a PNG of its pixels, the aligned 112 x 112 face and SFace's 128 float32 values | H48 |
 
 Pore SIFT starts on demand. Its short configuration check runs in the research
 project Python, which can read the research TOML files and verify the pin.
@@ -95,6 +97,33 @@ library depends only on `KERNEL32.dll`, like the released one. On 2026-11-05
 this build gave, from memory, exactly the released tool's scores on the
 researcher's 40 captures and on damaged copies of them.
 
+## Face
+
+The face engine uses two models from [OpenCV Zoo](https://github.com/opencv/opencv_zoo), each pinned by
+SHA-256; the engine refuses any other file. They are kept in the git-ignored `local/models/face`, or in
+the folder named by `face_models` in `local/server.toml`:
+
+| Model | Size | SHA-256 | License |
+| --- | --- | --- | --- |
+| `face_detection_yunet_2023mar.onnx` (YuNet) | 232,589 bytes | `8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4` | MIT |
+| `face_recognition_sface_2021dec.onnx` (SFace) | 38,696,353 bytes | `0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79` | Apache 2.0 |
+
+OpenCV Zoo keeps them with Git LFS, and its Hugging Face copies have the same hashes:
+
+```bash
+mkdir -p local/models/face
+curl -L -o local/models/face/face_detection_yunet_2023mar.onnx https://media.githubusercontent.com/media/opencv/opencv_zoo/f12e12798e8314f7c074a6656816c048dcc95b7a/models/face_detection_yunet/face_detection_yunet_2023mar.onnx
+curl -L -o local/models/face/face_recognition_sface_2021dec.onnx https://media.githubusercontent.com/media/opencv/opencv_zoo/ba91a3b91d00d76e86540d4013f944bd6b514e39/models/face_recognition_sface/face_recognition_sface_2021dec.onnx
+```
+
+YuNet finds faces at its demo's threshold of 0.9; SFace aligns one face from its five landmarks to 112 x
+112 pixels and describes it with 128 values, a length the engine reads from the model when it starts. An
+image is decoded from memory by its content; data that is not an image, or that has more than 50 million
+pixels, is answered as `invalid`, so the server can tell a refused image from a failed engine. OpenCV's
+own messages are limited to errors, so nothing but the protocol reaches standard output. On 2026-11-09,
+with OpenCV 5.0.0, YuNet took about 20 ms on a 1280 x 720 frame and 2 ms on the live view's 320-pixel
+copy, and SFace about 3 ms per face.
+
 ## Tests
 
 ```bash
@@ -104,5 +133,8 @@ PY -m pytest engines -p no:cacheprovider
 
 Synthetic ridge images only. The OpenCV SIFT tests need the research checkout
 of `local/research.toml`; the NFIQ 2 test needs the library, named by
-`MBS_NFIQ2_BIN` or `nfiq2_bin` in `local/server.toml`. Tests whose
-requirements are missing are skipped.
+`MBS_NFIQ2_BIN` or `nfiq2_bin` in `local/server.toml`. The face tests
+(`test_face.py`) use synthetic images without a face: they start the engine in the `multimodal-face`
+environment beside the research one (or `MBS_FACE_PYTHON`) with the models of `local/models/face` (or
+`MBS_FACE_MODELS`); faces themselves are tried on the camera by hand. Tests whose requirements are missing
+are skipped.

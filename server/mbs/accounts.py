@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session as DbSession
 from . import keys as keyring
 from . import national_id, outbox, passwords, phones
 from .db import Databases
+from .face import current_enrolment as current_face
 from .fingerprint import enrolled_fingers
 from .keys import Keys
 from .models import (ACTIVE, ADMIN, DISABLED, EMAIL, LANGUAGES, SMS, THEMES, USER, Account, AuditEntry,
@@ -340,13 +341,17 @@ def complete_reset(databases: Databases, throttle: Throttle, token: str, new: st
 
 
 def modalities(databases: Databases, keys: Keys, account: SignedIn) -> dict[str, dict] | None:
-    """Enrolment per modality for the home screen (H15), with the enrolled fingers (H33); administrator
-    accounts have none (H12). Face and voice arrive with increments 4 and 5."""
+    """Enrolment per modality for the home screen (H15), with the enrolled fingers (H33) and when the face was
+    enrolled (H48); administrator accounts have none (H12). The voice arrives with increment 5."""
     if account.role != USER:
         return None
-    fingers = enrolled_fingers(databases, subject_of(databases, keys, account.id))
+    subject = subject_of(databases, keys, account.id)
+    fingers = enrolled_fingers(databases, subject)
     states: dict[str, dict] = {modality: {"enrolled": False} for modality in MODALITIES}
     states["fingerprint"] = {"enrolled": bool(fingers), "fingers": fingers}
+    face = current_face(databases, subject)
+    if face is not None:
+        states["face"] = {"enrolled": True, "enrolled_at": face.created_at.astimezone(timezone.utc).isoformat()}
     return states
 
 

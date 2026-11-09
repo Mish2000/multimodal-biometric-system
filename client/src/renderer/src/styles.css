@@ -1018,3 +1018,17 @@ button.danger {
 .match-toggle input { width: auto; }
 .match-picker { display: flex; flex: 1 1 17rem; flex-direction: column; gap: 0.4rem; }
 .match-picker input { width: 100%; accent-color: var(--accent); }
+
+/* H48: the camera's live view, mirrored as people expect of a camera that faces them; the found face is drawn
+   over it in the frame's own pixels, so the overlay is mirrored with the picture. */
+.camera { margin-block: 1rem; }
+.camera-view { position: relative; width: min(100%, 640px); aspect-ratio: 16 / 9; background: #000; border-radius: var(--radius); overflow: hidden; }
+.camera-view video,
+.camera-view canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; transform: scaleX(-1); }
+.camera-status { position: absolute; inset: auto 0 0 0; margin: 0; padding: 0.5rem; color: #fff; text-align: center; }
+.camera-picker { margin-block: 0.75rem; }
+.camera-picker select { width: auto; margin-inline-start: 0.5rem; }
+.guidance { width: min(100%, 640px); }
+.faces img { width: 112px; height: 112px; border-radius: var(--radius); }
+.method-card h2 { direction: ltr; text-align: start; }
+.face-enrolment .prompt:empty { padding: 0; margin: 0; border: 0; background: none; }

@@ -7,11 +7,12 @@ no creation time for them, so its rows cannot be matched to accounts by when the
 
 from __future__ import annotations
 
+import struct
 import uuid
 from datetime import datetime
 
 from sqlalchemy import (BigInteger, Boolean, CheckConstraint, DateTime, Double, ForeignKey, Identity, Index, Integer,
-                        LargeBinary, SmallInteger, String, UniqueConstraint, Uuid, text)
+                        LargeBinary, SmallInteger, String, UniqueConstraint, Uuid, cast, text)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql.base import ischema_names
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -25,12 +26,34 @@ SMS, EMAIL = "sms", "email"  # where a link to reset a password is sent (H32)
 
 
 class Vector(UserDefinedType):
-    """pgvector's `vector`, of any length (face and voice embeddings, H14); no Python package is needed for it."""
+    """pgvector's `vector`, of any length (face and voice embeddings, H14); no Python package is needed for it.
+    Python sees a list of floats; PostgreSQL gets pgvector's text form, cast to the type. Nine significant
+    digits carry a float32 value exactly, and pgvector stores float32 (H48)."""
 
     cache_ok = True
 
     def get_col_spec(self, **kw) -> str:
         return "vector"
+
+    def bind_expression(self, bindvalue):
+        return cast(bindvalue, self)
+
+    def bind_processor(self, dialect):
+        return lambda value: None if value is None else vector_text(value)
+
+    def result_processor(self, dialect, coltype):
+        return lambda value: None if value is None else vector_values(value)
+
+
+def vector_text(values) -> str:
+    """pgvector's text form of an embedding, as float32 values."""
+    return "[" + ",".join(format(float(v), ".9g") for v in values) + "]"
+
+
+def vector_values(stored: str) -> list[float]:
+    """pgvector's text form back to its float32 values; pgvector writes the shortest text of each."""
+    parts = stored.strip("[]").split(",")
+    return list(struct.unpack(f"<{len(parts)}f", struct.pack(f"<{len(parts)}f", *map(float, parts))))
 
 
 ischema_names["vector"] = Vector  # so that reading the schema back knows the type too

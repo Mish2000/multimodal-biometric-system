@@ -246,7 +246,7 @@ erDiagram
 | `threshold_origin` | `varchar(120)` | where the value comes from, shown with it |
 | `threshold_changed_at` | `timestamptz` | null until an administrator changes the value; who changed it is in the audit log |
 
-The first rows (the fingerprint ones exist since H33; face and voice join when their models are pinned):
+The first rows (the fingerprint ones exist since H33 and SFace's since H48; the voice joins when its model is pinned):
 
 | `code` | `threshold` | Provisional | Origin |
 | --- | --- | --- | --- |
@@ -283,11 +283,11 @@ One current enrolment per subject, modality and finger: a unique index over
 | `enrolment_id` | `uuid` | references `enrolment.id` |
 | `placement` | `smallint` | the order it was taken in, from 1; unique within the enrolment |
 | `captured_at` | `timestamptz` | |
-| `media_type` | `varchar(16)` | `image/png` for fingerprints (1000 × 1000, 8-bit gray) and faces (the camera's frame); `audio/wav` for voices (16 kHz, mono, 16-bit) |
+| `media_type` | `varchar(16)` | `image/png` for fingerprints (1000 × 1000, 8-bit gray) and faces (the camera's frame, asked for at 1280 × 720, H48); `audio/wav` for voices (16 kHz, mono, 16-bit) |
 | `width`, `height` | `smallint` | images only |
 | `ppi` | `smallint` | fingerprints only: 1000 (H7) |
 | `duration_ms` | `integer` | voices only |
-| `checks` | `jsonb` | fingerprints only: H7's four checks, each with its measured value and whether it passed, then NFIQ 2's quality score against its minimum (H33) |
+| `checks` | `jsonb` | fingerprints: H7's four checks, each with its measured value and whether it passed, then NFIQ 2's quality score against its minimum (H33); faces: H48's four checks (one face, YuNet's score, the whole face inside, its width), each with its value; null for voices |
 | `data` | `bytea` | the sealed file |
 
 An enrolment keeps the three captures that pass its checks: H7's for every
@@ -305,7 +305,7 @@ of a fingerprint enrolment can read 1, 2 and 4.
 | `version` | `varchar(64)` | the method's version when it was made, so templates of an older version can be found and made again from their samples |
 | `created_at` | `timestamptz` | |
 | `data` | `bytea` | fingerprints: the sealed template, about 4.3 MB for OpenCV SIFT, 0.83 MB for Pore SIFT and 0.41 MB for Pore CNN (H10) |
-| `embedding` | `vector` | faces and voices: the embedding, unsealed because pgvector cannot search sealed vectors (H14); 128 values for SFace (to be read from the model file, 5.2) and 192 for ECAPA-TDNN |
+| `embedding` | `vector` | faces and voices: the embedding, unsealed because pgvector cannot search sealed vectors (H14); 128 values for SFace (read from the model, H48) and 192 for ECAPA-TDNN |
 
 Exactly one of `data` and `embedding` is set; one template per sample and
 algorithm (unique). Fusion makes no template of its own: it combines the
@@ -375,8 +375,8 @@ enrolled two fingers, the face and the voice therefore has:
 
 A fingerprint enrolment takes about 18 MB: three captures of about 330 KB
 (the mean of the second set, H9), each with templates of 5.5 MB. A voice
-recording of four seconds is about 128 KB, an embedding under 1 KB; the size
-of a face image is known once the camera is tried (increment 4).
+recording of four seconds is about 128 KB, an embedding under 1 KB; a face
+image, a 1280 × 720 PNG, is about 1 MB sealed (the first face enrolment, H48).
 
 ## Limits
 

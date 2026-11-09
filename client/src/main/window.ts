@@ -18,3 +18,29 @@ export function denyPermissions(session: Session): void {
   session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false))
   session.setPermissionCheckHandler(() => false)
 }
+
+// H48: the face needs the camera: video only, and only for the app's own page. The microphone waits for the
+// voice (increment 5), and every other permission stays refused.
+export function permitCamera(session: Session, appPage: (url: string) => boolean): void {
+  session.setPermissionRequestHandler((contents, permission, callback, details) => {
+    const types = (details as { mediaTypes?: string[] }).mediaTypes ?? []
+    const url = (details as { requestingUrl?: string }).requestingUrl ?? contents.getURL()
+    callback(permission === 'media' && types.length > 0 && types.every((type) => type === 'video') && appPage(url))
+  })
+  session.setPermissionCheckHandler((_contents, permission, requestingOrigin, details) =>
+    permission === 'media' && (details as { mediaType?: string }).mediaType === 'video' && appPage(requestingOrigin),
+  )
+}
+
+// The app's page: its built files, or the development server's origin while developing.
+export function appPageMatcher(devServer: string | undefined): (url: string) => boolean {
+  if (!devServer) return (url) => url.startsWith('file://')
+  const origin = new URL(devServer).origin
+  return (url) => {
+    try {
+      return new URL(url).origin === origin
+    } catch {
+      return false
+    }
+  }
+}
