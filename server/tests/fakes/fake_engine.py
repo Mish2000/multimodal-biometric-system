@@ -59,7 +59,7 @@ def compare(_header, parts):
         assert len(parts) == (4 if view else 2) and all(part.startswith(b"LEARNED:") for part in parts[:2])
     probe, reference = (p.decode().split(":", 1)[1] for p in parts[:2])
     if LEARNED and view:
-        # H44: the pores each learned template was described from, the probe's first.
+        # H44: the pores each Pore CNN template was described from, the probe's first.
         assert parts[2:] == [b"PORE:" + probe.encode(), b"PORE:" + reference.encode()], parts[2:]
     same, other = (30, 2) if LEARNED else (45, 3) if PORE else (90, 5)
     score = same if probe[0] == reference[0] else other

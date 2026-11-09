@@ -44,7 +44,7 @@ def test_pore_sift_pairs_come_from_every_scoring_comparison(fp_client, script, s
 @pytest.mark.parametrize("stored_pores", [True, False])
 def test_learned_pairs_repeat_the_winning_comparison_with_its_pores(fp_client, script, service, monkeypatch, stored_pores):
     if stored_pores:
-        add_pore(service)  # the enrolment then stores Pore SIFT templates, whose points the learned ones reuse
+        add_pore(service)  # the enrolment then stores Pore SIFT templates, whose points the Pore CNN ones reuse
     token = enrolled(fp_client, script)
     add_learned(service)
     detections, learned = observe(monkeypatch, service.pore), observe(monkeypatch, service.learned)

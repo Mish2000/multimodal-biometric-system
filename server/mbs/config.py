@@ -113,7 +113,7 @@ def pore_python() -> Path | None:
 
 
 def learned_python() -> Path | None:
-    """H39: the existing research runtime of the second trained descriptor."""
+    """H39: the existing research runtime of Pore CNN."""
     if not RESEARCH_LOCAL.exists():
         return None
     with open(RESEARCH_LOCAL, "rb") as source:

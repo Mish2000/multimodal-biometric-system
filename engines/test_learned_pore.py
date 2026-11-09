@@ -14,7 +14,7 @@ import protocol
 def test_learned_templates_and_scores_equal_the_research_functions(tmp_path):
     link = research_link.load()
     if not link.gpu_python.exists():
-        pytest.skip("the learned descriptor runtime is unavailable")
+        pytest.skip("Pore CNN runtime is unavailable")
     coordinates = np.array([[0, 0], [16, 16], [500, 500], [983, 983], [984, 984], [999, 999]], np.int32)
     buffer = io.BytesIO()
     np.savez(buffer, points=coordinates)

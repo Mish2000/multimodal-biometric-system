@@ -46,7 +46,7 @@ def test_pore_templates_and_scores_equal_the_research_worker(tmp_path):
             with np.load(features / f"{image['image_id']}.npz") as expected:
                 assert np.array_equal(actual_points, expected["points"])
                 assert np.array_equal(actual_descriptors, expected["descriptors"])
-            # H39: detection alone returns the exact same points for the learned descriptor.
+            # H39: detection alone returns the exact same points for Pore CNN.
             detected, coordinate_parts = ask(engine, {"op": "detect"}, Path(image["path"]).read_bytes())
             with np.load(io.BytesIO(coordinate_parts[0]), allow_pickle=False) as coordinates:
                 assert detected["ok"] and np.array_equal(coordinates["points"], actual_points)

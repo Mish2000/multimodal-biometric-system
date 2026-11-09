@@ -915,7 +915,7 @@ describe('fingerprint verification (H35)', () => {
 })
 
 describe('learned verification and generic enrolment clarity (H39)', () => {
-  it.each(['en', 'he'] as const)('selects the learned method before capture and explains preparation and its result in %s', async (language) => {
+  it.each(['en', 'he'] as const)('selects Pore CNN before capture and explains preparation and its result in %s', async (language) => {
     server.current = server.add('dana', 'user', { language })
     server.fingers = [7]
     server.verification = [{ type: 'preparing_templates', completed: 1, total: 3 }]
@@ -925,10 +925,10 @@ describe('learned verification and generic enrolment clarity (H39)', () => {
     expect(screen.queryByRole('radio')).toBeNull()
     fireEvent.click(within(hands).getByRole('button', { name: he ? /מורה/ : /Index/ }))
     fireEvent.click(screen.getByRole('button', { name: he ? 'אימות האצבע הזו (1:1)' : 'Verify this finger (1:1)' }))
-    fireEvent.click(await screen.findByRole('radio', { name: he ? 'המתאר הנלמד' : 'Learned pore descriptor' }))
+    fireEvent.click(await screen.findByRole('radio', { name: 'Pore CNN' }))
     expect(server.verifications).toEqual([])
     fireEvent.click(screen.getByRole('button', { name: he ? 'התחלת האימות' : 'Start verification' }))
-    expect(await screen.findByText(he ? 'יוצרים תבניות המתאר הנלמד (1 מתוך 3)…' : 'Creating Learned pore descriptor templates (1 of 3)…')).toBeTruthy()
+    expect(await screen.findByText(he ? 'יוצרים תבניות Pore CNN (1 מתוך 3)…' : 'Creating Pore CNN templates (1 of 3)…')).toBeTruthy()
     expect(server.verifications[0]?.algorithm).toBe('learned-pore')
     act(() => server.emitVerification({ ...VERIFIED, algorithm: 'learned-pore', score: 30, threshold: 21, threshold_provisional: true }))
     expect(await screen.findByRole('heading', { name: he ? 'נמצאה התאמה לטביעת האצבע' : 'Fingerprint matches' })).toBeTruthy()
@@ -941,7 +941,7 @@ describe('learned verification and generic enrolment clarity (H39)', () => {
     )
     const previous = server.verifications[0]!.runId
     fireEvent.click(change)
-    expect(await screen.findByRole('radio', { name: he ? 'המתאר הנלמד' : 'Learned pore descriptor' })).toHaveProperty('checked', true)
+    expect(await screen.findByRole('radio', { name: 'Pore CNN' })).toHaveProperty('checked', true)
     expect(screen.getByText(he ? 'מורה שמאל' : 'left index')).toBeTruthy()
     expect(server.verifications).toHaveLength(1)
     expect(server.verificationCancels).toEqual([])
@@ -960,7 +960,7 @@ describe('learned verification and generic enrolment clarity (H39)', () => {
     await openFingerprint()
     fireEvent.click(within(screen.getByRole('group', { name: 'Left hand' })).getByRole('button', { name: /Index/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Verify this finger (1:1)' }))
-    fireEvent.click(await screen.findByRole('radio', { name: 'Learned pore descriptor' }))
+    fireEvent.click(await screen.findByRole('radio', { name: 'Pore CNN' }))
     fireEvent.click(screen.getByRole('button', { name: 'Back to the fingers' }))
     expect(screen.getByRole('button', { name: 'Enrol this finger again' })).toBeTruthy()
     expect(server.verifications).toEqual([])
@@ -984,14 +984,14 @@ describe('learned verification and generic enrolment clarity (H39)', () => {
     fireEvent.click(within(screen.getByRole('group', { name: 'Left hand' })).getByRole('button', { name: /Index/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Enrol this finger' }))
     await screen.findByRole('heading', { name: 'How your fingerprint is stored' })
-    expect(screen.getByText('Templates stored for: OpenCV SIFT, Pore SIFT, Learned pore descriptor.')).toBeTruthy()
+    expect(screen.getByText('Templates stored for: OpenCV SIFT, Pore SIFT, Pore CNN.')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'The points' }))
     expect(screen.getByText('Template demonstration: OpenCV SIFT')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Why it was accepted' }))
     expect(screen.getByRole('heading', { name: 'Enrolment check: OpenCV SIFT' })).toBeTruthy()
     const pore = screen.getByRole('region', { name: 'Pore SIFT' })
     expect(within(pore).getAllByText('not above 37')).toHaveLength(3)
-    const learned = screen.getByRole('region', { name: 'Learned pore descriptor' })
+    const learned = screen.getByRole('region', { name: 'Pore CNN' })
     expect(within(learned).getAllByText('above 21: match')).toHaveLength(3)
     expect(screen.queryByRole('radio')).toBeNull()
   })
@@ -1134,7 +1134,7 @@ describe('pore-method identification (H42)', () => {
     ['pore-sift', 'en'], ['learned-pore', 'en'], ['pore-sift', 'he'], ['learned-pore', 'he'],
   ] as const)('chooses %s in %s, prepares templates and changes method before a fresh scan', async (algorithm, language) => {
     const he = language === 'he'
-    const name = algorithm === 'pore-sift' ? 'Pore SIFT' : he ? 'המתאר הנלמד' : 'Learned pore descriptor'
+    const name = algorithm === 'pore-sift' ? 'Pore SIFT' : 'Pore CNN'
     const threshold = algorithm === 'pore-sift' ? 37 : 21
     const score = algorithm === 'pore-sift' ? 45 : 30
     server.current = server.add('dana', 'user', { language })
@@ -1176,7 +1176,7 @@ describe('pore-method identification (H42)', () => {
     await openFingerprint()
     fireEvent.click(screen.getByRole('button', { name: 'Identify a fingerprint (1:N)' }))
     expect(screen.getByRole('radio', { name: 'Pore SIFT' })).toHaveProperty('disabled', true)
-    expect(screen.getByRole('radio', { name: 'Learned pore descriptor' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('radio', { name: 'Pore CNN' })).toHaveProperty('disabled', true)
     expect(screen.getByRole('radio', { name: 'OpenCV SIFT' })).toHaveProperty('checked', true)
     expect(screen.getByRole('button', { name: 'Start identification' })).toHaveProperty('disabled', false)
     expect(server.identifications).toEqual([])
@@ -1187,9 +1187,9 @@ describe('pore-method identification (H42)', () => {
     server.identification = [{ type: 'preparing_templates', algorithm: 'learned-pore', completed: 2, total: 6 }]
     await openFingerprint()
     fireEvent.click(screen.getByRole('button', { name: 'Identify a fingerprint (1:N)' }))
-    fireEvent.click(screen.getByRole('radio', { name: 'Learned pore descriptor' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Pore CNN' }))
     fireEvent.click(screen.getByRole('button', { name: 'Start identification' }))
-    await screen.findByText('Creating Learned pore descriptor templates (2 of 6)…')
+    await screen.findByText('Creating Pore CNN templates (2 of 6)…')
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     await screen.findByText('Identification cancelled.')
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
@@ -1252,7 +1252,7 @@ describe('pore match illustrations (H44)', () => {
   coordinates.forEach((value, index) => new DataView(data.buffer).setFloat32(index * 4, value, true))
   const encoded = btoa(String.fromCharCode(...data))
 
-  it.each([['pore-sift', 'Pore SIFT', 'en'], ['learned-pore', 'המתאר הנלמד', 'he']] as const)(
+  it.each([['pore-sift', 'Pore SIFT', 'en'], ['learned-pore', 'Pore CNN', 'he']] as const)(
     'names the pores of %s and how they are counted', async (algorithm, method, language) => {
       const he = language === 'he'
       server.current = server.add('dana', 'user', { language })

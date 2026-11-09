@@ -5,8 +5,8 @@ answers one request at a time on standard input and output, and keeps nothing
 between requests. A message is one line of JSON with `length` (and `parts`
 when the data has several), followed by its bytes (`protocol.py`, standard
 library only). The server runs OpenCV SIFT and NFIQ 2 in the research project
-environment, Pore SIFT in its existing research environment, and the learned
-descriptor in the research GPU environment. They add no package.
+environment, Pore SIFT in its existing research environment, and Pore CNN in the research GPU environment.
+They add no package.
 
 | Engine | Operations | Decision |
 | --- | --- | --- |
@@ -28,8 +28,8 @@ templates and 435 H10 scores exactly.
 
 H39 also exposes `detect`, returning the same integer coordinates in memory
 without computing SIFT descriptors. New enrolments pass the existing Pore
-SIFT template's coordinates to the learned descriptor, detecting once per
-capture. The learned engine verifies the research pin and model hash, calls
+SIFT template's coordinates to Pore CNN, detecting once per
+capture. The Pore CNN engine verifies the research pin and model hash, calls
 the unchanged 32 x 32 window selector and description function, then stores
 and scores half-precision descriptors exactly as H10 does. Templates and
 all 435 second-set scores were reproduced exactly. No coordinate or capture
@@ -54,7 +54,7 @@ the pore pairs that their score counts: mutual nearest descriptors that pass
 the 0.7 ratio check, with no geometric check. Pore SIFT observes the list
 returned by the pinned matcher's `find_correspondences` through a scoped
 binding and maps its probe and reference indices to the template's (row,
-column) pores as (x, y). A learned template holds descriptors only, so its
+column) pores as (x, y). A Pore CNN template holds descriptors only, so its
 viewed comparison also takes the pores that each template was described
 from. The engine scores with the unchanged `batched_scores`, recomputes the
 counted rows with the same operations for that one reference, and finds each

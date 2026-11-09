@@ -1,4 +1,4 @@
-"""The research's second trained pore descriptor, in its existing runtime (H6, H10, H13, H39, H44).
+"""Pore CNN, the research's trained pore network, in its existing runtime (H6, H10, H13, H39, H44).
 
 Pore coordinates come from the shared detector, supplied in memory by the server. The unchanged
 research functions select 32 x 32 windows, describe them and compare native float16 NPY templates.
@@ -32,7 +32,7 @@ class LearnedPore:
         research_link.verify(link)
         research_link.verify_package(link, fpl3.__file__)
         if not Path(sys.executable).samefile(link.gpu_python):
-            raise RuntimeError("the learned descriptor must run in its pinned research environment")
+            raise RuntimeError("Pore CNN must run in its pinned research environment")
         self.version, self.d, self.torch = link.commit, descriptor, torch
         self.net = descriptor.DescriptionNet(None).to(descriptor.DEVICE)
         self.net.load_state_dict(torch.load(link.files["learned_descriptor_model"][0],

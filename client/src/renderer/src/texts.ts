@@ -103,7 +103,7 @@ const en = {
     methodDescriptions: {
       'opencv-sift': 'Stores distinctive points and 128 numbers around each point. Matches the descriptions and checks their geometric alignment.',
       'pore-sift': 'Detects sweat pores and stores 128 numbers around each pore. Counts mutual matches between their descriptions.',
-      'learned-pore': 'Uses the shared sweat-pore detector. The second trained model turns a 32 × 32 window around each pore into 128 numbers, then counts mutual matches.',
+      'learned-pore': 'Uses the shared sweat-pore detector. A small convolutional neural network (CNN), trained in this research, turns a 32 × 32 window around each pore into 128 numbers. The method then counts mutual matches.',
     },
     methodAccuracy: {
       'opencv-sift': 'SD302 pair comparisons on other scanners, 70.8% / 68.1% true accepts at a 0.1% false-accept target (RxJ / QxJ).',
@@ -118,7 +118,7 @@ const en = {
     methodComparison: {
       'opencv-sift': 'OpenCV SIFT compares the new capture with the three stored templates of this finger. The highest score decides.',
       'pore-sift': 'Pore SIFT compares the new capture with the three stored pore templates of this finger. The highest number of mutually matched pores decides.',
-      'learned-pore': 'The learned pore descriptor compares the new capture with this finger’s three stored learned templates. The highest number of mutually matched pores decides.',
+      'learned-pore': 'Pore CNN compares the new capture with this finger’s three stored Pore CNN templates. The highest number of mutually matched pores decides.',
     },
     judge: 'Enrolment uses OpenCV SIFT to check that the three placements are the same finger for every comparison method.',
     provisional: 'provisional threshold',
@@ -230,7 +230,7 @@ const en = {
       } as Record<string, string>,
     },
     matches: {
-      // H43: OpenCV SIFT keypoints. H44: the pores of Pore SIFT and the learned descriptor.
+      // H43: OpenCV SIFT keypoints. H44: the pores of Pore SIFT and Pore CNN (H46).
       points: {
         title: 'Point matches in this comparison',
         explanation: (placement: number, count: number) => `Stored placement ${placement} has the highest score. That score counts ${count} matching point pairs in this comparison.`,
@@ -321,7 +321,7 @@ const en = {
     enrolmentBox: 'enrolment',
     sampleBox: (placement: number) => `sample, placement ${placement}`,
     pendingMethod: 'Templates can be prepared from the same captures when this method becomes available.',
-    methodNames: { 'opencv-sift': 'OpenCV SIFT', 'pore-sift': 'Pore SIFT', 'learned-pore': 'Learned pore descriptor' } as Record<string, string>,
+    methodNames: { 'opencv-sift': 'OpenCV SIFT', 'pore-sift': 'Pore SIFT', 'learned-pore': 'Pore CNN' } as Record<string, string>,
     acceptedText: (threshold: number) => `Every pair of the three captures was compared with OpenCV SIFT, the later one against the earlier. Each score is above the threshold of ${threshold}, so they are the same finger and the enrolment was kept.`,
     notKept: (placements: string) => `Placement ${placements} did not match the others and was not kept.`,
   },
@@ -490,7 +490,7 @@ const he: Texts = {
     methodDescriptions: {
       'opencv-sift': 'שומרת נקודות בולטות ו־128 מספרים סביב כל נקודה. מחפשת תיאורים דומים ובודקת שהמיקומים מתיישרים גאומטרית.',
       'pore-sift': 'מאתרת נקבוביות זיעה ושומרת 128 מספרים סביב כל נקבובית. סופרת התאמות הדדיות בין התיאורים שלהן.',
-      'learned-pore': 'משתמשת בגלאי נקבוביות הזיעה המשותף. המודל מהאימון השני הופך חלון של 32 × 32 פיקסלים סביב כל נקבובית ל־128 מספרים, וסופר התאמות הדדיות.',
+      'learned-pore': 'משתמשת בגלאי נקבוביות הזיעה המשותף. רשת נוירונים קונבולוציונית (CNN) קטנה, שאומנה במחקר, הופכת חלון של 32 × 32 פיקסלים סביב כל נקבובית ל־128 מספרים, והשיטה סופרת התאמות הדדיות.',
     },
     methodAccuracy: {
       'opencv-sift': 'בהשוואות זוגות ב־SD302 בסורקים אחרים התקבלו 70.8% / 68.1% מזוגות אותה אצבע, ביעד של 0.1% קבלות שגויות (RxJ / QxJ).',
@@ -505,7 +505,7 @@ const he: Texts = {
     methodComparison: {
       'opencv-sift': 'OpenCV SIFT משווה את הסריקה החדשה לשלוש התבניות השמורות של האצבע הזו. הציון הגבוה ביותר מכריע.',
       'pore-sift': 'Pore SIFT משווה את הסריקה החדשה לשלוש תבניות הנקבוביות השמורות של האצבע הזו. מספר הנקבוביות שהותאמו הדדית הגבוה ביותר מכריע.',
-      'learned-pore': 'המתאר הנלמד משווה את הסריקה החדשה לשלוש התבניות הנלמדות השמורות של האצבע הזו. מספר הנקבוביות שהותאמו הדדית הגבוה ביותר מכריע.',
+      'learned-pore': 'Pore CNN משווה את הסריקה החדשה לשלוש תבניות Pore CNN השמורות של האצבע הזו. מספר הנקבוביות שהותאמו הדדית הגבוה ביותר מכריע.',
     },
     judge: 'ברישום, OpenCV SIFT בודקת ששלוש ההנחות הן של אותה אצבע עבור כל שיטות ההשוואה.',
     provisional: 'סף זמני',
@@ -706,7 +706,7 @@ const he: Texts = {
     enrolmentBox: 'רישום',
     sampleBox: (placement) => `סריקה, הנחה ${placement}`,
     pendingMethod: 'אפשר להכין תבניות מאותן סריקות כשהשיטה תהיה זמינה.',
-    methodNames: { 'opencv-sift': 'OpenCV SIFT', 'pore-sift': 'Pore SIFT', 'learned-pore': 'המתאר הנלמד' },
+    methodNames: { 'opencv-sift': 'OpenCV SIFT', 'pore-sift': 'Pore SIFT', 'learned-pore': 'Pore CNN' },
     acceptedText: (threshold) => `כל זוג מתוך שלוש הסריקות הושווה ב-OpenCV SIFT, המאוחרת מול המוקדמת. כל ציון מעל הסף ${threshold}, ולכן זו אותה אצבע, והרישום נשמר.`,
     notKept: (placements) => `הנחה ${placements} לא התאימה לאחרות ולא נשמרה.`,
   },

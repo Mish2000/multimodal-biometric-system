@@ -1,4 +1,4 @@
-"""H39: shared detection, native method separation and atomic preparation of the learned descriptor."""
+"""H39: shared detection, native method separation and atomic preparation of Pore CNN."""
 
 import json
 import struct

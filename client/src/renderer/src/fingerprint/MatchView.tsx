@@ -1,5 +1,5 @@
 // H18, H43, H44: the pairs counted by the highest-scoring comparison, in the two native image frames:
-// OpenCV SIFT's RANSAC inliers, or the pore pairs of Pore SIFT and the learned descriptor.
+// OpenCV SIFT's RANSAC inliers, or the pore pairs of Pore SIFT and Pore CNN (H46).
 import { useMemo, useState, type PointerEvent } from 'react'
 import type { MatchViewData } from '../../../shared/bridge'
 import { useSession } from '../session'

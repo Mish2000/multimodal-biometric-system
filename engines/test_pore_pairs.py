@@ -99,7 +99,7 @@ def test_real_pore_sift_view_keeps_the_score_and_maps_each_pore_to_itself():
 def test_real_learned_view_keeps_the_score_at_the_described_pores():
     link = research_link.load()
     if not link.gpu_python.exists():
-        pytest.skip("the learned descriptor runtime is unavailable")
+        pytest.skip("Pore CNN runtime is unavailable")
     # Rows and columns differ, so a swapped axis cannot pass; the first and last two windows do not fit.
     coordinates = np.array([[0, 500], [120, 700], [300, 200], [640, 410], [983, 16], [999, 999]], np.int32)
     described = {(700.0, 120.0), (200.0, 300.0), (410.0, 640.0), (16.0, 983.0)}

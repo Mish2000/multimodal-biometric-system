@@ -1026,3 +1026,23 @@ rank 2 is drawn. Manual scanner validation follows separately.
 The 1:N match illustration of the caller's own print (H45) passed a manual
 check on the connected HiScan PRO. Increment 3 is complete: all three
 fingerprint methods in 1:1 and 1:N, with their match drawings (H20).
+
+## 2026-11-09: Pore CNN as the display name of the learned pore descriptor
+
+Approved on 2026-11-09. Call the research's learned pore descriptor "Pore
+CNN" in every text that people read, in both interface languages (H2, H6).
+
+- **H46** The name states what distinguishes the method. It uses the same
+  detected pores as Pore SIFT, and a small convolutional neural network
+  trained in the research describes the window around each pore, where Pore
+  SIFT uses SIFT. Like OpenCV SIFT and Pore SIFT, it reads the same in
+  English and Hebrew.
+- Earlier records keep their wording: "learned pore descriptor", "learned
+  descriptor" and "second trained pore descriptor" in H6 to H45 name the
+  same method.
+- Identifiers do not change. The code `learned-pore` is stored in every
+  template and attempt row and bound into the encryption of stored
+  templates, and engine and test file names keep it. The research's code,
+  the labels its results pages generate and its method document's file name
+  also stay: a research change outside README.md and docs/ would be a new
+  research version (H21).

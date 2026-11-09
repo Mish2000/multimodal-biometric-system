@@ -74,7 +74,7 @@ class FingerprintService:
     sift: Engine
     quality_minimum: int = QUALITY_MINIMUM
     pore: Engine | None = None  # H38: the research's separate Pore SIFT runtime
-    learned: Engine | None = None  # H39: the second trained descriptor, in its research runtime
+    learned: Engine | None = None  # H39: Pore CNN, in its research runtime
     _busy: threading.Lock = field(default_factory=threading.Lock)
     _search_peers: dict[str, list[Engine]] = field(default_factory=dict)
 
@@ -163,7 +163,7 @@ def methods(databases: Databases, service: FingerprintService | None) -> list[di
 
 
 def engine_for(service: FingerprintService, code: str) -> Engine | None:
-    """H39: the selected descriptor's runtime; learned extraction also needs the shared detector."""
+    """H39: the selected descriptor's runtime; Pore CNN extraction also needs the shared detector."""
     if code == OPENCV_SIFT:
         return service.sift
     if code == PORE_SIFT:

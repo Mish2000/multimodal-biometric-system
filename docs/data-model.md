@@ -10,11 +10,11 @@ biometric `subject`, `algorithm`, `enrolment`, `sample` and `template` tables
 exist (H23, H33); `attempt` exists for fingerprint verification (H35) and
 fingerprint identification (H41, H42).
 
-H38 and H39 use these tables for OpenCV SIFT, Pore SIFT and the learned pore
-descriptor. Each new finding gets one sealed template per available method.
+H38 and H39 use these tables for OpenCV SIFT, Pore SIFT and Pore CNN.
+Each new finding gets one sealed template per available method.
 An existing enrolment receives missing templates from its three sealed
 findings at its first verification with that method. The three new templates
-commit together. Learned templates preserve H10's native float16 NPY format;
+commit together. Pore CNN templates preserve H10's native float16 NPY format;
 Pore SIFT uses integer coordinates and float32 descriptors in NPZ.
 
 ## Principles
@@ -304,7 +304,7 @@ of a fingerprint enrolment can read 1, 2 and 4.
 | `algorithm` | `varchar(32)` | references `algorithm.code`, of the sample's modality |
 | `version` | `varchar(64)` | the method's version when it was made, so templates of an older version can be found and made again from their samples |
 | `created_at` | `timestamptz` | |
-| `data` | `bytea` | fingerprints: the sealed template, about 4.3 MB for OpenCV SIFT, 0.83 MB for Pore SIFT and 0.41 MB for the learned descriptor (H10) |
+| `data` | `bytea` | fingerprints: the sealed template, about 4.3 MB for OpenCV SIFT, 0.83 MB for Pore SIFT and 0.41 MB for Pore CNN (H10) |
 | `embedding` | `vector` | faces and voices: the embedding, unsealed because pgvector cannot search sealed vectors (H14); 128 values for SFace (to be read from the model file, 5.2) and 192 for ECAPA-TDNN |
 
 Exactly one of `data` and `embedding` is set; one template per sample and

@@ -134,8 +134,8 @@ def _reference_image(databases: Databases, keys: Keys, subject: uuid.UUID, enrol
                       placement: int, pores_version: str | None = None) -> tuple[bytes, bytes | None]:
     """H18, H43: one capture of the caller's current enrolment for the winning comparison.
 
-    H44: with `pores_version`, also the stored Pore SIFT template of that capture, whose points the
-    learned descriptor was described from (H39, H42), when it exists in that version."""
+    H44: with `pores_version`, also the stored Pore SIFT template of that capture, whose points
+    Pore CNN was described from (H39, H42), when it exists in that version."""
     with Session(databases.biometric) as db:
         row = db.execute(select(Sample.id, Sample.data).join(Enrolment).where(
             Enrolment.id == enrolment_id, Enrolment.subject_id == subject, Enrolment.modality == fp.FINGERPRINT,
@@ -194,7 +194,7 @@ async def _verify(service, databases, keys, subject, finger, run, algorithm) -> 
     ready = await run_in_threadpool(engine.start)
     if ready["version"] != reference.version:
         raise VerificationError("template_version_mismatch")
-    described_from: dict[int, bytes] = {}  # H44: the pores of learned templates prepared in this run
+    described_from: dict[int, bytes] = {}  # H44: the pores of Pore CNN templates prepared in this run
     if reference.pending:
         generated = []
         for sample_id, placement, png in reference.pending:
@@ -233,7 +233,7 @@ async def _verify(service, databases, keys, subject, finger, run, algorithm) -> 
     native = await run_in_threadpool(fp.extract_native, service, algorithm, png, probe_pores)
     comparisons = []
     # H43, H44: OpenCV SIFT and Pore SIFT templates hold their points, so each scoring comparison also
-    # returns the pairs it counts. Learned templates hold descriptors only (see below).
+    # returns the pairs it counts. Pore CNN templates hold descriptors only (see below).
     pairs_in_comparison = algorithm in (fp.OPENCV_SIFT, fp.PORE_SIFT)
     best_score, best_placement, best_template, best_pairs = -1, None, b"", b""
     for placement, template in reference.templates:

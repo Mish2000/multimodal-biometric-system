@@ -2,7 +2,7 @@
 
 Approved on 2026-10-20 (H11–H20 in `docs/decisions.md`),
 from the draft of 2026-10-19 as revised on 2026-10-20, and amended with his
-approval since (H24 to H45). Every decision is cited by its ID; a change needs
+approval since (H24 to H46). Every decision is cited by its ID; a change needs
 the researcher's approval and a new entry in the decision record.
 
 ## 1. Purpose and scope
@@ -59,7 +59,7 @@ FastAPI server: Python 3.12, its own environment
         ├── scanner: ScannerCapture (C#, x86; OEM route H8, guided placements H9,
         │            acquisition mode for the server H33)
         └── engines, one process per method in its own environment (H4):
-              fingerprint: OpenCV SIFT, Pore SIFT, learned pore descriptor
+              fingerprint: OpenCV SIFT, Pore SIFT, Pore CNN
                            (research code through the pinned link, H10),
                            and NFIQ 2's quality score of every capture (H33)
               face: YuNet detection + SFace recognition
@@ -178,9 +178,9 @@ flow of 2026-10-18).
   A user can also delete a finger's enrolment, which erases it and the
   enrolments it replaced with their findings and templates (H34).
 - **Algorithms:** from the research, unchanged, through the pinned link
-  (H10): OpenCV SIFT, Pore SIFT and the learned pore descriptor (its second
+  (H10): OpenCV SIFT, Pore SIFT and Pore CNN (its second
   training, H6); fusions with the research's weights or with user weights that
-  sum to 100 (H6). Pore SIFT and the learned descriptor share one pore
+  sum to 100 (H6). Pore SIFT and Pore CNN share one pore
   detection per capture, as in H10.
 - **Verification (1:1, H15):** the user picks one of the enrolled fingers;
   the new capture is compared with its three templates, and the highest score
@@ -194,10 +194,10 @@ flow of 2026-10-18).
   existing ones get missing Pore SIFT templates from their stored captures
   before the first verification in that method. The fixed enrolment referee
   remains OpenCV SIFT. Preparation and storage are atomic and version-checked.
-  H39 adds the second trained pore descriptor, accepting strictly above the
+  H39 adds Pore CNN, the research's trained pore network, accepting strictly above the
   provisional threshold of 21. New enrolments share Pore SIFT's detected
   coordinates; existing samples reuse stored coordinates when available.
-  Native learned templates are float16 NPY arrays, as in H10. Method choice
+  Native Pore CNN templates are float16 NPY arrays, as in H10. Method choice
   sits inside verification, before an explicit capture start. Enrolment's
   completion labels its OpenCV SIFT demonstration and shows the other
   methods' three placement-pair scores for illustration, separately from
@@ -210,10 +210,10 @@ flow of 2026-10-18).
   stored placement. The server validates the coordinates and count, and
   sends the illustration with the committed result. It lives in the page
   while that result is open, with pointer and keyboard pair selection.
-  H44 extends it to Pore SIFT and the learned descriptor: the lines join
+  H44 extends it to Pore SIFT and Pore CNN: the lines join
   the pore pairs that their score counts, mutual nearest descriptors that
   pass the 0.7 ratio check without a geometric check, and the page says so.
-  Learned templates hold descriptors only, so the winning comparison is
+  Pore CNN templates hold descriptors only, so the winning comparison is
   repeated once with the pores both templates were described from, and
   its score must equal the deciding one.
 - **Identification (1:N, H15):** the new capture is compared with every
@@ -230,29 +230,28 @@ flow of 2026-10-18).
   their scores and the total gallery size. Equal leaders are marked as a
   tie, with deterministic ordering for storage. Results identify the caller's
   own fingers and keep other candidates anonymous (H18).
-  H42 extends identification to Pore SIFT and the learned pore descriptor.
+  H42 extends identification to Pore SIFT and Pore CNN.
   The user chooses the method before starting. Missing templates are prepared
   from sealed captures before the scanner is requested and commit together
   for each enrolled finger. The client reports progress and allows cancellation.
   Completed preparations are reused on retry. Pore SIFT compares in bounded
-  CPU groups, and the learned descriptor uses one comparison runtime.
+  CPU groups, and Pore CNN uses one comparison runtime.
   H45 draws the matches of the caller's highest-ranked own print among the
   shown candidates, never another user's: its winning comparison is
-  repeated once with the pairs (for the learned descriptor, with its pores,
+  repeated once with the pairs (for Pore CNN, with its pores,
   as H44), and the repeated score must equal the ranked score.
 - **Thresholds (H16):** settings per algorithm, kept in the biometric
   database; a comparison is accepted when its score is above its threshold.
   Administrators can change them in the client, each change enters the audit
   log, and every attempt records the threshold it used. At the SD302
   thresholds (RxJ), OpenCV SIFT accepted none of the researcher's 405
-  different-finger pairs in H10, but Pore SIFT accepted 71 and the learned
-  descriptor 28. The initial values:
+  different-finger pairs in H10, but Pore SIFT accepted 71 and Pore CNN 28. The initial values:
 
   | Algorithm | Accept above | Origin | H10 same finger | H10 different fingers |
   | --- | --- | --- | --- | --- |
   | OpenCV SIFT | 57 | SD302 plain vs plain, FAR 0.1 % (RxJ) | 28 of 30 | 0 of 675 |
   | Pore SIFT | 37 | provisional: the highest H10 different-finger score | 13 of 30 | 0 of 675 |
-  | Learned pore descriptor | 21 | provisional: the highest H10 different-finger score | 24 of 30 | 0 of 675 |
+  | Pore CNN | 21 | provisional: the highest H10 different-finger score | 24 of 30 | 0 of 675 |
 
   "Same finger" counts the 30 placement pairs of the second set (H10, A);
   "different fingers" counts both comparisons of H10 (A and B). They are
@@ -273,7 +272,7 @@ flow of 2026-10-18).
 - **Speed and size (H10, medians):** OpenCV SIFT 0.25 s per capture and
   0.15 s per comparison, with a 4.3 MB template; the pore methods 3.1 s per
   capture, almost all of it pore detection on one CPU thread (the system may
-  use more threads), then 32 ms (Pore SIFT) or 0.5 ms (learned descriptor,
+  use more threads), then 32 ms (Pore SIFT) or 0.5 ms (Pore CNN,
   GPU) per comparison, with templates of 0.83 MB and 0.41 MB.
 
 ### 5.2 Face
@@ -318,7 +317,7 @@ SHA-256.
 | Home | three modality cards, fingerprint first, with each one's enrolment status |
 | Settings (H24) | the theme: light, dark, or Windows' setting (the default), saved per account and applied at once; sign-in and registration follow Windows' setting. The language, English or Hebrew, saved per account (H31). Under security, the password's change (H28); a screen of its own only for replacing a one-time password (H12) |
 | Modality | enrol, verify (1:1), identify (1:N); before enrolment, verify and identify lead to the message of section 5; an enrolled finger can be enrolled again or its enrolment deleted, after a confirmation (H34) |
-| Algorithm choice | one card per algorithm: accuracy, speed, what its template holds and how two templates are compared (H2), in two or three sentences with a small drawing, and whether its threshold is provisional; OpenCV SIFT first, then the learned pore descriptor, Pore SIFT and the fusions (H18); face and voice have one model each, shown on its card without a choice |
+| Algorithm choice | one card per algorithm: accuracy, speed, what its template holds and how two templates are compared (H2), in two or three sentences with a small drawing, and whether its threshold is provisional; OpenCV SIFT first, then Pore CNN, Pore SIFT and the fusions (H18); face and voice have one model each, shown on its card without a choice |
 | Fingerprint capture | scanner status, finger and placement guide, "lift the finger" between placements, the captured print and its checks with its NFIQ 2 score (H33), the pair scores of the kept placements |
 | Stored template (H33) | after an enrolment, once: the captures with their checks, OpenCV SIFT's points, one point's 128 numbers in SIFT's 4 x 4 x 8 layout, the whole template as a picture, its row with the sealed value's parts, and the pair scores against the threshold; sent from the server's memory before sealing, kept by the page only while the screen is open |
 | Face capture | live camera view with the detected face box |
@@ -329,12 +328,12 @@ SHA-256.
 
 OpenCV SIFT comes first because its threshold is the only one that is not
 provisional on the HiScan PRO, it did best there (28 of 30 same-finger pairs,
-none of 675 different-finger pairs) and its 1:1 is the fastest (0.4 s); the
-learned pore descriptor, the research's own method, comes next.
+none of 675 different-finger pairs) and its 1:1 is the fastest (0.4 s);
+Pore CNN, the research's own method, comes next.
 
 Accuracy shown for fingerprint algorithms (H18): the SD302 plain vs plain
 test result, measured on other scanners at the SD302 thresholds (TAR at FAR
-0.1 %: learned descriptor 95.1 % and 93.4 %, Pore SIFT 77.9 % and 78.5 %,
+0.1 %: Pore CNN 95.1 % and 93.4 %, Pore SIFT 77.9 % and 78.5 %,
 OpenCV SIFT 70.8 % and 68.1 %, RxJ and QxJ), in plain words, because its
 sample is far larger than the HiScan check of H10. It stays so until the
 thresholds are calibrated with other people (H16); the cards still mark the
@@ -482,7 +481,7 @@ themes during that work.
   illumination before closing the channel (3).
 - **H38** Pore SIFT verification, comparison-method choice and native sealed
   templates for new and existing generic enrolments (5.1, 6).
-- **H39** Second trained pore descriptor, shared detection, method choice
+- **H39** Pore CNN, shared detection, method choice
   within verification and the generic enrolment's labelled demonstrations
   and placement-pair comparisons (5.1, 6).
 - **H40** A matched verification result can return to method selection for
@@ -490,12 +489,14 @@ themes during that work.
 - **H41** OpenCV SIFT identification over current active enrolments, bounded
   parallel comparison, anonymous ranked results and retention of identification
   attempts after deletion of the leading enrolment (3, 5.1, 7).
-- **H42** Pore SIFT and learned pore identification, method selection before
+- **H42** Pore SIFT and Pore CNN identification, method selection before
   capture and preparation of missing gallery templates from sealed captures
   (5.1, 7).
 - **H43** OpenCV SIFT 1:1 illustration with the caller's winning stored
   capture and the inlier pairs counted in that comparison (5.1, 6).
-- **H44** Pore SIFT and learned pore 1:1 illustrations with the pore pairs
+- **H44** Pore SIFT and Pore CNN 1:1 illustrations with the pore pairs
   counted in the winning comparison (5.1, 6).
 - **H45** 1:N illustration of the caller's own highest-ranked shown print,
   from its winning comparison repeated once (5.1, 6).
+- **H46** "Pore CNN" as the display name of the learned pore descriptor;
+  identifiers and stored data unchanged (6).

@@ -303,7 +303,7 @@ async def _match_view(service, engine: Engine, databases, keys, gallery: Gallery
                       reference: Reference, rank: int, score: int, probe: bytes, probe_pores: bytes | None,
                       described_from: dict[uuid.UUID, bytes]) -> dict:
     """H18, H45: the caller's own print only. Its winning comparison is repeated once with `view` and, for
-    the learned descriptor, the pores both templates were described from (H44)."""
+    Pore CNN, the pores both templates were described from (H44)."""
     png, stored_pores = await run_in_threadpool(_preparation_source, databases, keys, candidate, reference, gallery)
     native = await run_in_threadpool(_open_reference, databases, keys, candidate, reference, gallery.algorithm)
     parts = [probe, native]

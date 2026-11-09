@@ -2,11 +2,11 @@
 
     python methods/hiscan_eval.py --first FIRST_SET_FOLDER [--session captures/live002] [--fingers 1-10] [--out DIR]
 
-Runs OpenCV SIFT, Pore SIFT and the learned pore descriptor (second training) unchanged from the pinned
+Runs OpenCV SIFT, Pore SIFT and Pore CNN (second training) unchanged from the pinned
 research checkout (methods/research-pin.toml), each in its own research environment, on the second capture
 set (H9) and the first set. Pairs: (A) placements within the second set, the earlier capture as reference;
 (B) the first set as reference against every second-set capture. Every method's pairs are counted against
-the plain vs plain thresholds at FAR 0.1 %; pore counts, single-thread timings (the learned descriptor on
+the plain vs plain thresholds at FAR 0.1 %; pore counts, single-thread timings (Pore CNN on
 the GPU) and template sizes are recorded. Everything written derives from biometric samples, so it goes to
 <session>/evaluation (or --out) inside the ignored captures/ folder; that folder must not exist yet.
 Run it with the research project environment's Python (local/research.toml).
@@ -27,7 +27,7 @@ from pathlib import Path
 import research_link
 
 STAGES = ("opencv-sift", "pore-sift", "learned-pore-repeat")
-LABELS = {"opencv-sift": "OpenCV SIFT", "pore-sift": "Pore SIFT", "learned-pore-repeat": "Learned pore descriptor"}
+LABELS = {"opencv-sift": "OpenCV SIFT", "pore-sift": "Pore SIFT", "learned-pore-repeat": "Pore CNN"}
 SETS = {"A": "second set: placements against each other", "B": "first set (reference) against the second set"}
 
 
@@ -229,7 +229,7 @@ def evaluate(plan: dict, results: dict, thresholds: dict) -> dict:
     detection = median_of(on_second(ps["extraction"]), "detect_s") + median_of(on_second(ps["extraction"]), "nms_s")
     report["timing"] = {
         "note": "medians; extraction on the second-set images; OpenCV SIFT and Pore SIFT on one CPU thread, "
-                "the learned descriptor on the GPU after a warm-up; it uses the pores Pore SIFT detects",
+                "Pore CNN on the GPU after a warm-up; it uses the pores Pore SIFT detects",
         "opencv-sift": {"extract_s": median_of(on_second(o["extraction"]), "extract_s"),
                         "compare_s": median_of(o["comparisons"], "compare_s"),
                         "template_bytes": median_of(on_second(o["extraction"]), "bytes")},

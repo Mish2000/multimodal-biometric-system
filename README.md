@@ -99,7 +99,7 @@ checked 1000 ppi images.
 <td valign="top">
 
 **📜 Every decision on record**<br>
-Each design choice is numbered (H1 to H45), dated, and cited in the code and the commits.
+Each design choice is numbered (H1 to H46), dated, and cited in the code and the commits.
 
 </td>
 <td valign="top">
@@ -116,7 +116,7 @@ have tests of their own.
 
 | | Capture | Method | Template | Decision |
 | --- | --- | --- | --- | --- |
-| 👆 **Fingerprint** | Biometrika HiScan PRO, native 1000 ppi | OpenCV SIFT · Pore SIFT · learned pore descriptor · fusion | local descriptors, sealed | score above the method's threshold |
+| 👆 **Fingerprint** | Biometrika HiScan PRO, native 1000 ppi | OpenCV SIFT · Pore SIFT · Pore CNN · fusion | local descriptors, sealed | score above the method's threshold |
 | 🙂 **Face** | the PC's camera | YuNet detection + SFace | embedding in pgvector | cosine similarity above 0.363 |
 | 🎙️ **Voice** | the PC's microphone, 16 kHz mono | SpeechBrain ECAPA-TDNN | 192-value embedding in pgvector | cosine similarity above 0.25 |
 

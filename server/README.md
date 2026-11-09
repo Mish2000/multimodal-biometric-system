@@ -3,7 +3,7 @@
 The FastAPI server of the system: the local PostgreSQL cluster, the key file, registration with the
 national ID and the mobile phone, sign-in, password recovery, roles and the accounts part of the
 administration (H3, H11, H12, H14, H19, H29 to H32), fingerprint enrolment (H33)
-and 1:1 verification with OpenCV SIFT, Pore SIFT and the learned pore descriptor
+and 1:1 verification with OpenCV SIFT, Pore SIFT and Pore CNN
 (H35, H38, H39) and 1:N identification (H41, H42) with all three methods.
 It runs with the `multimodal-server` environment and starts PostgreSQL from the
 `multimodal-postgres` environment (`environments/`).
@@ -118,7 +118,7 @@ attempts of all its enrolments, including their probes (H35).
 
 Verification accepts `algorithm`: `opencv-sift` (the default), `pore-sift`
 (H38), or `learned-pore` (H39). Pore SIFT uses the environment named in the
-checked research configuration; the learned descriptor uses `gpu_python` in
+checked research configuration; Pore CNN uses `gpu_python` in
 `local/research.toml` and the pinned second model. New enrolments produce all
 available templates together; existing ones receive missing templates from
 their sealed samples before a new capture. Preparation emits
@@ -138,9 +138,9 @@ enrolment and sent with the committed result. Its presentation data stays
 in the page for that result. The processing timer ends after the comparisons,
 before opening the stored image for presentation.
 
-H44 returns `match_view` for Pore SIFT and the learned descriptor too. Pore
-SIFT pairs come from each scoring comparison, as in H43. For the learned
-descriptor, the server repeats the winning comparison once with the pores
+H44 returns `match_view` for Pore SIFT and Pore CNN too. Pore
+SIFT pairs come from each scoring comparison, as in H43.
+For Pore CNN, the server repeats the winning comparison once with the pores
 both templates were described from: the probe's detection in this run, and
 for the stored capture this run's preparation, its Pore SIFT template, or
 the pinned detector. The repeated score must equal the deciding score.
@@ -152,7 +152,7 @@ pore method from sealed captures before requesting a new scan. Each enrolled
 finger's missing templates commit together, and retry reuses completed work.
 Identification extracts the new capture once and compares its template to the
 selected method's stored templates. CPU engines use groups of up to four
-independent processes, and the learned descriptor uses one runtime. Gallery
+independent processes, and Pore CNN uses one runtime. Gallery
 metadata spans the search, while the reference data is loaded for each group.
 The server rechecks participating accounts, enrolments and template membership
 before committing. Cancellation interrupts computation and waits for cleanup.
@@ -164,8 +164,8 @@ and templates, and the number of equal leaders. Other candidates have only
 per-attempt ranks and anonymous labels. The caller's own finger positions
 are included. H45 adds `match_view` for the caller's highest-ranked own
 enrolment among those five, with its rank, finger and placement: the server
-repeats that enrolment's winning comparison once with `view` (the learned
-descriptor with its pores, as in H44) and requires the same score. No other
+repeats that enrolment's winning comparison once with `view` (Pore CNN with its pores, as in H44)
+and requires the same score. No other
 user's capture is opened for it. The attempt stores its leading enrolment even for a non-match.
 Deleting that enrolment sets the link to null and retains the attempt and
 its sealed probe, as stated in the client confirmation (H41).
