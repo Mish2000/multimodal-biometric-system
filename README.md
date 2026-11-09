@@ -99,7 +99,7 @@ checked 1000 ppi images.
 <td valign="top">
 
 **📜 Every decision on record**<br>
-Each design choice is numbered (H1 to H46), dated, and cited in the code and the commits.
+Each design choice is numbered (H1 to H47), dated, and cited in the code and the commits.
 
 </td>
 <td valign="top">
@@ -205,6 +205,12 @@ Details: [server](server/README.md) · [scanner](scanner/README.md) · [research
 
 [Specification](docs/specification.md) · [Data model](docs/data-model.md) · [Decision record](docs/decisions.md) ·
 [Native scanner capture](docs/scanner-native-capture.md) · [Methods on the scanner](docs/hiscan-methods.md)
+
+## License
+
+© 2026 Michael Sirkovich. All rights reserved. The source is public so that it can be read, evaluated
+and cited; using, copying, modifying or distributing any part of it needs prior written permission
+([LICENSE](LICENSE)). To cite it, use [CITATION.cff](CITATION.cff) or GitHub's "Cite this repository".
 
 ---
 

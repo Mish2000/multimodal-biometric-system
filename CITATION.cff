@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "If you refer to this system, please cite it as below."
+title: "Multimodal Biometric System"
+abstract: >-
+  A desktop biometric system for enrolment, 1:1 verification and 1:N
+  identification by fingerprint, face and voice, built as Stage B of the
+  fingerprint-level3-recognition-research project. Its fingerprint methods
+  come from that research and run on native 1000 ppi captures.
+type: software
+authors:
+  - given-names: Michael
+    family-names: Sirkovich
+repository-code: "https://github.com/Mish2000/multimodal-biometric-system"
+license-url: "https://github.com/Mish2000/multimodal-biometric-system/blob/main/LICENSE"
+keywords:
+  - biometrics
+  - multimodal biometrics
+  - fingerprint
+  - level 3 features
+  - sweat pores

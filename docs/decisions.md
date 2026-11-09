@@ -1046,3 +1046,25 @@ CNN" in every text that people read, in both interface languages (H2, H6).
   the labels its results pages generate and its method document's file name
   also stay: a research change outside README.md and docs/ would be a new
   research version (H21).
+
+## 2026-11-09: copyright notice and an independent archive
+
+Approved on 2026-11-09. State the rights in both repositories explicitly,
+and keep a dated copy of each outside GitHub.
+
+- **H47** Both repositories stay public, so that the work can be read,
+  evaluated and cited. Their code and documentation are under copyright, all
+  rights reserved: any use, copying, modification or distribution needs prior
+  written permission. Neither repository had a license before, so the same
+  default applied without being stated.
+- This repository has a `LICENSE` file with that text, a License section in
+  the README and a `CITATION.cff` file for citing. The client's
+  `package.json` already declared `UNLICENSED`. Third-party software, models
+  and data keep their own licenses and terms.
+- The research repository states the same in its README only. A license
+  file in its root would be a research change outside README.md and docs/,
+  that is, a new research version (H21); the pin stays at 606c8d3.
+- After the push, each repository is saved once to Software Heritage, the
+  public archive of source code, as a dated copy held by a third party. The
+  archive keeps what it saves permanently, which suits repositories that stay
+  public.
