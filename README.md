@@ -101,7 +101,7 @@ checked 1000 ppi images.
 <td valign="top">
 
 **📜 Every decision on record**<br>
-Each design choice is numbered (H1 to H52), dated, and cited in the code and the commits.
+Each design choice is numbered (H1 to H53), dated, and cited in the code and the commits.
 
 </td>
 <td valign="top">

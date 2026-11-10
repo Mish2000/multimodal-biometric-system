@@ -1321,3 +1321,37 @@ did not (0.019 to 0.362); one identification found the leading enrolment at
 0.431, and one found none. The close photo of H52, refused before that
 decision, matched. Increment 4 is complete: the face from the PC's cameras
 and from files, in enrolment, 1:1 and 1:N (H20).
+
+## 2026-11-10: a choice between the camera and an existing image
+
+Approved on 2026-11-10. Separate the face's live capture from the upload of
+an existing image, and end every attempt with a way back to that choice
+(H27, H40, H49 to H51).
+
+- **H53** After "Verify my face (1:1)" or "Identify (1:N)", SFace's card
+  offers two choices in place of the start button: "Live verification" or
+  "Live identification", which opens the camera, still only on this explicit
+  choice (H40), and "Upload an existing image", a screen of its own with a
+  visible drop zone and a button that chooses a file. The camera screen takes
+  no file. For the face this replaces the hidden menu of H27 and H51 with a
+  visible, secondary choice; enrolment still takes its images from the camera
+  only.
+- Every attempt ends on an outcome screen: the result of H49 or H50, a refused
+  image or file with its checks, or a failure. Each offers "Verify again" or
+  "Identify again", which returns to the choice, and "Back". A refused image
+  no longer leaves the camera open for another take, so a run takes one image
+  and the twelve images of a run no longer apply.
+- The server, the checks of H48 and H51 and the stored attempts are unchanged.
+
+All 142 client tests, type checks and the build passed, and the built client
+passed 89 offscreen checks: verification and identification open on the
+choice without a camera, the camera screen takes no file, the file screen
+shows its drop zone, a dropped image without a face ends on its outcome screen
+whose "Verify again" returns to the choice, and enrolment offers no file. The
+server is unchanged since its 276 tests passed for H52.
+
+## 2026-11-10: live check of the choice between the camera and an existing image
+
+The choice of H53 passed a manual check on the researcher's PC: live and
+uploaded images in verification and identification, refused images on their
+outcome screen, and "again" returning to the choice.

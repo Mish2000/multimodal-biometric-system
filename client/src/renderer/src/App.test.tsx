@@ -1443,10 +1443,10 @@ describe('face verification (H49)', () => {
     expect(screen.getByRole('heading', { name: 'Verify your face' })).toBeTruthy()
     expect(screen.getByText(/About a tenth of a second/)).toBeTruthy()
     expect(screen.queryByText('No camera is connected. Connect a USB camera.')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Start verification' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Live verification' }))
     expect(await screen.findByText('No camera is connected. Connect a USB camera.')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    expect(await screen.findByRole('button', { name: 'Verify my face (1:1)' })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: 'Live verification' })).toBeTruthy() // back to the choice (H53)
   })
 
   it('shows the new face beside the closest enrolled one, the similarity against the threshold and every comparison', async () => {
@@ -1519,10 +1519,10 @@ describe('face identification (H50)', () => {
     expect(screen.getByText(/Other users appear anonymously, without a picture or a name/)).toBeTruthy()
     expect(screen.getByText(/the search itself is one database query/)).toBeTruthy()
     expect(screen.queryByText('No camera is connected. Connect a USB camera.')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Start identification' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Live identification' }))
     expect(await screen.findByText('No camera is connected. Connect a USB camera.')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    expect(await screen.findByRole('button', { name: 'Identify (1:N)' })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: 'Live identification' })).toBeTruthy() // back to the choice (H53)
     expect(server.faceIdentifications).toBe(0)
   })
 
@@ -1584,61 +1584,69 @@ describe('face identification (H50)', () => {
     await openFaceAs(true, 'he')
     fireEvent.click(screen.getByRole('button', { name: 'זיהוי (1:N)' }))
     expect(screen.getByRole('heading', { name: 'זיהוי פנים (1:N)' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'התחלת הזיהוי' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'זיהוי חי' })).toBeTruthy()
     expect(document.documentElement.dir).toBe('rtl')
   })
 })
 
-describe('face images from files (H51)', () => {
+describe('the choice of the camera or an existing image, and the outcome screens (H51, H53)', () => {
   const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3])
+  const original = window.matchMedia
+  afterEach(() => {
+    window.matchMedia = original
+  })
 
-  async function camera(open: 'Verify my face (1:1)' | 'Identify (1:N)' | 'זיהוי (1:N)', language: Language = 'en') {
+  async function choice(open: 'Verify my face (1:1)' | 'Identify (1:N)' | 'זיהוי (1:N)', language: Language = 'en') {
     server.face = { enrolled: true, enrolled_at: '2026-11-09T13:00:00+00:00' }
     server.add('dana', 'user', { language })
     window.matchMedia = ((query: string) => ({ matches: query.includes('reduce'), media: query, addEventListener: () => undefined,
       removeEventListener: () => undefined })) as unknown as typeof window.matchMedia
-    open_('/sign-in')
+    goTo('/sign-in')
     await signIn('dana', 'dana password 1')
     fireEvent.click(await cardLink(language === 'he' ? 'פנים' : 'Face'))
     await screen.findByText(language === 'he' ? /מקבל מעל 0.363/ : /Accepts above 0.363/)
     fireEvent.click(screen.getByRole('button', { name: open }))
-    fireEvent.click(screen.getByRole('button', { name: language === 'he' ? 'התחלת הזיהוי' : open === 'Identify (1:N)' ? 'Start identification' : 'Start verification' }))
-    await screen.findByText(language === 'he' ? 'אין מצלמה מחוברת. צריך לחבר מצלמת USB.' : 'No camera is connected. Connect a USB camera.')
   }
-  const open_ = open
+  const goTo = open
   const choose = (files: File[]) => fireEvent.change(screen.getByTestId('face-file'), { target: { files } })
   const drag = (type: 'dragEnter' | 'dragLeave' | 'drop', files: File[] = []) =>
     fireEvent[type](window, { dataTransfer: { types: ['Files'], files } })
 
-  it('keeps the file out of sight: one menu item beside the camera in 1:1 and 1:N, none in enrolment', async () => {
-    await camera('Verify my face (1:1)')
-    expect(screen.queryByRole('menu')).toBeNull()
-    expect(screen.queryByText(/Use an image file/)).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'More options' }))
-    expect(screen.getAllByRole('menuitem')).toHaveLength(1)
-    expect(screen.getByRole('menuitem', { name: /Use an image file… JPEG or PNG, up to 10 MB/ })).toBeTruthy()
-    fireEvent.keyDown(document, { key: 'Escape' })
-    expect(screen.queryByRole('menu')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Enrol my face again' }))
-    await screen.findByText('No camera is connected. Connect a USB camera.')
-    expect(screen.queryByRole('button', { name: 'More options' })).toBeNull()
+  it('asks for the camera or an existing image first; the camera screen takes no file, and enrolment offers none', async () => {
+    await choice('Verify my face (1:1)')
+    expect(screen.getByRole('button', { name: 'Live verification' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Upload an existing image' })).toBeTruthy()
+    expect(screen.queryByText('No camera is connected. Connect a USB camera.')).toBeNull() // no camera before the choice (H40)
+    fireEvent.click(screen.getByRole('button', { name: 'Live verification' }))
+    expect(await screen.findByText('No camera is connected. Connect a USB camera.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Choose an image file' })).toBeNull()
     drag('dragEnter')
     expect(screen.queryByText('Drop the image to use it')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Back' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Enrol my face again' }))
+    await screen.findByText('No camera is connected. Connect a USB camera.')
+    expect(screen.queryByRole('button', { name: 'Upload an existing image' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Choose an image file' })).toBeNull()
   })
 
-  it('sends a chosen file’s content alone, with its source, and the result names the source', async () => {
-    await camera('Verify my face (1:1)')
+  it('sends a chosen file’s content alone, with its source; the result names it, and “Verify again” returns to the choice', async () => {
+    await choice('Verify my face (1:1)')
+    fireEvent.click(screen.getByRole('button', { name: 'Upload an existing image' }))
+    expect(screen.getByText('Drag an image here, or choose a file.')).toBeTruthy()
     choose([new File([PNG], 'holiday photo.png', { type: 'image/png' })])
     expect(await screen.findByRole('heading', { name: 'Your face matches' })).toBeTruthy()
     expect(server.faceSent).toEqual([{ image: btoa(String.fromCharCode(...PNG)), source: 'file' }])
     expect(JSON.stringify(server.faceSent)).not.toContain('holiday')
     expect(screen.getByText('Source: an image file, 4000 × 3000 pixels, kept as a 1920 × 1440 copy.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Verify again' }))
+    expect(await screen.findByRole('button', { name: 'Live verification' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Upload an existing image' })).toBeTruthy()
   })
 
-  it('shows the drop target only while a file is dragged, takes one file at a time and refuses one over 10 MB', async () => {
-    await camera('Identify (1:N)')
-    expect(screen.queryByText('Drop the image to use it')).toBeNull()
+  it('takes one dropped file of up to 10 MB on the file screen, and “Identify again” returns to the choice', async () => {
+    await choice('Identify (1:N)')
+    fireEvent.click(screen.getByRole('button', { name: 'Upload an existing image' }))
     drag('dragEnter')
     expect(screen.getByText('Drop the image to use it')).toBeTruthy()
     drag('dragLeave')
@@ -1652,22 +1660,27 @@ describe('face images from files (H51)', () => {
     drag('drop', [new File([PNG], 'me.png')])
     expect(await screen.findByRole('heading', { name: 'A matching face was found' })).toBeTruthy()
     expect(server.faceSent.map((sent) => sent.source)).toEqual(['file'])
-    expect(screen.getByText(/^Source: an image file, 4000 × 3000 pixels/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Identify again' }))
+    expect(await screen.findByRole('button', { name: 'Live identification' })).toBeTruthy()
   })
 
-  it('lists a refused file’s own checks and makes no result', async () => {
-    await camera('Verify my face (1:1)')
+  it('ends a refused image on an outcome screen with its checks, whose “Verify again” returns to the choice', async () => {
+    await choice('Verify my face (1:1)')
+    fireEvent.click(screen.getByRole('button', { name: 'Upload an existing image' }))
     choose([new File([new TextEncoder().encode('GIF89a')], 'animation.gif')])
-    expect(await screen.findByText('A JPEG or PNG image: only JPEG and PNG images can be used')).toBeTruthy()
-    expect(screen.queryByRole('heading', { name: /Your face/ })).toBeNull()
+    expect(await screen.findByRole('heading', { name: 'The image did not pass its checks' })).toBeTruthy()
+    expect(screen.getByText('A JPEG or PNG image: only JPEG and PNG images can be used')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Choose an image file' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Verify again' }))
+    expect(await screen.findByRole('button', { name: 'Upload an existing image' })).toBeTruthy()
   })
 
   it('names the camera as the source of a camera image, and speaks Hebrew', async () => {
     render(<MemoryRouter><SessionProvider><FaceVerificationView result={FACE_VERIFIED} onAgain={() => undefined} onLeave={() => undefined} /></SessionProvider></MemoryRouter>)
     expect(await screen.findByText('Source: the camera.')).toBeTruthy()
     cleanup()
-    await camera('זיהוי (1:N)', 'he')
-    fireEvent.click(screen.getByRole('button', { name: 'אפשרויות נוספות' }))
-    expect(screen.getByRole('menuitem', { name: /שימוש בקובץ תמונה…/ })).toBeTruthy()
+    await choice('זיהוי (1:N)', 'he')
+    expect(screen.getByRole('button', { name: 'זיהוי חי' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'העלאת תמונה קיימת' })).toBeTruthy()
   })
 })

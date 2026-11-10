@@ -322,8 +322,8 @@ flow of 2026-10-18).
 - **1:1 (H49):** after SFace's card and an explicit start, one taken image
   that passes the checks is compared with the user's three current embeddings;
   the highest cosine similarity decides, strictly above the threshold, and
-  equal scores go to the earliest image. A rejected image is taken again, at
-  most twelve per run. The result shows the new aligned face beside the
+  equal scores go to the earliest image. A rejected image makes no attempt and
+  ends on its outcome screen (H53). The result shows the new aligned face beside the
   closest enrolled one, whose stored image is extracted again for its owner
   only and must give its stored embedding.
 - **1:N (H50):** after SFace's card and an explicit start, one taken image
@@ -393,9 +393,10 @@ them: the capture from the device is the only prominent action; a small "more
 options" button (⋯) beside the device's view opens a menu that takes a file,
 and a file dragged onto the window shows the drop target only while it is
 dragged. Enrolment offers neither, and a result names its source. For the
-face (H51) the button sits beside the camera on the 1:1 and 1:N screens, also
-when no camera is connected; one file at a time, whose name never leaves the
-page.
+face, H53 replaced that menu with a visible choice before 1:1 and 1:N, between
+the camera and an existing image, each on a screen of its own; one file at a
+time, whose name never leaves the page. Every attempt ends on an outcome
+screen whose "again" returns to the choice.
 
 ## 7. Attempts and audit (H6, H12)
 
@@ -580,3 +581,5 @@ themes during that work.
 - **H52** Large and small faces: smaller copies when no face is found, the
   face found again on the image's own pixels before the checks and the
   alignment, and faces under 112 pixels still refused (5.2).
+- **H53** The face's choice between the camera and an existing image before
+  1:1 and 1:N, and an outcome screen whose "again" returns to it (5.2, 6).

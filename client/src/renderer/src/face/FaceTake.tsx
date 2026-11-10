@@ -1,18 +1,16 @@
-// H49, H50: the pieces that face verification and identification share. Before an enrolment, the message of H15;
-// SFace's card, without a choice, and an explicit start (H40); then the camera panel of H48 for one image that
-// the server compares. An image that fails its checks is taken again and makes no attempt, at most twelve per
-// run (as H35); the server's answer is either such a rejection or the completed, saved result.
-// H51: an image file may take the camera's place here, and only here (H27). It stays out of sight: a small
-// "more options" button beside the camera opens a menu with one item, and a file dragged over the window shows
-// the drop target only while it is dragged. The page checks only the size; it sends the file's content alone,
-// never its name, and the server decides by the content.
+// H49, H50: the pieces that face verification and identification share. Before an enrolment, the message of H15.
+// H53: SFace's card is a choice between the camera and an existing image file (H27, H51), each on a screen of its
+// own; the camera still starts only on that explicit choice (H40). Every attempt ends on an outcome screen (a
+// result, a refused image with its checks, or a failure) whose "again" returns to the choice; a run takes one
+// image. The page checks only a file's size; it sends the file's content alone, never its name, and the server
+// decides by the content.
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router'
 import type { FaceCheck, FaceDetection, FaceMethod, FaceSize, FaceSource, RouteName } from '../../../shared/bridge'
 import { errorText } from '../texts'
 import { useSession } from '../session'
 import { CameraPanel } from './CameraPanel'
-import { checkLine, MOST_TAKEN } from './FaceEnrolment'
+import { checkLine } from './FaceEnrolment'
 
 export function FaceNotEnrolled({ title, text, onEnrol }: { title: ReactNode; text: string; onEnrol: () => void }) {
   const { t } = useSession()
@@ -29,13 +27,14 @@ export function FaceNotEnrolled({ title, text, onEnrol }: { title: ReactNode; te
   )
 }
 
-export function FaceCard({ title, lead, method, notes, start, onStart, onLeave }: {
+export function FaceChoice({ title, lead, method, notes, live, onLive, onFile, onLeave }: {
   title: ReactNode
   lead: string
   method: FaceMethod
   notes: string[]
-  start: string
-  onStart: () => void
+  live: string
+  onLive: () => void
+  onFile: () => void
   onLeave: () => void
 }) {
   const { t } = useSession()
@@ -52,14 +51,14 @@ export function FaceCard({ title, lead, method, notes, start, onStart, onLeave }
         {notes.map((note) => <p key={note} className="aside">{note}</p>)}
       </div>
       <div className="actions">
-        <button type="button" disabled={!method.available} onClick={onStart}>{start}</button>
+        <button type="button" disabled={!method.available} onClick={onLive}>{live}</button>
+        <button type="button" className="secondary" disabled={!method.available} onClick={onFile}>{f.files.upload}</button>
         <button type="button" className="secondary" onClick={onLeave}>{f.back}</button>
       </div>
+      <p className="aside">{f.files.uploadNote}</p>
     </section>
   )
 }
-
-type Rejected = { status: 'rejected'; checks: FaceCheck[] } & FaceDetection
 
 export const FILE_BYTES = 10 * 1024 * 1024 // H27
 
@@ -84,33 +83,51 @@ function base64Of(file: Blob): Promise<string> {
 
 const carriesFiles = (event: DragEvent) => Array.from(event.dataTransfer?.types ?? []).includes('Files')
 
-export function FaceTake<T extends { status: string }>({ title, route, minimumWidth, comparing, errors, onResult, onLeave }: {
+type Rejected = { status: 'rejected'; checks: FaceCheck[] } & FaceDetection
+
+export function FaceTake<T extends { status: string }>({ title, mode, route, minimumWidth, comparing, errors, again, onResult, onChoice, onLeave }: {
   title: ReactNode
+  mode: 'live' | 'file'
   route: Extract<RouteName, 'verifyFace' | 'identifyFace'>
   minimumWidth: number
   comparing: string
   errors?: Record<string, string>
+  again: string
   onResult: (result: T) => void
+  onChoice: () => void
   onLeave: () => void
 }) {
   const { call, t } = useSession()
   const f = t.face
-  const [phase, setPhase] = useState<'live' | 'checking' | 'failed'>('live')
-  const [taken, setTaken] = useState(0)
-  const [rejected, setRejected] = useState<FaceCheck[] | null>(null)
+  const [phase, setPhase] = useState<'ready' | 'checking' | 'rejected' | 'failed'>('ready')
+  const [rejected, setRejected] = useState<FaceCheck[]>([])
   const [failure, setFailure] = useState('')
   const [notice, setNotice] = useState('') // a file the page itself could not use (H51)
-  const [menu, setMenu] = useState(false)
   const [dragging, setDragging] = useState(false)
   const input = useRef<HTMLInputElement>(null)
-  const options = useRef<HTMLDivElement>(null)
   const latestFile = useRef<(files: File[]) => void>(() => undefined)
 
+  async function check(image: string, source: FaceSource) {
+    setNotice('')
+    setPhase('checking')
+    const answer = await call<T | Rejected>(route, { image, source })
+    if (!answer.ok) {
+      setFailure(errors?.[answer.error] ?? f.errors[answer.error] ?? errorText(answer, t))
+      setPhase('failed')
+      return
+    }
+    if (answer.data.status !== 'rejected') {
+      onResult(answer.data as T)
+      return
+    }
+    setRejected((answer.data as Rejected).checks)
+    setPhase('rejected')
+  }
+
   async function takeFile(files: File[]) {
-    setMenu(false)
     setNotice('')
     const [file] = files
-    if (phase !== 'live' || file === undefined) return
+    if (phase !== 'ready' || file === undefined) return
     if (files.length > 1) return setNotice(f.files.oneFile)
     if (file.size > FILE_BYTES) return setNotice(f.files.tooLarge)
     let image: string
@@ -123,9 +140,10 @@ export function FaceTake<T extends { status: string }>({ title, route, minimumWi
   }
   latestFile.current = (files) => void takeFile(files)
 
-  // H51: a file dragged over the window shows the drop target only while it is dragged; the browser's own
-  // handling (opening the file in the window) is always prevented here.
+  // H51, H53: on the file screen, a file dragged over the window marks the drop zone and is taken when dropped;
+  // the browser's own handling (opening the file in the window) is prevented. The camera screen takes no file.
   useEffect(() => {
+    if (mode !== 'file') return
     let depth = 0
     const enter = (event: DragEvent) => {
       if (!carriesFiles(event)) return
@@ -158,108 +176,57 @@ export function FaceTake<T extends { status: string }>({ title, route, minimumWi
       window.removeEventListener('dragleave', leave)
       window.removeEventListener('drop', drop)
     }
-  }, [])
+  }, [mode])
 
-  // The menu closes on Escape and on a click outside it.
-  useEffect(() => {
-    if (!menu) return
-    const outside = (event: PointerEvent) => {
-      if (!options.current?.contains(event.target as Node)) setMenu(false)
-    }
-    const escape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setMenu(false)
-    }
-    document.addEventListener('pointerdown', outside)
-    document.addEventListener('keydown', escape)
-    return () => {
-      document.removeEventListener('pointerdown', outside)
-      document.removeEventListener('keydown', escape)
-    }
-  }, [menu])
-
-  async function check(image: string, source: FaceSource = 'device') {
-    const count = taken + 1
-    setTaken(count)
-    setRejected(null)
-    setNotice('')
-    setPhase('checking')
-    const answer = await call<T | Rejected>(route, { image, source })
-    if (!answer.ok) {
-      setPhase('failed')
-      setFailure(errors?.[answer.error] ?? f.errors[answer.error] ?? errorText(answer, t))
-      return
-    }
-    if (answer.data.status !== 'rejected') {
-      onResult(answer.data as T)
-      return
-    }
-    setRejected((answer.data as Rejected).checks)
-    if (count >= MOST_TAKEN) {
-      setPhase('failed')
-      setFailure(f.errors.too_many_images ?? t.unexpected)
-    } else setPhase('live')
-  }
+  if (phase === 'rejected' || phase === 'failed')
+    return (
+      <section className="face-outcome">
+        <h1>{title}</h1>
+        {phase === 'failed' ? (
+          <p className="error" role="alert">{failure}</p>
+        ) : (
+          <div className="rejected">
+            <h2>{f.rejectedTitle}</h2>
+            <ul className="checks">
+              {rejected.map((item) => (
+                <li key={item.name} className={item.passed ? 'met' : 'missing'}>
+                  <span className="mark" aria-hidden="true">{item.passed ? '✓' : '✗'}</span> {checkLine(item, t)}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        <div className="actions">
+          <button type="button" onClick={onChoice}>{again}</button>
+          <button type="button" className="secondary" onClick={onLeave}>{f.back}</button>
+        </div>
+      </section>
+    )
 
   return (
     <section className="enrolment face-verification">
       <h1>{title}</h1>
-      <p className="aside">{f.guide.noFace}</p>
-      {phase === 'failed' ? (
+      {mode === 'live' ? (
         <>
-          <p className="error" role="alert">{failure}</p>
-          <div className="actions">
-            <button type="button" onClick={() => {
-              setTaken(0)
-              setRejected(null)
-              setPhase('live')
-            }}>{f.tryAgain}</button>
-            <button type="button" className="secondary" onClick={onLeave}>{f.back}</button>
-          </div>
+          <p className="aside">{f.guide.noFace}</p>
+          <CameraPanel busy={phase !== 'ready'} minimumWidth={minimumWidth} onTaken={(image) => void check(image, 'device')} />
         </>
       ) : (
-        <>
-          <CameraPanel busy={phase !== 'live'} minimumWidth={minimumWidth} onTaken={(image) => void check(image)} />
-          <div className="more-options" ref={options}>
-            <button type="button" className="more-button secondary" aria-label={f.files.more} title={f.files.more}
-              aria-haspopup="menu" aria-expanded={menu} disabled={phase !== 'live'} onClick={() => setMenu((open) => !open)}>⋯</button>
-            {menu && (
-              <div className="more-menu" role="menu">
-                <button type="button" role="menuitem" autoFocus onClick={() => input.current?.click()}>
-                  <span>{f.files.use}</span>{' '}
-                  <small>{f.files.hint}</small>
-                </button>
-              </div>
-            )}
-            <input ref={input} type="file" accept="image/jpeg,image/png" hidden data-testid="face-file"
-              onChange={(event) => {
-                const files = Array.from(event.target.files ?? [])
-                event.target.value = ''
-                void takeFile(files)
-              }} />
-          </div>
-          {notice && <p className="error" role="alert">{notice}</p>}
-          <p className="notice prompt" role="status" aria-live="polite">{phase === 'checking' ? comparing : ''}</p>
-          {rejected !== null && (
-            <div className="rejected">
-              <p>{f.rejected}</p>
-              <ul className="checks">
-                {rejected.map((item) => (
-                  <li key={item.name} className={item.passed ? 'met' : 'missing'}>
-                    <span className="mark" aria-hidden="true">{item.passed ? '✓' : '✗'}</span> {checkLine(item, t)}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-          <button type="button" className="secondary" onClick={onLeave}>{f.cancel}</button>
-        </>
-      )}
-      {dragging && phase === 'live' && (
-        <div className="drop-target" aria-hidden="true">
-          <p><strong>{f.files.drop}</strong></p>
-          <p className="aside">{f.files.dropHint}</p>
+        <div className={`drop-zone${dragging ? ' dragging' : ''}`}>
+          <p><strong>{dragging ? f.files.drop : f.files.dropZone}</strong></p>
+          <p className="aside">{f.files.uploadNote}</p>
+          <button type="button" disabled={phase !== 'ready'} onClick={() => input.current?.click()}>{f.files.choose}</button>
+          <input ref={input} type="file" accept="image/jpeg,image/png" hidden data-testid="face-file"
+            onChange={(event) => {
+              const files = Array.from(event.target.files ?? [])
+              event.target.value = ''
+              void takeFile(files)
+            }} />
         </div>
       )}
+      {notice && <p className="error" role="alert">{notice}</p>}
+      <p className="notice prompt" role="status" aria-live="polite">{phase === 'checking' ? comparing : ''}</p>
+      <button type="button" className="secondary" onClick={onChoice}>{f.cancel}</button>
     </section>
   )
 }

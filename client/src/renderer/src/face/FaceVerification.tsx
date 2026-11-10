@@ -1,11 +1,11 @@
-// H49: face verification (1:1). SFace's card, without a choice, and an explicit start (H40); then the camera
-// panel of H48. An image that fails its checks is taken again and makes no attempt, at most twelve per run
-// (as H35). The server compares a passing image with the three enrolled ones, saves the attempt with its sealed
-// image, and only then answers; the result shows the new face beside the closest enrolled one.
+// H49: face verification (1:1). H53: SFace's card is a choice between the camera and an existing image (H51); an
+// image that fails its checks makes no attempt and ends on its own outcome screen. The server compares a passing
+// image with the three enrolled ones, saves the attempt with its sealed image, and only then answers; the result
+// shows the new face beside the closest enrolled one, and "Verify again" returns to the choice.
 import { useState } from 'react'
 import type { FaceMethod, FaceVerificationResult } from '../../../shared/bridge'
 import { useSession } from '../session'
-import { FaceCard, FaceNotEnrolled, FaceTake, SourceLine } from './FaceTake'
+import { FaceChoice, FaceNotEnrolled, FaceTake, SourceLine } from './FaceTake'
 
 export function FaceVerificationView({ result, onAgain, onLeave }: { result: FaceVerificationResult; onAgain: () => void; onLeave: () => void }) {
   const { t } = useSession()
@@ -50,19 +50,21 @@ export function FaceVerificationView({ result, onAgain, onLeave }: { result: Fac
 export function FaceVerification({ method, enrolled, onEnrol, onLeave }: { method: FaceMethod; enrolled: boolean; onEnrol: () => void; onLeave: () => void }) {
   const { t } = useSession()
   const v = t.face.verify
-  const [started, setStarted] = useState(false)
+  const [stage, setStage] = useState<'choice' | 'live' | 'file'>('choice') // H53
   const [run, setRun] = useState(0)
   const [result, setResult] = useState<FaceVerificationResult | null>(null)
+  const choice = () => {
+    setResult(null)
+    setStage('choice')
+    setRun((value) => value + 1)
+  }
 
   if (!enrolled) return <FaceNotEnrolled title={v.title} text={v.notEnrolled} onEnrol={onEnrol} />
-  if (result !== null)
-    return <FaceVerificationView result={result} onLeave={onLeave} onAgain={() => {
-      setResult(null)
-      setRun((value) => value + 1)
-    }} />
-  if (!started)
-    return <FaceCard title={v.title} lead={v.lead} method={method} notes={[v.speed]} start={v.start}
-      onStart={() => setStarted(true)} onLeave={onLeave} />
-  return <FaceTake<FaceVerificationResult> key={run} title={v.title} route="verifyFace" minimumWidth={method.width_minimum}
-    comparing={v.comparing} onResult={setResult} onLeave={onLeave} />
+  if (result !== null) return <FaceVerificationView result={result} onLeave={onLeave} onAgain={choice} />
+  if (stage === 'choice')
+    return <FaceChoice title={v.title} lead={v.lead} method={method} notes={[v.speed]} live={v.live}
+      onLive={() => setStage('live')} onFile={() => setStage('file')} onLeave={onLeave} />
+  return <FaceTake<FaceVerificationResult> key={run} mode={stage} title={v.title} route="verifyFace"
+    minimumWidth={method.width_minimum} comparing={v.comparing} again={v.again} onResult={setResult} onChoice={choice}
+    onLeave={onLeave} />
 }

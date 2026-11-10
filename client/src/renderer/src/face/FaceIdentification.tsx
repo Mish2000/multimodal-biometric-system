@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FaceIdentificationResult, FaceMethod } from '../../../shared/bridge'
 import { useSession } from '../session'
-import { FaceCard, FaceNotEnrolled, FaceTake, SourceLine } from './FaceTake'
+import { FaceChoice, FaceNotEnrolled, FaceTake, SourceLine } from './FaceTake'
 
 export const PASS_MS = 600
 const CELLS = 12
@@ -110,19 +110,22 @@ export function FaceIdentificationView({ result, onAgain, onLeave }: { result: F
 export function FaceIdentification({ method, enrolled, onEnrol, onLeave }: { method: FaceMethod; enrolled: boolean; onEnrol: () => void; onLeave: () => void }) {
   const { t } = useSession()
   const n = t.face.identify
-  const [started, setStarted] = useState(false)
+  const [stage, setStage] = useState<'choice' | 'live' | 'file'>('choice') // H53
   const [run, setRun] = useState(0)
   const [result, setResult] = useState<FaceIdentificationResult | null>(null)
+  const choice = () => {
+    setResult(null)
+    setStage('choice')
+    setRun((value) => value + 1)
+  }
 
   if (!enrolled) return <FaceNotEnrolled title={<Title />} text={n.notEnrolled} onEnrol={onEnrol} />
   if (result !== null)
-    return <FaceIdentificationView key={result.attempt_id} result={result} onLeave={onLeave} onAgain={() => {
-      setResult(null)
-      setRun((value) => value + 1)
-    }} />
-  if (!started)
-    return <FaceCard title={<Title />} lead={n.lead} method={method} notes={[n.privacy, n.speed]} start={n.start}
-      onStart={() => setStarted(true)} onLeave={onLeave} />
-  return <FaceTake<FaceIdentificationResult> key={run} title={<Title />} route="identifyFace" minimumWidth={method.width_minimum}
-    comparing={n.comparing} errors={n.errors} onResult={setResult} onLeave={onLeave} />
+    return <FaceIdentificationView key={result.attempt_id} result={result} onLeave={onLeave} onAgain={choice} />
+  if (stage === 'choice')
+    return <FaceChoice title={<Title />} lead={n.lead} method={method} notes={[n.privacy, n.speed]} live={n.live}
+      onLive={() => setStage('live')} onFile={() => setStage('file')} onLeave={onLeave} />
+  return <FaceTake<FaceIdentificationResult> key={run} mode={stage} title={<Title />} route="identifyFace"
+    minimumWidth={method.width_minimum} comparing={n.comparing} errors={n.errors} again={n.again} onResult={setResult}
+    onChoice={choice} onLeave={onLeave} />
 }
