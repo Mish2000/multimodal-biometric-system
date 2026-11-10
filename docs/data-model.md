@@ -8,7 +8,8 @@ accounts database, with the account's `theme` column (H24, H26), its `phone`
 and `language` columns and the `password_reset` table (H29, H31, H32), and the
 biometric `subject`, `algorithm`, `enrolment`, `sample` and `template` tables
 exist (H23, H33); `attempt` exists for fingerprint verification (H35) and
-fingerprint identification (H41, H42).
+fingerprint identification (H41, H42), and for face verification (H49) and
+face identification (H50).
 
 H38 and H39 use these tables for OpenCV SIFT, Pore SIFT and Pore CNN.
 Each new finding gets one sealed template per available method.
@@ -354,6 +355,14 @@ Face verification (H49) stores the same row with `modality = face`,
 `algorithm = sface` and `source = device`; its probe is the engine's PNG of
 the image's pixels. Deleting the face erases its verification attempts, and
 a new enrolment keeps the earlier ones with the enrolment they compared.
+
+Face identification (H50) stores the row of fingerprint identification below
+with `modality = face` and `algorithm = sface`: the leading face enrolment in
+`top_enrolment_id`, also below the threshold, and the number of embeddings
+searched in `gallery_size`, three for each enrolment. The search orders the
+current SFace templates of the active user accounts by pgvector's cosine
+distance without an index. Deleting a face keeps the identification attempts
+that it led, with their link emptied.
 
 Identification uses `mode = identify`, `enrolment_id = null` and the number
 of compared templates in `gallery_size` (H41). The selected method is

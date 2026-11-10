@@ -314,8 +314,16 @@ flow of 2026-10-18).
   most twelve per run. The result shows the new aligned face beside the
   closest enrolled one, whose stored image is extracted again for its owner
   only and must give its stored embedding.
-- **1:N:** the highest cosine similarity over a user's embeddings; 1:N
-  searches the embeddings with pgvector.
+- **1:N (H50):** after SFace's card and an explicit start, one taken image
+  that passes the checks is compared with the current face enrolments of the
+  active user accounts, fixed with the threshold when the image arrives. One
+  SQL statement ranks the enrolments by their highest cosine similarity, an
+  exact pgvector search without an index; the leader is found only strictly
+  above the threshold, and equal leaders are marked as a tie. Before the save,
+  the accounts, enrolments and templates are checked again, and a changed
+  gallery ends the search unsaved. The result shows the five leading
+  enrolments, other users anonymous (H18), and the caller's own closest
+  enrolled face beside the new one when it is among them.
 
 ### 5.3 Voice
 
@@ -349,7 +357,7 @@ SHA-256.
 | Face capture | live camera view with the detected face box and what to do next; the camera chosen by the client, with a selector when more than one can be used; after an enrolment, the three aligned faces and their pair scores (H48) |
 | Voice capture | the sentence to read, a level meter and a timer |
 | 1:1 result | the new print beside the enrolled one with lines between matched points or pores, or the new aligned face beside the closest enrolled one (H49), a score gauge marked with the threshold, the decision and the time it took |
-| 1:N result | an animated pass over the enrolled gallery, the ranked candidates with their scores, the top one marked when it passes the threshold |
+| 1:N result | an animated pass over the enrolled gallery, the ranked candidates with their scores, the top one marked when it passes the threshold; for the face the search takes milliseconds, so the pass plays once, for about 0.6 s, when the answer arrives (skipped when Windows' animation effects are off), and the caller's own closest enrolled face is shown beside the new one when it is among the five candidates (H50) |
 | Administration area (H12) | accounts with role and status, new administrators, disabling and enabling; the attempt history with filters; thresholds; the audit log; never national IDs or samples |
 
 OpenCV SIFT comes first because its threshold is the only one that is not
@@ -399,6 +407,12 @@ accepted scan through all gallery comparisons. Deleting a
 leading enrolment sets `top_enrolment_id` to null and retains the attempt,
 its score and its sealed probe. This includes identification attempts made
 by other users. Re-enrolment retains the previous enrolment and its history.
+
+Face identification follows the same rules (H50): a completed search is
+stored, found or not, with its leading enrolment, the number of embeddings
+searched and its sealed image; a rejected image is not; the time runs from the
+image's receipt through every comparison; and deleting a face keeps the
+identification attempts that it led, with their link emptied.
 
 Administrative changes are stored in the audit log of the accounts database:
 time, administrator, action and target (an account, or the algorithm whose
@@ -539,3 +553,7 @@ themes during that work.
 - **H49** Face verification (1:1): the comparison with the three current
   embeddings, the attempt as H35's, and the result with the closest enrolled
   face (5.2, 6, 7).
+- **H50** Face identification (1:N): the gallery of H41 ranked in one SQL
+  statement, the attempt as H41's, anonymous candidates, the caller's own
+  closest face, and the pass over the gallery when the answer arrives
+  (5.2, 6, 7).

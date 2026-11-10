@@ -4,7 +4,8 @@ The FastAPI server of the system: the local PostgreSQL cluster, the key file, re
 national ID and the mobile phone, sign-in, password recovery, roles and the accounts part of the
 administration (H3, H11, H12, H14, H19, H29 to H32), fingerprint enrolment (H33)
 and 1:1 verification with OpenCV SIFT, Pore SIFT and Pore CNN
-(H35, H38, H39) and 1:N identification (H41, H42) with all three methods, and face enrolment (H48).
+(H35, H38, H39) and 1:N identification (H41, H42) with all three methods, and face enrolment (H48),
+1:1 verification (H49) and 1:N identification (H50).
 It runs with the `multimodal-server` environment and starts PostgreSQL from the
 `multimodal-postgres` environment (`environments/`); the face engine runs in `multimodal-face`.
 
@@ -113,7 +114,8 @@ to their defaults when `local/server.toml` does not name them; without them the 
 | `POST /api/face/checks` | user | one taken image (a PNG of the camera's frame, at most 8 MB): its checks and, when it passes, its aligned face; nothing is kept |
 | `POST /api/face/enrolments` | user | three to six taken images with their times, in order: 201 `saved` when three match each other, otherwise 200 `another`, or `failed` after six |
 | `POST /api/face/verifications` | user | verify the face with one taken image (H49): `rejected` with its checks and no attempt, or `verified` with the three scores, the decision and the two aligned faces, sent after the attempt is saved; 409 `not_enrolled` before an enrolment |
-| `DELETE /api/face/enrolment` | user | delete the face's current and replaced enrolments with their images, embeddings and verification attempts; 404 when it is not enrolled |
+| `POST /api/face/identifications` | user | identify the face with one taken image (H50): `rejected` with its checks and no attempt, or `identified` with the five leading enrolments (the caller's own marked, others anonymous), the tie count, the gallery's size and, when the caller's enrolment is among the five, the two aligned faces, sent after the attempt is saved; 409 `not_enrolled` before an enrolment, 409 `gallery_changed` when the gallery changed during the search |
+| `DELETE /api/face/enrolment` | user | delete the face's current and replaced enrolments with their images, embeddings and verification attempts; identification attempts stay, without the link; 404 when it is not enrolled |
 | `GET /api/admin/accounts`, `POST /api/admin/accounts/{id}/status` | administrator | accounts; disable or enable |
 | `POST /api/admin/administrators`, `GET /api/admin/audit` | administrator | a new administrator; the audit log |
 
@@ -204,6 +206,15 @@ end of the comparisons. The winning stored image is then opened for its owner on
 its embedding must equal the stored one, or the run ends unsaved. The attempt is saved with its image
 sealed under `mbs/probe/v1`, while the enrolment is locked and still current (otherwise
 `enrolment_changed`), and only then is the answer sent.
+
+Face identification (H50) fixes its gallery when the image arrives, as H41 does for fingerprints: the
+current face enrolments of the active user accounts, through their sealed identity links, each with three
+SFace embeddings of the pinned version. One SQL statement ranks the enrolments by their highest cosine
+similarity, an exact search without an index; the leader is found only strictly above 0.363, and equal
+leaders are ordered by enrolment and reported as a tie. When the caller's own enrolment is among the five
+shown, its winning image is extracted again as in H49. The accounts, then the enrolments and their
+templates are locked and checked again before the attempt is saved (otherwise `gallery_changed`); the
+leading enrolment is stored even below the threshold, and its later deletion keeps the attempt (H41).
 
 Cancellation closes the acquisition worker's standard input (H36). The worker
 finishes its current native call, switches off the illumination (H37),

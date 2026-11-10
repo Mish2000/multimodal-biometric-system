@@ -3,8 +3,9 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { StrictMode } from 'react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import type { Account, ApiResult, DisplayState, FaceVerificationResult, EnrolmentEvent, Language, MbsBridge, OpenedLink, RouteName, Theme, VerificationEvent, FingerprintAlgorithm, IdentificationEvent } from '../../shared/bridge'
+import type { Account, ApiResult, DisplayState, FaceIdentificationResult, FaceVerificationResult, EnrolmentEvent, Language, MbsBridge, OpenedLink, RouteName, Theme, VerificationEvent, FingerprintAlgorithm, IdentificationEvent } from '../../shared/bridge'
 import { App } from './App'
+import { FaceIdentificationView } from './face/FaceIdentification'
 import { FaceVerificationView } from './face/FaceVerification'
 import { SessionProvider } from './session'
 
@@ -49,6 +50,7 @@ class FakeServer implements MbsBridge {
   faceAvailable = true
   faceDeletes = 0
   faceVerifications = 0
+  faceIdentifications = 0
 
   displays = async (): Promise<DisplayState> => ({ internalDisplay: false })
 
@@ -236,6 +238,9 @@ class FakeServer implements MbsBridge {
       case 'verifyFace':
         this.faceVerifications++
         return ok(FACE_VERIFIED)
+      case 'identifyFace':
+        this.faceIdentifications++
+        return ok(FACE_IDENTIFIED)
       case 'deleteFace':
         if (!this.face.enrolled) return no(404, 'not_enrolled')
         this.face = { enrolled: false }
@@ -293,6 +298,15 @@ const FACE_VERIFIED: FaceVerificationResult = {
   duration_ms: 118, comparisons: [{ placement: 1, score: 0.655, accepted: true }, { placement: 2, score: 0.712, accepted: true },
     { placement: 3, score: 0.301, accepted: false }],
   view: { placement: 2, probe: 'AAAA', reference: 'AAAA' },
+}
+
+const FACE_IDENTIFIED: FaceIdentificationResult = {
+  status: 'identified', attempt_id: '7c1d7c2e-0000-4000-8000-000000000002', at: '2026-11-09T19:00:00+00:00', score: 0.712,
+  threshold: 0.363, threshold_origin: "OpenCV's SFace sample, cosine similarity", threshold_provisional: false, accepted: true,
+  duration_ms: 84, gallery_size: 9, enrolments: 3, tied_leaders: 1,
+  candidates: [{ rank: 1, own: true, score: 0.712, accepted: true }, { rank: 2, own: false, score: 0.201, accepted: false },
+    { rank: 3, own: false, score: 0.034, accepted: false }],
+  view: { rank: 1, placement: 2, probe: 'AAAA', reference: 'AAAA' },
 }
 
 let server: FakeServer
@@ -1359,7 +1373,7 @@ describe('the face (H48)', () => {
     expect(enrol.disabled).toBe(false)
     expect(screen.getByRole('heading', { name: 'SFace' })).toBeTruthy()
     expect(screen.getByText(/Accepts above 0.363/)).toBeTruthy()
-    expect(screen.getByText(/Identification \(1:N\) by face comes in the next build step/)).toBeTruthy()
+    expect(screen.getByText(/Images from a file, for verification and identification, come in the next build step/)).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Delete the face enrolment' })).toBeNull()
   })
 
@@ -1449,5 +1463,120 @@ describe('face verification (H49)', () => {
     await openFaceAs(true)
     fireEvent.click(screen.getByRole('button', { name: 'Delete the face enrolment' }))
     expect(screen.getByRole('alertdialog').textContent).toContain('their verification attempts with their images')
+    expect(screen.getByRole('alertdialog').textContent).toContain('Identification (1:N) attempts and their images stay stored')
+  })
+})
+
+describe('face identification (H50)', () => {
+  const original = window.matchMedia
+  afterEach(() => {
+    window.matchMedia = original
+  })
+
+  function reducedMotion() {
+    window.matchMedia = ((query: string) => ({
+      matches: query === '(prefers-reduced-motion: reduce)', media: query, onchange: null, addListener: () => undefined,
+      removeListener: () => undefined, addEventListener: () => undefined, removeEventListener: () => undefined,
+      dispatchEvent: () => false,
+    })) as typeof window.matchMedia
+  }
+
+  function view(result: FaceIdentificationResult, onAgain: () => void = () => undefined) {
+    render(<MemoryRouter><SessionProvider><FaceIdentificationView result={result} onAgain={onAgain} onLeave={() => undefined} /></SessionProvider></MemoryRouter>)
+  }
+
+  async function openFaceAs(enrolled: boolean, language: Language = 'en') {
+    if (enrolled) server.face = { enrolled: true, enrolled_at: '2026-11-09T13:00:00+00:00' }
+    server.add('dana', 'user', { language })
+    open('/sign-in')
+    await signIn('dana', 'dana password 1')
+    fireEvent.click(await cardLink(language === 'he' ? 'פנים' : 'Face'))
+    await screen.findByText(language === 'he' ? /מקבל מעל 0.363/ : /Accepts above 0.363/)
+  }
+
+  it('offers the enrolment first when the face is not enrolled (H15)', async () => {
+    await openFaceAs(false)
+    fireEvent.click(screen.getByRole('button', { name: 'Identify (1:N)' }))
+    expect(screen.getByRole('heading', { name: 'Face identification (1:N)' })).toBeTruthy()
+    expect(screen.getByText(/Face identification is not available yet/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Enrol my face' }))
+    expect(await screen.findByRole('heading', { name: 'Enrolling your face' })).toBeTruthy()
+    expect(server.faceIdentifications).toBe(0)
+  })
+
+  it('shows SFace without a choice and starts the camera only on an explicit start (H40)', async () => {
+    await openFaceAs(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Identify (1:N)' }))
+    expect(screen.getByRole('heading', { name: 'Face identification (1:N)' })).toBeTruthy()
+    expect(screen.getByText(/Other users appear anonymously, without a picture or a name/)).toBeTruthy()
+    expect(screen.getByText(/the search itself is one database query/)).toBeTruthy()
+    expect(screen.queryByText('No camera is connected. Connect a USB camera.')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Start identification' }))
+    expect(await screen.findByText('No camera is connected. Connect a USB camera.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(await screen.findByRole('button', { name: 'Identify (1:N)' })).toBeTruthy()
+    expect(server.faceIdentifications).toBe(0)
+  })
+
+  it('plays the pass over the gallery once, then shows the result', async () => {
+    view(FACE_IDENTIFIED)
+    expect(screen.getByRole('heading', { name: 'Face identification (1:N)' })).toBeTruthy()
+    expect(screen.getByText('Searching the enrolled faces…')).toBeTruthy()
+    expect(document.querySelectorAll('.gallery-sweep.passing span')).toHaveLength(12)
+    expect(screen.queryByRole('table')).toBeNull()
+    expect(await screen.findByRole('heading', { name: 'A matching face was found' })).toBeTruthy()
+    expect(document.querySelector('.gallery-sweep')).toBeNull()
+  })
+
+  it('ranks the candidates, shows the caller’s own face beside the new one and keeps other users anonymous', async () => {
+    reducedMotion()
+    let again = 0
+    view(FACE_IDENTIFIED, () => again++)
+    expect(screen.getByRole('heading', { name: 'A matching face was found' })).toBeTruthy()
+    expect(document.querySelector('.gallery-sweep')).toBeNull()
+    expect(screen.getByText('Highest similarity 0.712; a match needs more than 0.363.')).toBeTruthy()
+    expect(screen.getAllByRole('row').slice(1).map((row) => row.textContent)).toEqual([
+      '1Your face0.712above the threshold', '2Another registered user0.201not above the threshold',
+      '3Another registered user0.034not above the threshold'])
+    expect(screen.getByRole('table', { name: 'Leading candidates, 3 of 3' })).toBeTruthy()
+    expect(screen.getByRole('img', { name: 'New image' })).toBeTruthy()
+    expect(screen.getByRole('img', { name: 'Your enrolled image 2' })).toBeTruthy()
+    expect(screen.getByText(/^Your enrolled face, rank 1 in the list, beside the new image/)).toBeTruthy()
+    expect(screen.getByText('3 face enrolments, 9 images, in this search.')).toBeTruthy()
+    expect(screen.getByText('Processing took 0.08 s. The result and its encrypted image were saved.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Identify again' }))
+    expect(again).toBe(1)
+  })
+
+  it('names another user’s leading face only anonymously, and says why no face is shown', () => {
+    reducedMotion()
+    const { view: _shown, ...unseen } = FACE_IDENTIFIED
+    view({ ...unseen, score: 0.81, enrolments: 2, gallery_size: 6,
+      candidates: [{ rank: 1, own: false, score: 0.81, accepted: true }, { rank: 2, own: false, score: 0.2, accepted: false }] })
+    expect(screen.getByRole('heading', { name: 'A matching face was found' })).toBeTruthy()
+    expect(screen.getAllByText('Another registered user')).toHaveLength(3)
+    expect(screen.queryAllByRole('img')).toHaveLength(0)
+    expect(screen.getByText(/^Your own face is not among the candidates shown/)).toBeTruthy()
+    expect(screen.getByText('2 face enrolments, 6 images, in this search.')).toBeTruthy()
+  })
+
+  it('reports a tie without choosing a candidate, and a leader below the threshold as not found', () => {
+    reducedMotion()
+    view({ ...FACE_IDENTIFIED, tied_leaders: 2 })
+    expect(screen.getByText('2 candidates share the highest similarity. The result does not select a unique candidate.')).toBeTruthy()
+    cleanup()
+    view({ ...FACE_IDENTIFIED, score: 0.2, accepted: false, enrolments: 1, gallery_size: 3,
+      candidates: [{ rank: 1, own: true, score: 0.2, accepted: false }] })
+    expect(screen.getByRole('heading', { name: 'No matching face was found' })).toBeTruthy()
+    expect(screen.getByText('One face enrolment, 3 images, in this search.')).toBeTruthy()
+    expect(screen.getAllByText('Your face')).toHaveLength(1)
+  })
+
+  it('speaks Hebrew, right to left', async () => {
+    await openFaceAs(true, 'he')
+    fireEvent.click(screen.getByRole('button', { name: 'זיהוי (1:N)' }))
+    expect(screen.getByRole('heading', { name: 'זיהוי פנים (1:N)' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'התחלת הזיהוי' })).toBeTruthy()
+    expect(document.documentElement.dir).toBe('rtl')
   })
 })

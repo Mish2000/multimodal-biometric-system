@@ -1038,3 +1038,10 @@ button.danger {
 .face-pair img { width: 140px; height: 140px; border-radius: var(--radius); }
 .face-score { width: min(100%, 420px); height: 1.25rem; }
 .face-verification .prompt:empty { padding: 0; margin: 0; border: 0; background: none; }
+
+/* H50: the pass over the face gallery plays once when the answer arrives, since the search takes milliseconds;
+   the page skips it when Windows' animation effects are off. */
+.gallery-sweep.passing span { animation: gallery-pass 200ms ease-out both; }
+@keyframes gallery-pass { from { opacity: 0.12; } to { opacity: 0.8; } }
+@media (prefers-reduced-motion: reduce) { .gallery-sweep.passing span { animation: none; opacity: 0.8; } }
+.face-identification tr.own td { font-weight: 600; }

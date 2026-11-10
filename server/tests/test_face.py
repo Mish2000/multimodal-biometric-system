@@ -101,7 +101,8 @@ def test_the_face_routes_are_only_for_signed_in_users(face_client, databases):
     routes = [("GET", "/api/face/method", None), ("POST", "/api/face/detect", {"image": image()}),
               ("POST", "/api/face/checks", {"image": image()}),
               ("POST", "/api/face/enrolments", taken(image(), image(variant=1), image(variant=2))),
-              ("DELETE", "/api/face/enrolment", None)]
+              ("DELETE", "/api/face/enrolment", None), ("POST", "/api/face/verifications", {"image": image()}),
+              ("POST", "/api/face/identifications", {"image": image()})]
     admin = administrator(face_client, databases)
     for method, path, body in routes:
         assert error(face_client.request(method, path, json=body)) == (401, "not_signed_in")
@@ -111,7 +112,8 @@ def test_the_face_routes_are_only_for_signed_in_users(face_client, databases):
 def test_without_the_face_environment_the_face_is_unavailable(client):
     token = user(client)
     for path, body in (("/api/face/detect", {"image": image()}), ("/api/face/checks", {"image": image()}),
-                       ("/api/face/enrolments", taken(image(), image(variant=1), image(variant=2)))):
+                       ("/api/face/enrolments", taken(image(), image(variant=1), image(variant=2))),
+                       ("/api/face/verifications", {"image": image()}), ("/api/face/identifications", {"image": image()})):
         assert error(client.post(path, json=body, headers=auth(token))) == (503, "face_unavailable")
 
 

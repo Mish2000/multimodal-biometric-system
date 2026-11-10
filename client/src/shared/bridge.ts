@@ -28,6 +28,7 @@ export const ROUTES = {
   enrolFace: ['POST', '/api/face/enrolments'],
   deleteFace: ['DELETE', '/api/face/enrolment'],
   verifyFace: ['POST', '/api/face/verifications'], // H49
+  identifyFace: ['POST', '/api/face/identifications'], // H50
 } as const satisfies Record<string, readonly ['GET' | 'POST' | 'DELETE', string]>
 
 export type RouteName = keyof typeof ROUTES
@@ -283,6 +284,27 @@ export interface FaceVerificationResult {
 }
 
 export type FaceVerificationAnswer = FaceVerificationResult | ({ status: 'rejected'; checks: FaceCheck[] } & FaceDetection)
+
+// H50: a face identification's answer, saved first. Other candidates have only a rank for this attempt and no
+// picture (H18); `view` is the caller's own enrolled face, when it is among the candidates shown.
+export interface FaceIdentificationResult {
+  status: 'identified'
+  attempt_id: string
+  at: string
+  score: number
+  threshold: number
+  threshold_origin: string
+  threshold_provisional: boolean
+  accepted: boolean
+  duration_ms: number
+  gallery_size: number // the images (embeddings) searched
+  enrolments: number
+  tied_leaders: number
+  candidates: Array<{ rank: number; own: boolean; score: number; accepted: boolean }>
+  view?: { rank: number; placement: number; probe: string; reference: string } // aligned faces, PNG in base64
+}
+
+export type FaceIdentificationAnswer = FaceIdentificationResult | ({ status: 'rejected'; checks: FaceCheck[] } & FaceDetection)
 
 // H48: whether the laptop's own screen is in use. With the lid closed and external monitors on, Windows turns
 // it off, and the built-in camera sees only the inside of the lid.

@@ -1,6 +1,6 @@
 // H48: the camera of the face screens, chosen by the client: the live view of the current camera, a selector
 // when more than one can be used, and what happened when a camera was covered, unplugged or refused.
-// Enrolment (H48) and verification (H49) share it.
+// Enrolment (H48), verification (H49) and identification (H50) share it.
 import { useState } from 'react'
 import { useSession } from '../session'
 import type { Camera } from './camera'

@@ -1,8 +1,10 @@
 // The face screen (H15, H48): its enrolment state, SFace's card, and the enrolment from the camera; a new
-// enrolment replaces the current one, and the enrolment can be deleted, as H34 does for a finger.
+// enrolment replaces the current one, and the enrolment can be deleted, as H34 does for a finger. Verification
+// (H49) and identification (H50) start from here.
 import { useCallback, useEffect, useState } from 'react'
 import type { FaceMethod, FaceSaved } from '../../../shared/bridge'
 import { FaceEnrolment } from '../face/FaceEnrolment'
+import { FaceIdentification } from '../face/FaceIdentification'
 import { FaceResult } from '../face/FaceResult'
 import { FaceVerification } from '../face/FaceVerification'
 import { errorText } from '../texts'
@@ -17,6 +19,7 @@ export function Face() {
   const [method, setMethod] = useState<FaceMethod | null>(null)
   const [enrolling, setEnrolling] = useState(false)
   const [verifying, setVerifying] = useState(false) // H49
+  const [identifying, setIdentifying] = useState(false) // H50
   const [saved, setSaved] = useState<FaceSaved | null>(null)
   const [confirming, setConfirming] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -57,6 +60,21 @@ export function Face() {
         }}
         onLeave={() => {
           setVerifying(false)
+          load()
+        }}
+      />
+    )
+  if (identifying && method !== null && state !== null)
+    return (
+      <FaceIdentification
+        method={method}
+        enrolled={state.enrolled}
+        onEnrol={() => {
+          setIdentifying(false)
+          setEnrolling(true)
+        }}
+        onLeave={() => {
+          setIdentifying(false)
           load()
         }}
       />
@@ -113,10 +131,16 @@ export function Face() {
             ) : (
               <div className="actions">
                 {state.enrolled && (
-                  <button type="button" disabled={!method.available} onClick={() => {
-                    setMessage(null)
-                    setVerifying(true)
-                  }}>{f.verify.open}</button>
+                  <>
+                    <button type="button" disabled={!method.available} onClick={() => {
+                      setMessage(null)
+                      setVerifying(true)
+                    }}>{f.verify.open}</button>
+                    <button type="button" className="secondary" disabled={!method.available} onClick={() => {
+                      setMessage(null)
+                      setIdentifying(true)
+                    }}>{f.identify.open}</button>
+                  </>
                 )}
                 <button type="button" className={state.enrolled ? 'secondary' : ''} disabled={!method.available} onClick={() => {
                   setMessage(null)
@@ -125,10 +149,16 @@ export function Face() {
                   {state.enrolled ? f.enrolAgain : f.enrol}
                 </button>
                 {!state.enrolled && (
-                  <button type="button" className="secondary" disabled={!method.available} onClick={() => {
-                    setMessage(null)
-                    setVerifying(true)
-                  }}>{f.verify.open}</button>
+                  <>
+                    <button type="button" className="secondary" disabled={!method.available} onClick={() => {
+                      setMessage(null)
+                      setVerifying(true)
+                    }}>{f.verify.open}</button>
+                    <button type="button" className="secondary" disabled={!method.available} onClick={() => {
+                      setMessage(null)
+                      setIdentifying(true)
+                    }}>{f.identify.open}</button>
+                  </>
                 )}
                 {state.enrolled && (
                   <button type="button" className="secondary" onClick={() => setConfirming(true)}>{f.deleteEnrolment}</button>

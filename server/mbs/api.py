@@ -356,8 +356,18 @@ def create_app(databases: Databases, keys: Keys, outbox: Outbox, fingerprints: F
         subject = accounts.subject_of(databases, keys, account.id)
         return engine_work(lambda: face.verify(service, databases, keys, subject, image))
 
+    # H50: one taken image against every current face enrolment of the active users. A completed search is saved
+    # with its sealed image before the answer, a rejected image is not; other users stay anonymous (H18).
+    @app.post("/api/face/identifications")
+    @allow(USER)
+    def identify_face(body: FaceImage, account: SignedIn = Depends(signed_in)) -> dict:
+        service = face_service()
+        image = face.decode_image(body.image, face.IMAGE_BYTES)
+        subject = accounts.subject_of(databases, keys, account.id)
+        return engine_work(lambda: face.identify(service, databases, keys, subject, image))
+
     # As H34 for a finger: the face's enrolment is erased with its images and embeddings, and (H49) with its
-    # verification attempts and their sealed images.
+    # verification attempts and their sealed images; identification attempts stay, without the link (H41, H50).
     @app.delete("/api/face/enrolment", status_code=204)
     @allow(USER)
     def delete_face(account: SignedIn = Depends(signed_in)) -> None:

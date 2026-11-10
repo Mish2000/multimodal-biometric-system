@@ -89,12 +89,27 @@ def _validate_reference(reference: Reference, version: str) -> None:
         raise IdentificationError("stored_template_unreadable")
 
 
-def _load_gallery(databases: Databases, keys: Keys, subject: uuid.UUID, code: str = fp.OPENCV_SIFT) -> Gallery:
+def active_owners(databases: Databases, keys: Keys) -> list[Owner]:
+    """The active user accounts and their subjects, through their sealed identity links (H3, H41); face
+    identification (H50) fixes its gallery from the same list."""
     with Session(databases.accounts) as db:
         rows = db.execute(select(Account.id, IdentityLink.subject).join(IdentityLink).where(
             Account.role == USER, Account.status == ACTIVE).order_by(Account.id)).all()
-    owners = [Owner(account_id, uuid.UUID(bytes=keyring.open_sealed(
+    return [Owner(account_id, uuid.UUID(bytes=keyring.open_sealed(
         keys, keyring.IDENTITY_LINK, account_id.bytes, sealed)), sealed) for account_id, sealed in rows]
+
+
+def owners_unchanged(db: Session, owners: list[Owner]) -> bool:
+    """Lock the gallery's accounts, before any enrolment is locked, and tell whether each is still the same
+    active user account (H41, H50)."""
+    rows = db.execute(select(Account.id, Account.status, Account.role, IdentityLink.subject).join(
+        IdentityLink).where(Account.id.in_([owner.account_id for owner in owners])).order_by(
+        Account.id).with_for_update()).all()
+    return list(rows) == [(owner.account_id, ACTIVE, USER, owner.sealed_link) for owner in owners]
+
+
+def _load_gallery(databases: Databases, keys: Keys, subject: uuid.UUID, code: str = fp.OPENCV_SIFT) -> Gallery:
+    owners = active_owners(databases, keys)
     with Session(databases.biometric) as db:
         candidates = [Candidate(*row) for row in db.execute(select(Enrolment.id, Enrolment.subject_id,
             Enrolment.finger).where(Enrolment.modality == fp.FINGERPRINT, Enrolment.replaced_at.is_(None),
@@ -242,11 +257,7 @@ def _save(databases: Databases, keys: Keys, subject: uuid.UUID, gallery: Gallery
     attempt.probe = keyring.seal(keys, keyring.PROBE, attempt.id.bytes + subject.bytes, png)
     # Lock accounts first, then enrolments. Capture and comparison hold neither transaction open.
     with Session(databases.accounts) as accounts_db, accounts_db.begin():
-        rows = accounts_db.execute(select(Account.id, Account.status, Account.role, IdentityLink.subject).join(
-            IdentityLink).where(Account.id.in_([owner.account_id for owner in gallery.owners])).order_by(
-            Account.id).with_for_update()).all()
-        expected = [(owner.account_id, ACTIVE, USER, owner.sealed_link) for owner in gallery.owners]
-        if list(rows) != expected:
+        if not owners_unchanged(accounts_db, gallery.owners):
             raise IdentificationError("gallery_changed")
         with Session(databases.biometric, expire_on_commit=False) as db, db.begin():
             ids = [candidate.id for candidate in gallery.candidates]

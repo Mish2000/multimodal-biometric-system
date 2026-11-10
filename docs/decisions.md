@@ -1167,3 +1167,56 @@ Face verification (H49) passed a manual check on the researcher's PC: six
 attempts, all matches, with similarities of 0.570 to 0.894 against the
 threshold of 0.363 and 66 to 83 ms of processing, each saved with its image
 sealed (about 1 MB).
+
+## 2026-11-09: face identification
+
+Approved on 2026-11-09. Identify the face with one image from the PC's
+cameras, the third step of increment 4 (H15, H20), as H41 does for a finger.
+
+- **H50** After SFace's card, without a choice, and an explicit start (H40),
+  the camera of H48 takes one image that must pass H48's four checks; a
+  rejected image is taken again and makes no attempt, at most twelve per run.
+  Without the caller's own face enrolment, the message of H15 is shown.
+- The gallery is the current face enrolments of the active user accounts,
+  found through their sealed identity links, each with three SFace embeddings
+  of the pinned model; it and the threshold are fixed when the image arrives.
+  One SQL statement ranks the enrolments by their highest pgvector cosine
+  similarity, an exact search without an index. The leader is found only
+  strictly above the threshold, and equal leaders are ordered by enrolment
+  identifier and reported as a tie. Before the save, the accounts, then the
+  enrolments and their templates are locked and checked again; a deletion, a
+  new enrolment, a disabled account or a changed template ends the search
+  unsaved.
+- Every completed search, found or not, is saved as H41's attempt: `face`,
+  `identify`, `sface`, the leading enrolment even below the threshold, the
+  number of embeddings searched, the score and the threshold used, the
+  decision, the time from the image's receipt through every comparison,
+  `source = device`, and the image sealed under `mbs/probe/v1`. The answer is
+  sent only after the save. Deleting a face keeps the identification attempts
+  that it led, with their link emptied (H41), and erases its verification
+  attempts (H49); the confirmation says both.
+- The result shows the five leading enrolments with their similarities. The
+  caller's own enrolment is named; the others are "another registered user",
+  without a picture, a name or an identifier (H18). When the caller's
+  enrolment is among the five, its winning image is extracted again as in H49
+  and its aligned face is shown beside the new one; otherwise the page says
+  why no face is shown. The gallery's size and the processing time follow.
+- The search takes a few milliseconds, so the specification's pass over the
+  gallery plays once, for about 0.6 s, when the answer arrives; the time
+  shown stays the server's processing time, and the pass is skipped when
+  Windows' animation effects are off.
+
+The full server run passed 265 tests, including the four local checks with
+stored captures; all 137 client tests, type checks and the build passed. The
+built client passed 81 offscreen checks, among them identification before an
+enrolment, which offers the enrolment first. Identification of real faces is
+checked by hand.
+
+## 2026-11-10: live face identification check
+
+Face identification (H50) passed a manual check on the researcher's PC with
+two accounts, the second enrolled for this check: four searches, all found,
+each led by the caller's own enrolment, with similarities of 0.607 to 0.884
+against the threshold of 0.363 and 62 to 123 ms of processing, over
+galleries of three and six embeddings, each saved with its image sealed
+(about 0.77 MB).

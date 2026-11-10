@@ -1,4 +1,4 @@
-"""Face enrolment (H17, H25, H48).
+"""Face enrolment (H17, H25, H48), verification (H49) and identification (H50).
 
 The camera belongs to the client: the page shows its live view, asks the server where the faces are
 (`detect`), and sends the images the user takes. Every image passes the same checks here: exactly one face,
@@ -23,10 +23,11 @@ import struct
 import threading
 import time
 import uuid
+from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import CursorResult, delete, select, text, update
+from sqlalchemy import CursorResult, bindparam, delete, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DbSession
 
@@ -35,6 +36,7 @@ from .config import REPOSITORY, Config
 from .db import Databases
 from .engines import Engine, EngineError, conda_environment
 from .fingerprint import best_three
+from .identification import Owner, active_owners, owners_unchanged
 from .keys import Keys
 from .models import Algorithm, Attempt, Enrolment, Sample, Template, vector_text, vector_values
 
@@ -390,3 +392,122 @@ def verify(service: FaceService, databases: Databases, keys: Keys, subject: uuid
             "threshold": threshold, "threshold_origin": origin, "threshold_provisional": provisional,
             "accepted": attempt.accepted, "duration_ms": duration_ms, "comparisons": comparisons,
             "view": {"placement": best.placement, "probe": _b64(probe.aligned), "reference": _b64(reference)}}
+
+
+# Face identification (H50): one taken image against every current face enrolment of the active user accounts, as
+# H41 does for fingerprints. The gallery and the threshold are fixed when the image arrives. One SQL statement ranks
+# the enrolments by their highest cosine similarity, an exact search without an index (docs/data-model.md); the
+# leader is found only strictly above the threshold, and equal leaders are ordered by enrolment and reported as a
+# tie. A completed search is saved, found or not, after the accounts, the enrolments and their templates are checked
+# again under locks, and the answer is sent only after that. Only the caller's own enrolment is named or shown (H18).
+
+SHOWN_CANDIDATES = 5
+
+RANKING = text("""
+WITH scored AS (
+    SELECT s.enrolment_id, s.id AS sample_id, s.placement, t.embedding::text AS embedding,
+           1 - (t.embedding <=> CAST(:probe AS vector)) AS score
+    FROM template t JOIN sample s ON s.id = t.sample_id
+    WHERE t.id IN :templates AND t.algorithm = 'sface'
+), ranked AS (
+    SELECT scored.*, row_number() OVER (PARTITION BY enrolment_id ORDER BY score DESC, placement) AS place
+    FROM scored
+)
+SELECT enrolment_id, sample_id, placement, embedding, score FROM ranked WHERE place = 1
+ORDER BY score DESC, enrolment_id
+""").bindparams(bindparam("templates", expanding=True))
+
+
+@dataclass(frozen=True)
+class Gallery:
+    owners: list[Owner]  # the participating accounts, fixed as H41 fixes them
+    enrolments: list[tuple[uuid.UUID, uuid.UUID]]  # (enrolment, subject), in enrolment order
+    rows: list[tuple]  # (enrolment, sample, placement, template, version), in enrolment and placement order
+
+
+def _gallery_rows(db: DbSession, enrolments: list[uuid.UUID]) -> list[tuple]:
+    return [tuple(row) for row in db.execute(
+        select(Enrolment.id, Sample.id, Sample.placement, Template.id, Template.version)
+        .join(Sample, Sample.enrolment_id == Enrolment.id)
+        .outerjoin(Template, (Template.sample_id == Sample.id) & (Template.algorithm == SFACE))
+        .where(Enrolment.id.in_(enrolments)).order_by(Enrolment.id, Sample.placement))]
+
+
+def _gallery(databases: Databases, keys: Keys, subject: uuid.UUID, version: str) -> Gallery:
+    """The current face enrolments of the active user accounts, each with its three embeddings of this version."""
+    owners = active_owners(databases, keys)
+    with _db(databases.biometric) as db:
+        enrolments = [tuple(row) for row in db.execute(select(Enrolment.id, Enrolment.subject_id).where(
+            Enrolment.modality == FACE, Enrolment.replaced_at.is_(None),
+            Enrolment.subject_id.in_([owner.subject_id for owner in owners])).order_by(Enrolment.id))]
+        if not any(owner == subject for _, owner in enrolments):
+            raise FaceError("not_enrolled", 409)  # H15: the client offers the enrolment
+        rows = _gallery_rows(db, [enrolment for enrolment, _ in enrolments])
+    counts = Counter(row[0] for row in rows)
+    if any(counts[enrolment] != IMAGES for enrolment, _ in enrolments) or any(row[3] is None for row in rows):
+        raise FaceError("gallery_templates_unavailable", 503)
+    if any(row[4] != version for row in rows):
+        raise FaceError("method_version_differs", 503)
+    participating = {owner for _, owner in enrolments}
+    return Gallery([owner for owner in owners if owner.subject_id in participating], enrolments, rows)
+
+
+def _save_identification(databases: Databases, gallery: Gallery, attempt: Attempt) -> None:
+    """As H41: the accounts are locked first, then the enrolments; a deletion, a new enrolment, a disabled account
+    or a changed template since the start ends the search unsaved. A later deletion of the leading enrolment keeps
+    the attempt and empties its link."""
+    ids = [enrolment for enrolment, _ in gallery.enrolments]
+    with DbSession(databases.accounts) as accounts_db, accounts_db.begin():
+        if not owners_unchanged(accounts_db, gallery.owners):
+            raise FaceError("gallery_changed", 409)
+        with _db(databases.biometric) as db, db.begin():
+            current = db.execute(select(Enrolment.id, Enrolment.subject_id, Enrolment.replaced_at).where(
+                Enrolment.id.in_(ids)).order_by(Enrolment.id).with_for_update()).all()
+            if [tuple(row) for row in current] != [(enrolment, owner, None) for enrolment, owner in gallery.enrolments] \
+                    or _gallery_rows(db, ids) != gallery.rows:
+                raise FaceError("gallery_changed", 409)
+            db.add(attempt)
+
+
+def identify(service: FaceService, databases: Databases, keys: Keys, subject: uuid.UUID, image: bytes) -> dict:
+    at = datetime.now(timezone.utc)
+    started = time.perf_counter()
+    with _db(databases.biometric) as db:
+        algorithm = db.get(Algorithm, SFACE)
+        version, threshold = algorithm.version, algorithm.threshold
+        origin, provisional = algorithm.threshold_origin, algorithm.threshold_provisional
+    gallery = _gallery(databases, keys, subject, version)
+    if service.engine.start().get("sface_sha256") != version:
+        raise FaceError("method_version_differs", 503)
+    probe = _extract(service, image)
+    if not probe.passed:
+        return {"status": "rejected", "width": probe.width, "height": probe.height, "faces": probe.faces,
+                "checks": probe.checks}
+    with _db(databases.biometric) as db:
+        ranked = db.execute(RANKING, {"probe": vector_text(probe.embedding),
+                                      "templates": [row[3] for row in gallery.rows]}).all()
+    owner_of = dict(gallery.enrolments)
+    if len(ranked) != len(owner_of) or {row.enrolment_id for row in ranked} != set(owner_of):
+        raise FaceError("gallery_changed", 409)  # an enrolment's embeddings were erased since the start
+    duration_ms = round((time.perf_counter() - started) * 1000)  # receipt through every comparison (H41)
+    scores = [float(row.score) for row in ranked]
+    leader, score = ranked[0], scores[0]
+    shown = list(enumerate(ranked[:SHOWN_CANDIDATES], 1))
+    own = next(((rank, row) for rank, row in shown if owner_of[row.enrolment_id] == subject), None)
+    view = None
+    if own is not None:  # the caller's own enrolled face only, extracted again as H49 does
+        rank, row = own
+        reference = _repeat_view(service, keys, databases, subject, row.sample_id, vector_values(row.embedding))
+        view = {"rank": rank, "placement": row.placement, "probe": _b64(probe.aligned), "reference": _b64(reference)}
+    attempt = Attempt(id=uuid.uuid4(), at=at, subject_id=subject, modality=FACE, mode="identify", algorithm=SFACE,
+                      top_enrolment_id=leader.enrolment_id, gallery_size=len(gallery.rows), score=score,
+                      threshold=threshold, accepted=score > threshold, duration_ms=duration_ms, source="device")
+    attempt.probe = keyring.seal(keys, keyring.PROBE, attempt.id.bytes + subject.bytes, probe.png)
+    _save_identification(databases, gallery, attempt)
+    return {"status": "identified", "attempt_id": str(attempt.id), "at": at.isoformat(), "score": score,
+            "threshold": threshold, "threshold_origin": origin, "threshold_provisional": provisional,
+            "accepted": attempt.accepted, "duration_ms": duration_ms, "gallery_size": len(gallery.rows),
+            "enrolments": len(ranked), "tied_leaders": scores.count(score),
+            "candidates": [{"rank": rank, "own": owner_of[row.enrolment_id] == subject, "score": float(row.score),
+                            "accepted": float(row.score) > threshold} for rank, row in shown],
+            **({"view": view} if view is not None else {})}
