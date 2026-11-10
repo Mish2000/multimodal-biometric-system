@@ -24,6 +24,10 @@ export function checkLine(check: FaceCheck, t: Texts): string {
   if (check.name === 'one_face') return `${name}: ${f.found(check.count ?? 0)}`
   if (check.name === 'detector_score') return `${name}: ${f.scoreDetail(check.score ?? 0, check.minimum ?? 0)}`
   if (check.name === 'face_size') return `${name}: ${f.widthDetail(check.width ?? 0, check.minimum ?? 0)}`
+  // H51: a file's own checks, read from its header before the engine decodes it.
+  if (check.name === 'file_type') return check.passed ? `${name}: ${check.kind ?? ''}` : `${name}: ${f.files.typeDetail}`
+  if (check.name === 'image_size')
+    return `${name}: ${f.files.sizeDetail(check.width ?? 0, check.height ?? 0, check.minimum ?? 0, check.maximum ?? 0)}`
   return check.passed ? name : `${name}: ${f.outsideDetail}`
 }
 

@@ -294,9 +294,21 @@ flow of 2026-10-18).
   demo's threshold), the whole face inside the image, and at least 112 pixels
   wide (SFace's input, so no face is enlarged); no standard face quality score
   is used yet.
-- **Files (H27):** for 1:1 and 1:N only, never for enrolment: JPEG or PNG up
-  to 10 MB, at least 240 pixels on the short side and at most 50 million
-  pixels, with exactly one face; kept as its pixels, as PNG.
+- **Files (H27, H51):** for 1:1 and 1:N only, never for enrolment: JPEG or
+  PNG up to 10 MB, at least 240 pixels on the short side and at most 50
+  million pixels, with exactly one face; kept as its pixels, as PNG. The
+  server reads the kind and the size from the file's header before the
+  engine decodes it; OpenCV refuses more than 50 million pixels before
+  decoding and turns a photo upright by its EXIF orientation; an image whose
+  longer side is above 1920 pixels is detected on and kept as a copy scaled
+  down to 1920, and compared on its own pixels (H52). The attempt records
+  `source = file`.
+- **Face sizes (H52):** YuNet finds faces of about 10 to 300 pixels. When it
+  finds none at the image's own size, it looks on smaller copies (960, 640,
+  480, 320 pixels); a face found on any copy is found again on the image's own
+  pixels, scaled to about 200 pixels wide, and checked, aligned and described
+  there. Faces from 112 pixels wide to the whole frame are used; a smaller
+  face is refused rather than enlarged.
 - **Models:** YuNet for detection (MIT) and SFace for recognition (Apache
   2.0), from OpenCV Zoo, pinned by SHA-256 and run with OpenCV 5.0.0 in the
   face environment (H48). SFace gives an embedding of 128 values, read from
@@ -380,7 +392,10 @@ Files for face and voice (H27) stay out of sight until someone looks for
 them: the capture from the device is the only prominent action; a small "more
 options" button (⋯) beside the device's view opens a menu that takes a file,
 and a file dragged onto the window shows the drop target only while it is
-dragged. Enrolment offers neither, and a result names its source.
+dragged. Enrolment offers neither, and a result names its source. For the
+face (H51) the button sits beside the camera on the 1:1 and 1:N screens, also
+when no camera is connected; one file at a time, whose name never leaves the
+page.
 
 ## 7. Attempts and audit (H6, H12)
 
@@ -412,7 +427,9 @@ Face identification follows the same rules (H50): a completed search is
 stored, found or not, with its leading enrolment, the number of embeddings
 searched and its sealed image; a rejected image is not; the time runs from the
 image's receipt through every comparison; and deleting a face keeps the
-identification attempts that it led, with their link emptied.
+identification attempts that it led, with their link emptied. An image from
+a file (H51) is stored the same way, with `source = file`; a file refused by
+its own checks makes no attempt.
 
 Administrative changes are stored in the audit log of the accounts database:
 time, administrator, action and target (an account, or the algorithm whose
@@ -557,3 +574,9 @@ themes during that work.
   statement, the attempt as H41's, anonymous candidates, the caller's own
   closest face, and the pass over the gallery when the answer arrives
   (5.2, 6, 7).
+- **H51** Face images from files in 1:1 and 1:N: the hidden menu and the drop
+  target, the file's checks from its header, OpenCV's pixel limit, EXIF
+  orientation, scaling to 1920 pixels and `source = file` (5.2, 6, 7).
+- **H52** Large and small faces: smaller copies when no face is found, the
+  face found again on the image's own pixels before the checks and the
+  alignment, and faces under 112 pixels still refused (5.2).

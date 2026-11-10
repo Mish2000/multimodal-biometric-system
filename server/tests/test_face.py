@@ -50,9 +50,11 @@ def face_client(databases, keys, outbox, faces):
         yield client
 
 
-def raw(person="a", variant=0, faces=None, width=1280, height=720) -> bytes:
+def raw(person="a", variant=0, faces=None, width=1280, height=720, decoded=None, stored=None) -> bytes:
     spec = {"width": width, "height": height, "person": person, "variant": variant,
-            "faces": [{"box": [500, 200, 220, 260], "score": 0.95}] if faces is None else faces}
+            "faces": [{"box": [500, 200, 220, 260], "score": 0.95}] if faces is None else faces,
+            **({"decoded": decoded} if decoded is not None else {}),  # H51, H52: the own size and the stored copy's
+            **({"stored": stored} if stored is not None else {})}
     return b"FAKEFACE" + json.dumps(spec).encode()
 
 

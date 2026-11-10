@@ -339,7 +339,7 @@ const en = {
     deleteConfirm: 'Delete',
     deleting: 'Deleting…',
     deleted: 'The face enrolment was deleted. You can enrol again at any time.',
-    nextSteps: 'Images from a file, for verification and identification, come in the next build step.',
+    nextSteps: 'Recognition by voice comes in the next build step.',
     unavailable: 'The face engine is not set up on this computer (server/README.md).',
     methodText: 'SFace turns an aligned face into 128 numbers. Two faces are compared by how alike their numbers are: their cosine similarity, from −1 to 1.',
     methodThreshold: (value: number) => `Accepts above ${value}, the threshold of OpenCV’s own SFace sample.`,
@@ -379,7 +379,27 @@ const en = {
     pair: (probe: number, reference: number) => `Images ${reference} and ${probe}`,
     above: 'above the threshold',
     notAbove: 'not above the threshold',
-    checks: { one_face: 'One face', detector_score: 'A clear face', inside: 'The whole face in the picture', face_size: 'Close enough' } as Record<string, string>,
+    checks: { one_face: 'One face', detector_score: 'A clear face', inside: 'The whole face in the picture', face_size: 'Close enough',
+      file_type: 'A JPEG or PNG image', image_size: 'Image size' } as Record<string, string>,
+    // H51: an image file instead of the camera, for 1:1 and 1:N only.
+    files: {
+      more: 'More options',
+      use: 'Use an image file…',
+      hint: 'JPEG or PNG, up to 10 MB. An image can also be dragged onto the window.',
+      drop: 'Drop the image to use it',
+      dropHint: 'JPEG or PNG, up to 10 MB.',
+      tooLarge: 'The file is larger than 10 MB.',
+      oneFile: 'Use one image at a time.',
+      unreadable: 'The file could not be read.',
+      typeDetail: 'only JPEG and PNG images can be used',
+      sizeDetail: (width: number, height: number, minimum: number, maximum: number) =>
+        `${width} × ${height} pixels; at least ${minimum} on the shorter side and at most ${Math.round(maximum / 1e6)} million in all`,
+      fromCamera: 'Source: the camera.',
+      fromFile: (width: number, height: number, storedWidth: number, storedHeight: number) =>
+        width === storedWidth && height === storedHeight
+          ? `Source: an image file, ${width} × ${height} pixels.`
+          : `Source: an image file, ${width} × ${height} pixels, kept as a ${storedWidth} × ${storedHeight} copy.`,
+    },
     found: (count: number) => `${count} found`,
     scoreDetail: (score: number, minimum: number) => `score ${score.toFixed(2)}, at least ${minimum.toFixed(2)}`,
     widthDetail: (width: number, minimum: number) => `${Math.round(width)} pixels wide, at least ${minimum}`,
@@ -855,7 +875,7 @@ const he: Texts = {
     deleteConfirm: 'מחיקה',
     deleting: 'מוחק…',
     deleted: 'רישום הפנים נמחק. אפשר להירשם שוב בכל זמן.',
-    nextSteps: 'תמונות מקובץ, לאימות ולזיהוי, יגיעו בשלב הבנייה הבא.',
+    nextSteps: 'זיהוי לפי קול יגיע בשלב הבנייה הבא.',
     unavailable: 'מנוע הפנים לא הוגדר במחשב הזה (server/README.md).',
     methodText: 'SFace הופך פנים מיושרות ל-128 מספרים. שתי פנים מושוות לפי מידת הדמיון בין המספרים שלהן: דמיון הקוסינוס, מ-‎−1 עד 1.',
     methodThreshold: (value) => `מקבל מעל ${value}, הסף של הדוגמה של OpenCV עצמה ל-SFace.`,
@@ -895,7 +915,26 @@ const he: Texts = {
     pair: (probe, reference) => `תמונות ${reference} ו-${probe}`,
     above: 'מעל הסף',
     notAbove: 'לא מעל הסף',
-    checks: { one_face: 'פנים אחדות', detector_score: 'פנים ברורות', inside: 'כל הפנים בתמונה', face_size: 'קרוב מספיק' },
+    checks: { one_face: 'פנים אחדות', detector_score: 'פנים ברורות', inside: 'כל הפנים בתמונה', face_size: 'קרוב מספיק',
+      file_type: 'תמונת JPEG או PNG', image_size: 'גודל התמונה' },
+    files: {
+      more: 'אפשרויות נוספות',
+      use: 'שימוש בקובץ תמונה…',
+      hint: 'JPEG או PNG, עד 10 MB. אפשר גם לגרור תמונה אל החלון.',
+      drop: 'משחררים את התמונה כדי להשתמש בה',
+      dropHint: 'JPEG או PNG, עד 10 MB.',
+      tooLarge: 'הקובץ גדול מ-10 MB.',
+      oneFile: 'משתמשים בתמונה אחת בכל פעם.',
+      unreadable: 'לא ניתן היה לקרוא את הקובץ.',
+      typeDetail: 'אפשר להשתמש רק בתמונות JPEG ו-PNG',
+      sizeDetail: (width, height, minimum, maximum) =>
+        `רוחב ${width} וגובה ${height} פיקסלים; לפחות ${minimum} בצד הקצר ועד ${Math.round(maximum / 1e6)} מיליון בסך הכול`,
+      fromCamera: 'מקור: המצלמה.',
+      fromFile: (width, height, storedWidth, storedHeight) =>
+        width === storedWidth && height === storedHeight
+          ? `מקור: קובץ תמונה ברוחב ${width} ובגובה ${height} פיקסלים.`
+          : `מקור: קובץ תמונה ברוחב ${width} ובגובה ${height} פיקסלים, שנשמר כעותק ברוחב ${storedWidth} ובגובה ${storedHeight}.`,
+    },
     found: (count) => `נמצאו ${count}`,
     scoreDetail: (score, minimum) => `ציון ${score.toFixed(2)}, לפחות ${minimum.toFixed(2)}`,
     widthDetail: (width, minimum) => `רוחב ${Math.round(width)} פיקסלים, לפחות ${minimum}`,

@@ -5,7 +5,7 @@
 import { useState } from 'react'
 import type { FaceMethod, FaceVerificationResult } from '../../../shared/bridge'
 import { useSession } from '../session'
-import { FaceCard, FaceNotEnrolled, FaceTake } from './FaceTake'
+import { FaceCard, FaceNotEnrolled, FaceTake, SourceLine } from './FaceTake'
 
 export function FaceVerificationView({ result, onAgain, onLeave }: { result: FaceVerificationResult; onAgain: () => void; onLeave: () => void }) {
   const { t } = useSession()
@@ -27,6 +27,7 @@ export function FaceVerificationView({ result, onAgain, onLeave }: { result: Fac
       <meter className="face-score" min={0} max={1} value={Math.max(0, result.score)} aria-label={v.scoreLabel} />
       <p className={result.accepted ? 'ok' : 'error'}>{v.score(result.score, result.threshold)}</p>
       <p className="aside">{v.time(result.duration_ms)} {v.saved}</p>
+      <SourceLine source={result.source} size={result.size} />
       <h2>{v.comparisonsTitle}</h2>
       <ul className="checks">
         {result.comparisons.map((comparison) => (

@@ -364,6 +364,12 @@ current SFace templates of the active user accounts by pgvector's cosine
 distance without an index. Deleting a face keeps the identification attempts
 that it led, with their link emptied.
 
+A face verification or identification may take its new image from a file
+(H51): its row has `source = file`, and its probe is the PNG of the image
+after its EXIF orientation, scaled down to 1920 pixels when its longer side
+is above that; the comparison uses the image's own pixels (H52). The file,
+its name and its metadata are not kept.
+
 Identification uses `mode = identify`, `enrolment_id = null` and the number
 of compared templates in `gallery_size` (H41). The selected method is
 `opencv-sift`, `pore-sift` or `learned-pore` (H42). It stores the

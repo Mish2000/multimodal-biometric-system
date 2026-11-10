@@ -29,9 +29,15 @@ def option(name: str, default=None):
 def read(data: bytes) -> dict | None:
     while data.startswith(b"PNG:"):  # an image this engine made again from its pixels (a stored one, H49)
         data = data[len(b"PNG:"):]
-    if not data.startswith(b"FAKEFACE"):
+    index = data.find(b"FAKEFACE")  # a file's real JPEG or PNG header may come first (H51)
+    if index < 0:
         return None
-    return json.loads(data[len(b"FAKEFACE"):])
+    return json.loads(data[index + len(b"FAKEFACE"):])
+
+
+def size_of(spec: dict) -> dict:
+    """H51, H52: the image's own size and the stored copy's, when the label names them."""
+    return {key: spec[key] for key in ("decoded", "stored") if key in spec}
 
 
 def embedding(person: str, variant: int) -> list[float]:
@@ -57,7 +63,8 @@ def extract(_header, parts):
     if spec is None:
         return {"invalid": "the data is not an image"}, b""
     faces = faces_of(spec)
-    reply = {"width": spec["width"], "height": spec["height"], "faces": faces, "embedding_length": LENGTH}
+    reply = {"width": spec["width"], "height": spec["height"], "faces": faces, "embedding_length": LENGTH,
+             **size_of(spec)}
     if len(faces) != 1:
         return reply, b""
     values = embedding(spec.get("person", "a"), spec.get("variant", 0))

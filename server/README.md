@@ -5,7 +5,7 @@ national ID and the mobile phone, sign-in, password recovery, roles and the acco
 administration (H3, H11, H12, H14, H19, H29 to H32), fingerprint enrolment (H33)
 and 1:1 verification with OpenCV SIFT, Pore SIFT and Pore CNN
 (H35, H38, H39) and 1:N identification (H41, H42) with all three methods, and face enrolment (H48),
-1:1 verification (H49) and 1:N identification (H50).
+1:1 verification (H49) and 1:N identification (H50), also from image files (H51).
 It runs with the `multimodal-server` environment and starts PostgreSQL from the
 `multimodal-postgres` environment (`environments/`); the face engine runs in `multimodal-face`.
 
@@ -215,6 +215,14 @@ leaders are ordered by enrolment and reported as a tie. When the caller's own en
 shown, its winning image is extracted again as in H49. The accounts, then the enrolments and their
 templates are locked and checked again before the attempt is saved (otherwise `gallery_changed`); the
 leading enrolment is stored even below the threshold, and its later deletion keeps the attempt (H41).
+
+Both routes take `{"image": base64, "source": "device" | "file"}` (H51): a camera image up to 8 MB, an image
+file up to 10 MB. Before the engine reads a file, the server takes its kind from its first bytes (JPEG or
+PNG) and its width and height from its header (at least 240 pixels on the shorter side, at most 50 million
+pixels); a file that fails is answered `rejected` with these checks and makes no attempt. The engine turns
+a photo upright by its EXIF orientation, finds faces from 112 pixels wide to the whole frame and compares them on the image's own pixels (H52), and stores an image above 1920 pixels as its copy of 1920; the answer gives
+`source` and `size` (`decoded`, `stored`), and the attempt records the source. Enrolment and the live checks
+take no files.
 
 Cancellation closes the acquisition worker's standard input (H36). The worker
 finishes its current native call, switches off the illumination (H37),

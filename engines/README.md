@@ -15,7 +15,7 @@ They add no package. The face engine runs in its own environment,
 | `nfiq2_quality.py` | `quality` of a PNG: NIST's NFIQ 2.3 score, 0 to 100, of a 500 ppi copy made in memory | H33 |
 | `pore_sift.py` | `extract` a native PNG to the research's NPZ template; `compare` two templates by its basic matcher, with the research's detector, NMS and descriptor functions | H10, H38 |
 | `learned_pore.py` | `extract` a native PNG and shared pore coordinates to the second model's native float16 NPY template; `compare` by the research's batched matcher | H6, H10, H39 |
-| `face.py` | `detect` the faces of an image: boxes, five landmarks and YuNet's scores; `extract` for exactly one face: the image again as a PNG of its pixels, the aligned 112 x 112 face and SFace's 128 float32 values | H48 |
+| `face.py` | `detect` the faces of an image: boxes, five landmarks and YuNet's scores; `extract` for exactly one face: the image again as a PNG of its pixels, the aligned 112 x 112 face and SFace's 128 float32 values; images above 1920 pixels are scaled down first | H48, H51 |
 
 Pore SIFT starts on demand. Its short configuration check runs in the research
 project Python, which can read the research TOML files and verify the pin.
@@ -123,6 +123,19 @@ pixels, is answered as `invalid`, so the server can tell a refused image from a 
 own messages are limited to errors, so nothing but the protocol reaches standard output. On 2026-11-09,
 with OpenCV 5.0.0, YuNet took about 20 ms on a 1280 x 720 frame and 2 ms on the live view's 320-pixel
 copy, and SFace about 3 ms per face.
+
+For images from files (H51) the engine sets OpenCV's `OPENCV_IO_MAX_IMAGE_PIXELS` to 50 million before
+OpenCV loads, so a file that would decode to more is refused before it is decoded. OpenCV turns a photo
+upright by its EXIF orientation as it decodes, and an image whose longer side is above 1920 pixels is
+detected on, and returned as a PNG of, a copy scaled down to 1920 (`INTER_AREA`), never up; the replies
+give that copy's size as `stored`.
+
+YuNet finds faces of about 10 to 300 pixels (OpenCV Zoo's model notes). When no face is found at the
+image's own size, the engine detects on copies whose longer side is 960, 640, 480 and 320 pixels and stops
+at the first with a face (H52). A face found on any copy is found again on the image's own pixels: the
+region around it is scaled so the face is about 200 pixels wide, never enlarged, and detected once more.
+Boxes, landmarks, the alignment and the embedding are then in the image's own pixels (`width`, `height`).
+A camera frame whose face is found at its own size is read exactly as before.
 
 ## Tests
 

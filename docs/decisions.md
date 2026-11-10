@@ -1220,3 +1220,104 @@ each led by the caller's own enrolment, with similarities of 0.607 to 0.884
 against the threshold of 0.363 and 62 to 123 ms of processing, over
 galleries of three and six embeddings, each saved with its image sealed
 (about 0.77 MB).
+
+## 2026-11-10: face images from files
+
+Approved on 2026-11-10. Let an image file take the camera's place in face
+verification and identification, the fourth and last step of increment 4,
+within H27 (H20, H49, H50).
+
+- **H51** The file stays out of sight. On the 1:1 and 1:N camera screens
+  only, also when no camera is connected, a small "more options" button
+  beside the camera opens a menu with one item that takes a file, with a line
+  saying that an image can also be dragged onto the window; a file dragged
+  over the window shows the drop target only while it is dragged. Enrolment
+  offers neither. One file at a time; the page checks only its size and sends
+  its content alone, never its name, and a file counts toward the twelve
+  images of a run.
+- The two routes take the image's source, `device` (up to 8 MB) or `file`
+  (up to 10 MB). Before the engine reads a file, the server takes its kind
+  from its first bytes (JPEG or PNG, nothing else) and its width and height
+  from its header: at least 240 pixels on the shorter side and at most 50
+  million pixels. A file that fails is answered as a rejected image with its
+  checks and makes no attempt; the face checks of H48 follow for a file that
+  passes.
+- The face engine sets OpenCV's own limit of 50 million pixels before OpenCV
+  loads, so a small file that would decode to more is refused before any
+  memory is taken for it, and it reports that as an unreadable image. OpenCV
+  turns a photo upright by its EXIF orientation as it decodes. An image whose
+  longer side is above 1920 pixels is scaled down to 1920, never up, and the
+  detection, the alignment, the embedding and the stored image all use that
+  copy, so the stored image is the one compared. The camera's images are
+  unchanged, and the replies give the size as decoded and as used.
+- The attempt records `source = file` and keeps the scaled copy's pixels as
+  PNG, sealed as before; the original file, its name and its metadata are not
+  kept. Both result screens name the source and, for a file, its size.
+
+Checked on 2026-11-10 with OpenCV 5.0.0 on synthetic images only: a JPEG
+with EXIF orientation 6 was decoded upright; a 0.17 MB PNG of 56 million
+pixels was refused in 3 ms instead of being decoded to 168 MB; a 24 million
+pixel, 9.7 MB JPEG took 97 ms to decode and 13 ms to scale, YuNet took 50 ms
+on the scaled copy against 485 ms at full size, and the copy's PNG was 3.7 MB.
+
+The full server run passed 276 tests, including the four local checks with
+stored captures; all 24 engine tests, 142 client tests, type checks and the
+build passed. The built client passed 86 offscreen checks with the real face
+engine: with an enrolment of synthetic numbers, the menu stays closed until
+it is opened, a dragged file shows the drop target, a dropped image without a
+face is refused with its checks, 1:N offers the same menu and enrolment none.
+Images of real faces from files are checked by hand.
+
+## 2026-11-10: large and small faces
+
+Approved on 2026-11-10. The manual check of H51 found a clear 1080 x 1080
+photo in which no face was found: YuNet detects faces of "around 10x10 to
+300x300" pixels (OpenCV Zoo's model notes), and that face was about 430 x 595.
+Faces are now found at every size from 112 pixels wide to the whole frame,
+and compared on the image's own pixels (H48, H51).
+
+- **H52** A face is detected on the image, or on its copy of 1920 pixels
+  (H51), at its own size, as before. Only when none is found there, the face
+  engine detects again on smaller copies, whose longer side is 960, 640, 480
+  and 320 pixels, and stops at the first copy with a face.
+- A face found on a smaller copy, or on a copy smaller than the image, is
+  found again on the image's own pixels: the region around it is cut from the
+  image and scaled so that the face is about 200 pixels wide, never enlarged,
+  and detected once more. Its box and landmarks are given in the image's own
+  pixels, and the checks of H48 (inside the image, at least 112 pixels wide),
+  the alignment and the embedding use the image's own pixels. A face under 112
+  pixels wide in the image itself is still refused: SFace's input is 112 x 112,
+  and an enlarged face would cost accuracy.
+- An image whose face is found at its own size and that is not larger than
+  1920 pixels is read exactly as before, which holds for every camera frame and
+  every stored enrolment, so H49's repeated extraction is unaffected. A file
+  larger than 1920 pixels is still stored as its copy of 1920 (H51), so its
+  stored image is a smaller copy of the compared one; the result names both
+  sizes.
+
+Measured on 2026-11-10 on the researcher's photo, in memory only: the face was
+found on the copy of 640 pixels and again on the photo's own pixels at a score
+of 0.942; landmarks mapped back from the copy alone differed by up to 10.7
+pixels, and their embedding was only 0.961 like the one from the landmarks
+found again, which is why the face is found again before alignment. The same
+photo made small inside a grey 6000 x 4000 frame gave a face 71 pixels wide on
+the 1920 copy, refused before H52, and 234 pixels wide on the frame's own
+pixels, with an embedding 0.975 like the close photo's.
+
+The full server run passed 276 tests, including the four local checks with
+stored captures; all 27 engine tests, three of them new with a stand-in
+detector, 142 client tests, type checks and the build passed, and the built
+client passed 86 offscreen checks. Faces of every size from files are checked
+by hand.
+
+## 2026-11-10: live check of face images from files
+
+Face images from files (H51) and faces of every size (H52) passed a manual
+check on the researcher's PC: 31 verifications and 2 identifications from
+files, each saved with `source = file` and its image sealed (0.23 to 5.2 MB),
+in 16 to 239 ms of processing. Sixteen verifications matched, with
+similarities of 0.386 to 0.751 against the threshold of 0.363, and fifteen
+did not (0.019 to 0.362); one identification found the leading enrolment at
+0.431, and one found none. The close photo of H52, refused before that
+decision, matched. Increment 4 is complete: the face from the PC's cameras
+and from files, in enrolment, 1:1 and 1:N (H20).

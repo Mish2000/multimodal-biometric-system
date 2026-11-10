@@ -51,6 +51,7 @@ class FakeServer implements MbsBridge {
   faceDeletes = 0
   faceVerifications = 0
   faceIdentifications = 0
+  faceSent: Array<{ image: string; source: string }> = [] // H51
 
   displays = async (): Promise<DisplayState> => ({ internalDisplay: false })
 
@@ -236,11 +237,16 @@ class FakeServer implements MbsBridge {
         return ok({ code: 'sface', threshold: 0.363, threshold_provisional: false, threshold_origin: "OpenCV's SFace sample, cosine similarity",
           available: this.faceAvailable, images: 3, most_kept: 6, score_minimum: 0.9, width_minimum: 112, embedding_length: 128 })
       case 'verifyFace':
-        this.faceVerifications++
-        return ok(FACE_VERIFIED)
-      case 'identifyFace':
-        this.faceIdentifications++
-        return ok(FACE_IDENTIFIED)
+      case 'identifyFace': {
+        if (route === 'verifyFace') this.faceVerifications++
+        else this.faceIdentifications++
+        this.faceSent.push({ image: body.image ?? '', source: body.source ?? 'device' })
+        if (body.source === 'file' && body.image?.startsWith('R0lG')) // a GIF (H51)
+          return ok({ status: 'rejected', source: 'file', width: 0, height: 0, faces: [],
+            checks: [{ name: 'file_type', passed: false, detail: 'a JPEG or PNG image is needed' }] })
+        const result = route === 'verifyFace' ? FACE_VERIFIED : FACE_IDENTIFIED
+        return ok(body.source === 'file' ? { ...result, source: 'file', size: { decoded: [4000, 3000], stored: [1920, 1440] } } : result)
+      }
       case 'deleteFace':
         if (!this.face.enrolled) return no(404, 'not_enrolled')
         this.face = { enrolled: false }
@@ -297,6 +303,7 @@ const FACE_VERIFIED: FaceVerificationResult = {
   threshold: 0.363, threshold_origin: "OpenCV's SFace sample, cosine similarity", threshold_provisional: false, accepted: true,
   duration_ms: 118, comparisons: [{ placement: 1, score: 0.655, accepted: true }, { placement: 2, score: 0.712, accepted: true },
     { placement: 3, score: 0.301, accepted: false }],
+  source: 'device', size: { decoded: [1280, 720], stored: [1280, 720] },
   view: { placement: 2, probe: 'AAAA', reference: 'AAAA' },
 }
 
@@ -306,6 +313,7 @@ const FACE_IDENTIFIED: FaceIdentificationResult = {
   duration_ms: 84, gallery_size: 9, enrolments: 3, tied_leaders: 1,
   candidates: [{ rank: 1, own: true, score: 0.712, accepted: true }, { rank: 2, own: false, score: 0.201, accepted: false },
     { rank: 3, own: false, score: 0.034, accepted: false }],
+  source: 'device', size: { decoded: [1280, 720], stored: [1280, 720] },
   view: { rank: 1, placement: 2, probe: 'AAAA', reference: 'AAAA' },
 }
 
@@ -1373,7 +1381,7 @@ describe('the face (H48)', () => {
     expect(enrol.disabled).toBe(false)
     expect(screen.getByRole('heading', { name: 'SFace' })).toBeTruthy()
     expect(screen.getByText(/Accepts above 0.363/)).toBeTruthy()
-    expect(screen.getByText(/Images from a file, for verification and identification, come in the next build step/)).toBeTruthy()
+    expect(screen.getByText(/Recognition by voice comes in the next build step/)).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Delete the face enrolment' })).toBeNull()
   })
 
@@ -1578,5 +1586,88 @@ describe('face identification (H50)', () => {
     expect(screen.getByRole('heading', { name: 'זיהוי פנים (1:N)' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'התחלת הזיהוי' })).toBeTruthy()
     expect(document.documentElement.dir).toBe('rtl')
+  })
+})
+
+describe('face images from files (H51)', () => {
+  const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3])
+
+  async function camera(open: 'Verify my face (1:1)' | 'Identify (1:N)' | 'זיהוי (1:N)', language: Language = 'en') {
+    server.face = { enrolled: true, enrolled_at: '2026-11-09T13:00:00+00:00' }
+    server.add('dana', 'user', { language })
+    window.matchMedia = ((query: string) => ({ matches: query.includes('reduce'), media: query, addEventListener: () => undefined,
+      removeEventListener: () => undefined })) as unknown as typeof window.matchMedia
+    open_('/sign-in')
+    await signIn('dana', 'dana password 1')
+    fireEvent.click(await cardLink(language === 'he' ? 'פנים' : 'Face'))
+    await screen.findByText(language === 'he' ? /מקבל מעל 0.363/ : /Accepts above 0.363/)
+    fireEvent.click(screen.getByRole('button', { name: open }))
+    fireEvent.click(screen.getByRole('button', { name: language === 'he' ? 'התחלת הזיהוי' : open === 'Identify (1:N)' ? 'Start identification' : 'Start verification' }))
+    await screen.findByText(language === 'he' ? 'אין מצלמה מחוברת. צריך לחבר מצלמת USB.' : 'No camera is connected. Connect a USB camera.')
+  }
+  const open_ = open
+  const choose = (files: File[]) => fireEvent.change(screen.getByTestId('face-file'), { target: { files } })
+  const drag = (type: 'dragEnter' | 'dragLeave' | 'drop', files: File[] = []) =>
+    fireEvent[type](window, { dataTransfer: { types: ['Files'], files } })
+
+  it('keeps the file out of sight: one menu item beside the camera in 1:1 and 1:N, none in enrolment', async () => {
+    await camera('Verify my face (1:1)')
+    expect(screen.queryByRole('menu')).toBeNull()
+    expect(screen.queryByText(/Use an image file/)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'More options' }))
+    expect(screen.getAllByRole('menuitem')).toHaveLength(1)
+    expect(screen.getByRole('menuitem', { name: /Use an image file… JPEG or PNG, up to 10 MB/ })).toBeTruthy()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByRole('menu')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Enrol my face again' }))
+    await screen.findByText('No camera is connected. Connect a USB camera.')
+    expect(screen.queryByRole('button', { name: 'More options' })).toBeNull()
+    drag('dragEnter')
+    expect(screen.queryByText('Drop the image to use it')).toBeNull()
+  })
+
+  it('sends a chosen file’s content alone, with its source, and the result names the source', async () => {
+    await camera('Verify my face (1:1)')
+    choose([new File([PNG], 'holiday photo.png', { type: 'image/png' })])
+    expect(await screen.findByRole('heading', { name: 'Your face matches' })).toBeTruthy()
+    expect(server.faceSent).toEqual([{ image: btoa(String.fromCharCode(...PNG)), source: 'file' }])
+    expect(JSON.stringify(server.faceSent)).not.toContain('holiday')
+    expect(screen.getByText('Source: an image file, 4000 × 3000 pixels, kept as a 1920 × 1440 copy.')).toBeTruthy()
+  })
+
+  it('shows the drop target only while a file is dragged, takes one file at a time and refuses one over 10 MB', async () => {
+    await camera('Identify (1:N)')
+    expect(screen.queryByText('Drop the image to use it')).toBeNull()
+    drag('dragEnter')
+    expect(screen.getByText('Drop the image to use it')).toBeTruthy()
+    drag('dragLeave')
+    expect(screen.queryByText('Drop the image to use it')).toBeNull()
+    drag('drop', [new File([PNG], 'a.png'), new File([PNG], 'b.png')])
+    expect(await screen.findByText('Use one image at a time.')).toBeTruthy()
+    choose([new File([new Uint8Array(10 * 1024 * 1024 + 1)], 'large.jpg')])
+    expect(await screen.findByText('The file is larger than 10 MB.')).toBeTruthy()
+    expect(server.faceIdentifications).toBe(0)
+    drag('dragEnter')
+    drag('drop', [new File([PNG], 'me.png')])
+    expect(await screen.findByRole('heading', { name: 'A matching face was found' })).toBeTruthy()
+    expect(server.faceSent.map((sent) => sent.source)).toEqual(['file'])
+    expect(screen.getByText(/^Source: an image file, 4000 × 3000 pixels/)).toBeTruthy()
+  })
+
+  it('lists a refused file’s own checks and makes no result', async () => {
+    await camera('Verify my face (1:1)')
+    choose([new File([new TextEncoder().encode('GIF89a')], 'animation.gif')])
+    expect(await screen.findByText('A JPEG or PNG image: only JPEG and PNG images can be used')).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: /Your face/ })).toBeNull()
+  })
+
+  it('names the camera as the source of a camera image, and speaks Hebrew', async () => {
+    render(<MemoryRouter><SessionProvider><FaceVerificationView result={FACE_VERIFIED} onAgain={() => undefined} onLeave={() => undefined} /></SessionProvider></MemoryRouter>)
+    expect(await screen.findByText('Source: the camera.')).toBeTruthy()
+    cleanup()
+    await camera('זיהוי (1:N)', 'he')
+    fireEvent.click(screen.getByRole('button', { name: 'אפשרויות נוספות' }))
+    expect(screen.getByRole('menuitem', { name: /שימוש בקובץ תמונה…/ })).toBeTruthy()
   })
 })

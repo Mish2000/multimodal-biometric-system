@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FaceIdentificationResult, FaceMethod } from '../../../shared/bridge'
 import { useSession } from '../session'
-import { FaceCard, FaceNotEnrolled, FaceTake } from './FaceTake'
+import { FaceCard, FaceNotEnrolled, FaceTake, SourceLine } from './FaceTake'
 
 export const PASS_MS = 600
 const CELLS = 12
@@ -98,6 +98,7 @@ export function FaceIdentificationView({ result, onAgain, onLeave }: { result: F
       {gallery}
       <p className="aside">{n.privacy}</p>
       <p className="aside">{v.time(result.duration_ms)} {v.saved}</p>
+      <SourceLine source={result.source} size={result.size} />
       <div className="actions">
         <button type="button" onClick={onAgain}>{n.again}</button>
         <button type="button" className="secondary" onClick={onLeave}>{f.back}</button>

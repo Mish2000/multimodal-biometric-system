@@ -12,9 +12,9 @@
   <img alt=".NET Framework 4.8" src="https://img.shields.io/badge/.NET_Framework-4.8-512BD4?logo=dotnet&logoColor=white">
 </p>
 <p align="center">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-265%20server%20%C2%B7%20137%20client%20%C2%B7%2015%20scanner%20%C2%B7%2021%20engines-2EA44F">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-276%20server%20%C2%B7%20142%20client%20%C2%B7%2015%20scanner%20%C2%B7%2027%20engines-2EA44F">
   <img alt="Cryptography" src="https://img.shields.io/badge/crypto-AES--256--GCM%20%C2%B7%20Argon2id%20%C2%B7%20HMAC-7C3AED">
-  <img alt="Build" src="https://img.shields.io/badge/build-increment%203%20of%206%20complete-F59E0B">
+  <img alt="Build" src="https://img.shields.io/badge/build-increment%204%20of%206%20complete-F59E0B">
 </p>
 
 A desktop system that recognises a person by **fingerprint, face and voice**: enrolment once, then
@@ -27,7 +27,9 @@ matching methods run inside the system, on native 1000 ppi captures.
 > Built in six approved increments. Accounts and roles are implemented. Fingerprint enrolment,
 > 1:1 verification and 1:N identification with all three methods passed manual checks on the
 > HiScan PRO, as did the match drawings of 1:1 and of the user's own print in 1:N, which
-> complete increment 3. Face follows in increment 4.
+> complete increment 3. Face enrolment, 1:1 verification and 1:N identification from the
+> PC's cameras, and from image files for 1:1 and 1:N, passed manual checks and complete
+> increment 4. Voice follows in increment 5.
 > The final visual direction follows the functional build.
 
 ## Screenshots
@@ -99,7 +101,7 @@ checked 1000 ppi images.
 <td valign="top">
 
 **📜 Every decision on record**<br>
-Each design choice is numbered (H1 to H50), dated, and cited in the code and the commits.
+Each design choice is numbered (H1 to H52), dated, and cited in the code and the commits.
 
 </td>
 <td valign="top">
@@ -162,7 +164,7 @@ flowchart LR
 | 🟡 | **1 · Foundation** | environments, local PostgreSQL + pgvector, accounts, roles, administration and the client's skeleton (built); final visual design follows the functional build |
 | 🟢 | **2 · Fingerprint, 1:1** | enrolment, NFIQ 2 quality checks, sealed captures and templates, the stored-template screen and OpenCV SIFT verification with saved attempts. Verification passed a manual check on the scanner |
 | 🟢 | **3 · Fingerprint, complete** | all three methods for verification and identification, with match drawings in 1:1 and for the user's own print in 1:N, checked on HiScan PRO |
-| 🟡 | **4 · Face** | enrolment, 1:1 verification and 1:N identification from the built-in or a USB camera, chosen by the client; images from files next |
+| 🟢 | **4 · Face, complete** | enrolment, 1:1 verification and 1:N identification from the built-in or a USB camera, chosen by the client, and from image files for 1:1 and 1:N; faces of every size from 112 pixels, checked by hand |
 | ⚪ | **5 · Voice** | enrolment, 1:1 and 1:N |
 | ⚪ | **6 · Finish** | thresholds and history in the administration, fusion, the finished experience |
 
@@ -190,13 +192,13 @@ conda activate multimodal-server
 cd server
 python -m mbs setup        # key file, local settings, cluster and databases
 python -m mbs serve        # the API on 127.0.0.1:55433
-python -m pytest           # 265 tests, including four local checks with MBS_LIVE_CAPTURES
+python -m pytest           # 276 tests, including four local checks with MBS_LIVE_CAPTURES
 
 # The client, from its lock file
 cd ../client
 npm ci
 npm run dev                # the app, with the server running
-npm test                   # 137 tests
+npm test                   # 142 tests
 ```
 
 Details: [server](server/README.md) · [scanner](scanner/README.md) · [research methods](methods/README.md)

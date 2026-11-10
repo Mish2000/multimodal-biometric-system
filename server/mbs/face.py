@@ -52,6 +52,10 @@ WIDTH_MINIMUM = 112  # SFace's aligned input, so no face is enlarged
 EMBEDDING_LENGTH = 128  # read from the model by the engine (specification 5.2)
 LIVE_BYTES = 1 << 20  # a frame of the live view, made small by the page
 IMAGE_BYTES = 8 << 20  # a taken image: a PNG of the camera's frame
+FILE_BYTES = 10 << 20  # H27: an image file, for 1:1 and 1:N only
+SHORT_SIDE_MINIMUM = 240  # H27: a file's shorter side, in pixels
+MAX_PIXELS = 50_000_000  # H27: a file's largest image; the engine refuses more too
+SOURCES = ("device", "file")
 CAPTURE_AGE = timedelta(minutes=30)  # an enrolment's images were taken in the last half hour
 CLOCK_SKEW = timedelta(minutes=1)
 
@@ -164,16 +168,67 @@ class Extracted:
     png: bytes | None = None  # the image again, made by the engine from its pixels alone
     aligned: bytes | None = None  # SFace's 112 x 112 input
     embedding: list[float] | None = None
+    decoded: list[int] | None = None  # the image's own size, the frame of its boxes (H51, H52)
+    stored: list[int] | None = None  # the copy that is stored: the image, or one scaled down to 1920 (H51)
 
     @property
     def passed(self) -> bool:
         return all(check["passed"] for check in self.checks)
 
 
+JPEG_START, PNG_START = b"\xff\xd8\xff", b"\x89PNG\r\n\x1a\n"
+JPEG_FRAMES = {0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF}
+
+
+def file_header(data: bytes) -> tuple[str, int, int] | None:
+    """A file's kind and its width and height, read from its header alone, before anything decodes it (H27,
+    H51): a JPEG's frame header or a PNG's IHDR chunk. Anything else, or a header that cannot be read, is None."""
+    if data.startswith(PNG_START) and len(data) >= 24 and data[12:16] == b"IHDR":
+        return "PNG", int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big")
+    if not data.startswith(JPEG_START):
+        return None
+    index = 2
+    while index + 4 <= len(data):
+        if data[index] != 0xFF:
+            return None
+        marker = data[index + 1]
+        if marker == 0xFF:  # a fill byte
+            index += 1
+            continue
+        if marker == 0x01 or 0xD0 <= marker <= 0xD8:  # markers without a length
+            index += 2
+            continue
+        if marker == 0xDA:  # the image data begins before any frame header
+            return None
+        if marker in JPEG_FRAMES:
+            if index + 9 > len(data):
+                return None
+            return "JPEG", int.from_bytes(data[index + 7:index + 9], "big"), int.from_bytes(data[index + 5:index + 7], "big")
+        index += 2 + int.from_bytes(data[index + 2:index + 4], "big")
+    return None
+
+
+def file_checks(data: bytes) -> tuple[list[dict], list[int]]:
+    """H51: the checks of an image file before the engine decodes it; its EXIF orientation changes neither."""
+    header = file_header(data)
+    if header is None:
+        return [_check("file_type", False, "a JPEG or PNG image is needed")], [0, 0]
+    kind, width, height = header
+    fits = min(width, height) >= SHORT_SIDE_MINIMUM and width * height <= MAX_PIXELS
+    return [_check("file_type", True, f"a {kind} image", kind=kind),
+            _check("image_size", fits, f"{width} x {height} pixels: at least {SHORT_SIDE_MINIMUM} on the shorter side "
+                   f"and at most {MAX_PIXELS:,} in all", width=width, height=height, minimum=SHORT_SIDE_MINIMUM,
+                   maximum=MAX_PIXELS)], [width, height]
+
+
 def _extract(service: FaceService, image: bytes) -> Extracted:
     reply, parts = service.engine.request({"op": "extract"}, [image])
     width, height, faces = _faces(reply)
-    found = Extracted(width, height, faces, checks_for(width, height, faces))
+    decoded, stored = reply.get("decoded", [width, height]), reply.get("stored", [width, height])
+    if not all(isinstance(size, list) and len(size) == 2 and all(type(v) is int and v > 0 for v in size)
+               for size in (decoded, stored)):
+        raise EngineError("invalid face reply")
+    found = Extracted(width, height, faces, checks_for(width, height, faces), decoded=decoded, stored=stored)
     if len(faces) != 1:
         return found
     if reply.get("embedding_length") != EMBEDDING_LENGTH or len(parts) != 3 or len(parts[2]) != 4 * EMBEDDING_LENGTH:
@@ -327,6 +382,30 @@ def delete_face(databases: Databases, subject: uuid.UUID) -> bool:
 # scores go to the earliest image (H43). A rejected image makes no attempt; a completed comparison is saved,
 # match or not, with its image sealed, and the answer is sent only after that.
 
+def _take(service: FaceService, image: bytes, source: str) -> Extracted:
+    """The new image of a verification or an identification: from the camera, or from a file (H27, H51), whose
+    own checks come first and keep a refused file from the engine."""
+    if source not in SOURCES:
+        raise FaceError("invalid_request")
+    checks: list[dict] = []
+    if source == "file":
+        checks, size = file_checks(image)
+        if not all(check["passed"] for check in checks):
+            return Extracted(size[0], size[1], [], checks, decoded=size, stored=size)
+    probe = _extract(service, image)
+    probe.checks = checks + probe.checks
+    return probe
+
+
+def _rejected(probe: Extracted, source: str) -> dict:
+    return {"status": "rejected", "source": source, "width": probe.width, "height": probe.height,
+            "faces": probe.faces, "checks": probe.checks}
+
+
+def _size(probe: Extracted) -> dict:
+    return {"decoded": probe.decoded, "stored": probe.stored}
+
+
 COMPARISONS = """
 SELECT s.id AS sample_id, s.placement, t.version, t.embedding::text AS embedding,
        1 - (t.embedding <=> CAST(:probe AS vector)) AS score
@@ -349,7 +428,8 @@ def _repeat_view(service: FaceService, keys: Keys, databases: Databases, subject
     return again.aligned
 
 
-def verify(service: FaceService, databases: Databases, keys: Keys, subject: uuid.UUID, image: bytes) -> dict:
+def verify(service: FaceService, databases: Databases, keys: Keys, subject: uuid.UUID, image: bytes,
+           source: str = "device") -> dict:
     at = datetime.now(timezone.utc)
     started = time.perf_counter()
     with _db(databases.biometric) as db:
@@ -361,10 +441,9 @@ def verify(service: FaceService, databases: Databases, keys: Keys, subject: uuid
         raise FaceError("not_enrolled", 409)  # H15: the client offers the enrolment
     if service.engine.start().get("sface_sha256") != version:
         raise FaceError("method_version_differs", 503)
-    probe = _extract(service, image)
+    probe = _take(service, image, source)
     if not probe.passed:
-        return {"status": "rejected", "width": probe.width, "height": probe.height, "faces": probe.faces,
-                "checks": probe.checks}
+        return _rejected(probe, source)
     with _db(databases.biometric) as db:
         rows = db.execute(text(COMPARISONS), {"probe": vector_text(probe.embedding), "enrolment": enrolment.id}).all()
     if len(rows) != IMAGES:
@@ -379,7 +458,7 @@ def verify(service: FaceService, databases: Databases, keys: Keys, subject: uuid
     reference = _repeat_view(service, keys, databases, subject, best.sample_id, vector_values(best.embedding))
     attempt = Attempt(id=uuid.uuid4(), at=at, subject_id=subject, modality=FACE, mode="verify", algorithm=SFACE,
                       enrolment_id=enrolment.id, score=score, threshold=threshold, accepted=score > threshold,
-                      duration_ms=duration_ms, source="device")
+                      duration_ms=duration_ms, source=source)
     attempt.probe = keyring.seal(keys, keyring.PROBE, attempt.id.bytes + subject.bytes, probe.png)
     with _db(databases.biometric) as db, db.begin():
         # A deletion or a new enrolment since the comparison invalidates it (H35); a later deletion cascades.
@@ -391,6 +470,7 @@ def verify(service: FaceService, databases: Databases, keys: Keys, subject: uuid
     return {"status": "verified", "attempt_id": str(attempt.id), "at": at.isoformat(), "score": score,
             "threshold": threshold, "threshold_origin": origin, "threshold_provisional": provisional,
             "accepted": attempt.accepted, "duration_ms": duration_ms, "comparisons": comparisons,
+            "source": source, "size": _size(probe),
             "view": {"placement": best.placement, "probe": _b64(probe.aligned), "reference": _b64(reference)}}
 
 
@@ -469,7 +549,8 @@ def _save_identification(databases: Databases, gallery: Gallery, attempt: Attemp
             db.add(attempt)
 
 
-def identify(service: FaceService, databases: Databases, keys: Keys, subject: uuid.UUID, image: bytes) -> dict:
+def identify(service: FaceService, databases: Databases, keys: Keys, subject: uuid.UUID, image: bytes,
+             source: str = "device") -> dict:
     at = datetime.now(timezone.utc)
     started = time.perf_counter()
     with _db(databases.biometric) as db:
@@ -479,10 +560,9 @@ def identify(service: FaceService, databases: Databases, keys: Keys, subject: uu
     gallery = _gallery(databases, keys, subject, version)
     if service.engine.start().get("sface_sha256") != version:
         raise FaceError("method_version_differs", 503)
-    probe = _extract(service, image)
+    probe = _take(service, image, source)
     if not probe.passed:
-        return {"status": "rejected", "width": probe.width, "height": probe.height, "faces": probe.faces,
-                "checks": probe.checks}
+        return _rejected(probe, source)
     with _db(databases.biometric) as db:
         ranked = db.execute(RANKING, {"probe": vector_text(probe.embedding),
                                       "templates": [row[3] for row in gallery.rows]}).all()
@@ -501,13 +581,13 @@ def identify(service: FaceService, databases: Databases, keys: Keys, subject: uu
         view = {"rank": rank, "placement": row.placement, "probe": _b64(probe.aligned), "reference": _b64(reference)}
     attempt = Attempt(id=uuid.uuid4(), at=at, subject_id=subject, modality=FACE, mode="identify", algorithm=SFACE,
                       top_enrolment_id=leader.enrolment_id, gallery_size=len(gallery.rows), score=score,
-                      threshold=threshold, accepted=score > threshold, duration_ms=duration_ms, source="device")
+                      threshold=threshold, accepted=score > threshold, duration_ms=duration_ms, source=source)
     attempt.probe = keyring.seal(keys, keyring.PROBE, attempt.id.bytes + subject.bytes, probe.png)
     _save_identification(databases, gallery, attempt)
     return {"status": "identified", "attempt_id": str(attempt.id), "at": at.isoformat(), "score": score,
             "threshold": threshold, "threshold_origin": origin, "threshold_provisional": provisional,
             "accepted": attempt.accepted, "duration_ms": duration_ms, "gallery_size": len(gallery.rows),
-            "enrolments": len(ranked), "tied_leaders": scores.count(score),
+            "enrolments": len(ranked), "tied_leaders": scores.count(score), "source": source, "size": _size(probe),
             "candidates": [{"rank": rank, "own": owner_of[row.enrolment_id] == subject, "score": float(row.score),
                             "accepted": float(row.score) > threshold} for rank, row in shown],
             **({"view": view} if view is not None else {})}

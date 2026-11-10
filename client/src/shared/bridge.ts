@@ -224,6 +224,18 @@ export interface FaceCheck extends Check {
   count?: number
   minimum?: number
   width?: number
+  // H51, a file's checks: file_type (kind) and image_size (width, height, minimum, maximum).
+  kind?: string
+  height?: number
+  maximum?: number
+}
+
+// H51, H52: where the new image of a 1:1 or 1:N came from, its own size (compared on its own pixels), and the
+// size of the copy that is stored (an image whose longer side is above 1920 pixels is stored scaled down to 1920).
+export type FaceSource = 'device' | 'file'
+export interface FaceSize {
+  decoded: [number, number]
+  stored: [number, number]
 }
 
 export interface FaceCheckResult extends FaceDetection {
@@ -280,6 +292,8 @@ export interface FaceVerificationResult {
   accepted: boolean
   duration_ms: number
   comparisons: Array<{ placement: number; score: number; accepted: boolean }>
+  source: FaceSource
+  size: FaceSize
   view: { placement: number; probe: string; reference: string } // aligned faces, PNG in base64
 }
 
@@ -301,6 +315,8 @@ export interface FaceIdentificationResult {
   enrolments: number
   tied_leaders: number
   candidates: Array<{ rank: number; own: boolean; score: number; accepted: boolean }>
+  source: FaceSource
+  size: FaceSize
   view?: { rank: number; placement: number; probe: string; reference: string } // aligned faces, PNG in base64
 }
 

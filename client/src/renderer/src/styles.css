@@ -1045,3 +1045,13 @@ button.danger {
 @keyframes gallery-pass { from { opacity: 0.12; } to { opacity: 0.8; } }
 @media (prefers-reduced-motion: reduce) { .gallery-sweep.passing span { animation: none; opacity: 0.8; } }
 .face-identification tr.own td { font-weight: 600; }
+
+/* H51: an image file stays out of sight. A small button beside the camera opens a menu with one item, and the
+   drop target covers the window only while a file is dragged over it. */
+.more-options { position: relative; display: flex; justify-content: flex-end; width: min(100%, 640px); margin-block: 0.25rem 0.75rem; }
+.more-button { min-width: 2.5rem; padding-inline: 0.6rem; font-size: 1.1rem; line-height: 1; letter-spacing: 0.05em; }
+.more-menu { position: absolute; inset-block-start: calc(100% + 0.25rem); inset-inline-end: 0; z-index: 20; width: min(22rem, 90vw); padding: 0.3rem; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 6px 18px rgb(0 0 0 / 0.18); }
+.more-menu [role="menuitem"] { display: grid; gap: 0.2rem; width: 100%; padding: 0.55rem 0.7rem; background: transparent; color: var(--text); border: 0; text-align: start; font-weight: 500; }
+.more-menu [role="menuitem"]:hover, .more-menu [role="menuitem"]:focus-visible { background: var(--notice-bg); }
+.more-menu small { color: var(--muted); font-weight: 400; }
+.drop-target { position: fixed; inset: 0; z-index: 50; display: grid; place-content: center; gap: 0.25rem; padding: 2rem; text-align: center; background: color-mix(in srgb, var(--bg) 90%, transparent); border: 3px dashed var(--accent); pointer-events: none; }

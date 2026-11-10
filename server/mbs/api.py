@@ -160,6 +160,17 @@ class FaceImage(BaseModel):
     image: str = Field(max_length=_base64_length(face.IMAGE_BYTES))
 
 
+class FaceProbe(BaseModel):
+    """The new image of a verification or identification (H49, H50): a PNG of the camera's frame, or the content
+    of a JPEG or PNG file (H27, H51), in base64. Enrolment and the live checks take no files."""
+    model_config = {"extra": "forbid"}
+    image: str = Field(max_length=_base64_length(face.FILE_BYTES))
+    source: Literal["device", "file"] = "device"
+
+    def data(self) -> bytes:
+        return face.decode_image(self.image, face.FILE_BYTES if self.source == "file" else face.IMAGE_BYTES)
+
+
 class FaceTaken(FaceImage):
     captured_at: datetime
 
@@ -350,21 +361,21 @@ def create_app(databases: Databases, keys: Keys, outbox: Outbox, fingerprints: F
     # its sealed image before the answer, a rejected image is not.
     @app.post("/api/face/verifications")
     @allow(USER)
-    def verify_face(body: FaceImage, account: SignedIn = Depends(signed_in)) -> dict:
+    def verify_face(body: FaceProbe, account: SignedIn = Depends(signed_in)) -> dict:
         service = face_service()
-        image = face.decode_image(body.image, face.IMAGE_BYTES)
+        image = body.data()
         subject = accounts.subject_of(databases, keys, account.id)
-        return engine_work(lambda: face.verify(service, databases, keys, subject, image))
+        return engine_work(lambda: face.verify(service, databases, keys, subject, image, body.source))
 
     # H50: one taken image against every current face enrolment of the active users. A completed search is saved
     # with its sealed image before the answer, a rejected image is not; other users stay anonymous (H18).
     @app.post("/api/face/identifications")
     @allow(USER)
-    def identify_face(body: FaceImage, account: SignedIn = Depends(signed_in)) -> dict:
+    def identify_face(body: FaceProbe, account: SignedIn = Depends(signed_in)) -> dict:
         service = face_service()
-        image = face.decode_image(body.image, face.IMAGE_BYTES)
+        image = body.data()
         subject = accounts.subject_of(databases, keys, account.id)
-        return engine_work(lambda: face.identify(service, databases, keys, subject, image))
+        return engine_work(lambda: face.identify(service, databases, keys, subject, image, body.source))
 
     # As H34 for a finger: the face's enrolment is erased with its images and embeddings, and (H49) with its
     # verification attempts and their sealed images; identification attempts stay, without the link (H41, H50).
