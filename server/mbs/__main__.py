@@ -73,7 +73,7 @@ def create_admin(args) -> None:
 def serve(_args) -> None:
     import uvicorn
 
-    from . import face, fingerprint
+    from . import face, fingerprint, voice
     from .api import create_app
     from .outbox import Outbox
 
@@ -91,15 +91,22 @@ def serve(_args) -> None:
         print(f"the face is unavailable ({missing}); server/README.md says how to set it up")
     else:
         faces.warm_up()
+    voices, missing = voice.from_config(config)
+    if voices is None:
+        print(f"the voice is unavailable ({missing}); server/README.md says how to set it up")
+    else:
+        voices.warm_up()
     try:
         migrate(databases)  # a newer version of the server brings its tables up to date before it answers
-        uvicorn.run(create_app(databases, keys, Outbox(), fingerprints, faces), host="127.0.0.1",
+        uvicorn.run(create_app(databases, keys, Outbox(), fingerprints, faces, voices), host="127.0.0.1",
                     port=config.server_port, log_level="info")
     finally:
         if fingerprints is not None:
             fingerprints.close()
         if faces is not None:
             faces.close()
+        if voices is not None:
+            voices.close()
         databases.dispose()
         if started:
             postgres.stop(config)

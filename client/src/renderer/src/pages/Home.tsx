@@ -4,7 +4,7 @@ import { useSession } from '../session'
 
 type Modalities = Record<string, { enrolled: boolean; fingers?: number[] }>
 
-// The modality cards (H15): the fingerprint (H33) and the face (H48) open their screens; the voice comes later.
+// The modality cards (H15): the fingerprint (H33), the face (H48) and the voice (H54) open their screens.
 export function Home() {
   const { account, call, t } = useSession()
   const [modalities, setModalities] = useState<Modalities | null>(null)
@@ -51,6 +51,10 @@ export function Home() {
               ) : modality === 'face' ? (
                 <Link className="button" to="/face">
                   {t.face.open}
+                </Link>
+              ) : modality === 'voice' ? (
+                <Link className="button" to="/voice">
+                  {t.voice.open}
                 </Link>
               ) : (
                 <p className="aside">{t.comingNext}</p>

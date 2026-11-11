@@ -29,6 +29,11 @@ export const ROUTES = {
   deleteFace: ['DELETE', '/api/face/enrolment'],
   verifyFace: ['POST', '/api/face/verifications'], // H49
   identifyFace: ['POST', '/api/face/identifications'], // H50
+  // H54: the voice. The page owns the microphone and records; the server checks recordings and enrols them.
+  voiceMethod: ['GET', '/api/voice/method'],
+  checkVoice: ['POST', '/api/voice/checks'],
+  enrolVoice: ['POST', '/api/voice/enrolments'],
+  deleteVoice: ['DELETE', '/api/voice/enrolment'],
 } as const satisfies Record<string, readonly ['GET' | 'POST' | 'DELETE', string]>
 
 export type RouteName = keyof typeof ROUTES
@@ -321,6 +326,58 @@ export interface FaceIdentificationResult {
 }
 
 export type FaceIdentificationAnswer = FaceIdentificationResult | ({ status: 'rejected'; checks: FaceCheck[] } & FaceDetection)
+
+// H54: the checks of a recording: length (seconds, minimum, maximum), speech (seconds, minimum, and above_noise
+// in dB when speech was heard) and clipping (share, maximum).
+export interface VoiceCheck extends Check {
+  seconds?: number
+  minimum?: number
+  maximum?: number
+  above_noise?: number
+  share?: number
+}
+
+export interface VoiceCheckResult {
+  checks: VoiceCheck[]
+  passed: boolean
+  duration: number
+  speech: number
+}
+
+export interface VoiceMethod {
+  code: 'ecapa-voxceleb'
+  threshold: number
+  threshold_provisional: boolean
+  threshold_origin: string
+  available: boolean
+  recordings: number
+  most_kept: number
+  embedding_length: number
+  sample_rate: number
+  recording_seconds: number
+  duration_minimum: number
+  duration_maximum: number
+  speech_minimum: number
+  clipped_maximum: number
+}
+
+// Recordings are numbered in the order they were kept, from 1; probe is the later one.
+export type VoicePair = FacePair
+
+export interface VoiceSaved {
+  status: 'saved'
+  enrolment: { id: string; created_at: string; replaced_previous: boolean }
+  samples: Array<{ id: string; placement: number; captured_at: string; duration_ms: number; sealed_length: number; checks: VoiceCheck[] }>
+  templates: Array<{ id: string; sample_id: string; algorithm: string; version: string; embedding_length: number }>
+  pairs: VoicePair[]
+  threshold: number
+  not_kept: number[]
+}
+
+export type VoiceEnrolmentAnswer =
+  | VoiceSaved
+  | { status: 'another'; pairs: VoicePair[]; threshold: number; kept: number }
+  | { status: 'failed'; error: string; pairs: VoicePair[]; threshold: number; kept: number }
 
 // H48: whether the laptop's own screen is in use. With the lid closed and external monitors on, Windows turns
 // it off, and the built-in camera sees only the inside of the lid.

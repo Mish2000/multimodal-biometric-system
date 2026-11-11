@@ -19,17 +19,19 @@ export function denyPermissions(session: Session): void {
   session.setPermissionCheckHandler(() => false)
 }
 
-// H48: the face needs the camera: video only, and only for the app's own page. The microphone waits for the
-// voice (increment 5), and every other permission stays refused.
-export function permitCamera(session: Session, appPage: (url: string) => boolean): void {
+// H48: the face needs the camera, and (H54) the voice the microphone, each only for the app's own page. A request
+// asks for the camera alone or the microphone alone, never both, and every other permission stays refused.
+export function permitMedia(session: Session, appPage: (url: string) => boolean): void {
   session.setPermissionRequestHandler((contents, permission, callback, details) => {
     const types = (details as { mediaTypes?: string[] }).mediaTypes ?? []
     const url = (details as { requestingUrl?: string }).requestingUrl ?? contents.getURL()
-    callback(permission === 'media' && types.length > 0 && types.every((type) => type === 'video') && appPage(url))
+    const one = types.length > 0 && (types.every((type) => type === 'video') || types.every((type) => type === 'audio'))
+    callback(permission === 'media' && one && appPage(url))
   })
-  session.setPermissionCheckHandler((_contents, permission, requestingOrigin, details) =>
-    permission === 'media' && (details as { mediaType?: string }).mediaType === 'video' && appPage(requestingOrigin),
-  )
+  session.setPermissionCheckHandler((_contents, permission, requestingOrigin, details) => {
+    const type = (details as { mediaType?: string }).mediaType
+    return permission === 'media' && (type === 'video' || type === 'audio') && appPage(requestingOrigin)
+  })
 }
 
 // The app's page: its built files, or the development server's origin while developing.

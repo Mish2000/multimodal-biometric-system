@@ -2,7 +2,7 @@
 
 Approved on 2026-10-20 (H11–H20 in `docs/decisions.md`),
 from the draft of 2026-10-19 as revised on 2026-10-20, and amended with his
-approval since (H24 to H46). Every decision is cited by its ID; a change needs
+approval since (H24 to H54). Every decision is cited by its ID; a change needs
 the researcher's approval and a new entry in the decision record.
 
 ## 1. Purpose and scope
@@ -23,7 +23,7 @@ One PC runs everything (H11): the researcher's PC with the HiScan PRO, its
 integrated camera and its microphones (all present on 2026-10-19 and reported
 OK by Windows; the camera and microphones are first tried in their
 increments). A USB camera serves too, and the client chooses between the
-cameras itself (H48). The server listens on 127.0.0.1 only.
+cameras itself (H48), and between the microphones (H54). The server listens on 127.0.0.1 only.
 
 ## 2. Accounts and roles (H12)
 
@@ -64,7 +64,7 @@ FastAPI server: Python 3.12, its own environment
                            (research code through the pinned link, H10),
                            and NFIQ 2's quality score of every capture (H33)
               face: YuNet detection + SFace recognition (H48, its own environment)
-              voice: SpeechBrain ECAPA-TDNN
+              voice: SpeechBrain ECAPA-TDNN (H54, its own environment)
 ```
 
 - The client starts the local server when it opens and stops it when it
@@ -339,16 +339,35 @@ flow of 2026-10-18).
 
 ### 5.3 Voice
 
-- **Capture:** the microphone, through the client, as 16 kHz mono audio.
+- **Capture (H54):** the PC's microphones, through the client, which chooses
+  one: the user's last choice, then a camera's own microphone (one device
+  group in Chromium), then Windows' default microphone, then the others, USB
+  ones first; a microphone that sends only digital silence is passed over, and
+  a selector appears when more than one can be used. The sound is taken as it
+  is, without the browser's echo cancellation, noise suppression and automatic
+  gain, and recorded for five seconds as 16 kHz mono 16-bit PCM in a WAV.
+- **Checks (H54):** 3 to 30 seconds long; at least two seconds of speech
+  standing at least 15 dB above the room's noise (the recording's quietest
+  tenth, in windows of 25 ms every 10 ms, pauses of up to 0.2 s counted as
+  speech); at most 0.1 % of the samples at the 16-bit limits. No standard
+  voice quality score is used yet.
 - **Files (H27):** for 1:1 and 1:N only, never for enrolment: WAV, MP3 or OGG
   up to 10 MB and 3 to 30 seconds long, converted to 16 kHz mono.
 - **Model:** SpeechBrain's ECAPA-TDNN trained on VoxCeleb
   (`speechbrain/spkrec-ecapa-voxceleb`, Apache 2.0): a 192-value embedding
   compared by cosine similarity; SpeechBrain's verification threshold is 0.25,
-  and the model card reports an EER of 0.80 % on VoxCeleb1.
-- **Enrolment (H17):** three recordings of about four seconds, the user
-  reading a sentence shown in Hebrew; the model does not depend on the text.
-- **1:1 and 1:N:** as for the face.
+  and the model card reports an EER of 0.80 % on VoxCeleb1. Its five files
+  are pinned by SHA-256 at a Hugging Face commit and run with SpeechBrain
+  1.1.2 and PyTorch 2.13.0 for the CPU in the voice environment, always on
+  eight threads, so the same recording gives the same values (H54).
+- **Enrolment (H17, H54):** three recordings of about four seconds, the user
+  reading a sentence shown in the interface's language (H31), another one for
+  each recording; the model does not depend on the text. As for the face, the
+  three recordings' three pairs must all be above the threshold: another is
+  made until six pass or twelve are made, and every score is pgvector's cosine
+  similarity. The server keeps nothing between requests and checks every
+  recording again before it saves.
+- **1:1 and 1:N:** as for the face, in the next steps of increment 5.
 
 Model files are downloaded only with the researcher's approval and pinned by
 SHA-256.
@@ -367,7 +386,7 @@ SHA-256.
 | Fingerprint capture | scanner status, finger and placement guide, "lift the finger" between placements, the captured print and its checks with its NFIQ 2 score (H33), the pair scores of the kept placements |
 | Stored template (H33) | after an enrolment, once: the captures with their checks, OpenCV SIFT's points, one point's 128 numbers in SIFT's 4 x 4 x 8 layout, the whole template as a picture, its row with the sealed value's parts, and the pair scores against the threshold; sent from the server's memory before sealing, kept by the page only while the screen is open |
 | Face capture | live camera view with the detected face box and what to do next; the camera chosen by the client, with a selector when more than one can be used; after an enrolment, the three aligned faces and their pair scores (H48) |
-| Voice capture | the sentence to read, a level meter and a timer |
+| Voice capture | the sentence to read in the interface's language, a level meter and a timer; the microphone chosen by the client, with a selector when more than one can be used; after an enrolment, the three recordings as waveforms with playback, their checks and their pair scores (H54) |
 | 1:1 result | the new print beside the enrolled one with lines between matched points or pores, or the new aligned face beside the closest enrolled one (H49), a score gauge marked with the threshold, the decision and the time it took |
 | 1:N result | an animated pass over the enrolled gallery, the ranked candidates with their scores, the top one marked when it passes the threshold; for the face the search takes milliseconds, so the pass plays once, for about 0.6 s, when the answer arrives (skipped when Windows' animation effects are off), and the caller's own closest enrolled face is shown beside the new one when it is among the five candidates (H50) |
 | Administration area (H12) | accounts with role and status, new administrators, disabling and enabling; the attempt history with filters; thresholds; the audit log; never national IDs or samples |
@@ -441,7 +460,7 @@ threshold changed).
 ```
 client/    Electron + React + TypeScript (npm, lock file)
 server/    FastAPI application
-engines/   engine processes: fingerprint (through methods/) and NFIQ 2 (H33), later face and voice
+engines/   engine processes: fingerprint (through methods/) and NFIQ 2 (H33), face (H48) and voice (H54)
 methods/   pinned research link (H10)
 scanner/   ScannerCapture (H7–H9) and its acquisition mode for the server
 docs/      this specification, decisions, validations
@@ -449,8 +468,8 @@ docs/      this specification, decisions, validations
 
 New environments, each with exact versions: the server (Python 3.12,
 FastAPI, a PostgreSQL driver, `cryptography`), face (OpenCV;
-`environments/face.yml`, H48), voice
-(SpeechBrain with PyTorch), PostgreSQL with pgvector, and the client's npm
+`environments/face.yml`, H48), voice (SpeechBrain with PyTorch;
+`environments/voice.yml` and `voice-pip.txt`, H54), PostgreSQL with pgvector, and the client's npm
 packages. Node.js 24 is installed (24.18.0); PostgreSQL is not. PostgreSQL
 and pgvector come from conda-forge, like the research environments (H19). The
 only Windows build of pgvector 0.8.6, its newest version, is built for
@@ -583,3 +602,7 @@ themes during that work.
   alignment, and faces under 112 pixels still refused (5.2).
 - **H53** The face's choice between the camera and an existing image before
   1:1 and 1:N, and an outcome screen whose "again" returns to it (5.2, 6).
+- **H54** Voice enrolment from the PC's microphones: the voice environment and
+  the pinned model, the microphone chosen by the client, the recording and its
+  checks, three recordings matching pairwise, and pgvector's cosine similarity
+  as every voice score (1, 3, 5.3, 6, 8).

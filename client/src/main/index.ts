@@ -6,7 +6,7 @@ import { registerBridge } from './bridge'
 import { watchDisplays } from './displays'
 import { findResetLink, PROTOCOL, type ResetLink } from './links'
 import type { ServerClient } from './server'
-import { appPageMatcher, confine, permitCamera, webPreferences } from './window'
+import { appPageMatcher, confine, permitMedia, webPreferences } from './window'
 
 // During development the server runs on its own (`python -m mbs serve`); its address can be overridden.
 const SERVER_URL = process.env.MBS_SERVER_URL ?? 'http://127.0.0.1:55433'
@@ -69,7 +69,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on('web-contents-created', (_event, contents) => confine(contents))
 
   app.whenReady().then(() => {
-    permitCamera(session.defaultSession, appPageMatcher(process.env.ELECTRON_RENDERER_URL)) // H48
+    permitMedia(session.defaultSession, appPageMatcher(process.env.ELECTRON_RENDERER_URL)) // H48, H54
     watchDisplays()
     server = registerBridge(SERVER_URL)
     if (waiting !== null) server.openLink(waiting)

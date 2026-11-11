@@ -26,6 +26,7 @@ from . import keys as keyring
 from . import national_id, outbox, passwords, phones
 from .db import Databases
 from .face import current_enrolment as current_face
+from .voice import current_enrolment as current_voice
 from .fingerprint import enrolled_fingers
 from .keys import Keys
 from .models import (ACTIVE, ADMIN, DISABLED, EMAIL, LANGUAGES, SMS, THEMES, USER, Account, AuditEntry,
@@ -341,8 +342,8 @@ def complete_reset(databases: Databases, throttle: Throttle, token: str, new: st
 
 
 def modalities(databases: Databases, keys: Keys, account: SignedIn) -> dict[str, dict] | None:
-    """Enrolment per modality for the home screen (H15), with the enrolled fingers (H33) and when the face was
-    enrolled (H48); administrator accounts have none (H12). The voice arrives with increment 5."""
+    """Enrolment per modality for the home screen (H15), with the enrolled fingers (H33) and when the face (H48) and
+    the voice (H54) were enrolled; administrator accounts have none (H12)."""
     if account.role != USER:
         return None
     subject = subject_of(databases, keys, account.id)
@@ -352,6 +353,9 @@ def modalities(databases: Databases, keys: Keys, account: SignedIn) -> dict[str,
     face = current_face(databases, subject)
     if face is not None:
         states["face"] = {"enrolled": True, "enrolled_at": face.created_at.astimezone(timezone.utc).isoformat()}
+    voice = current_voice(databases, subject)
+    if voice is not None:
+        states["voice"] = {"enrolled": True, "enrolled_at": voice.created_at.astimezone(timezone.utc).isoformat()}
     return states
 
 

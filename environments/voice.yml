@@ -1,0 +1,33 @@
+# The voice engine's environment (H54): SpeechBrain's ECAPA-TDNN on PyTorch for the CPU, with libsndfile
+# reading the audio. Each listed version is the newest published at least 14 days before 2026-11-11 (H23)
+# that works with the others: torchaudio 2.11.0, which SpeechBrain imports, is built for PyTorch 2.13 in
+# every build of that age, so PyTorch is 2.13.0. conda-forge's torchaudio also depends on kaldi and
+# torchcodec, which the engine does not use; they are pinned to CPU builds, since the solver otherwise
+# chooses a CUDA build of kaldi with 1.77 GB of CUDA libraries. The full solved set, with SHA-256 per
+# package, is voice-win-64.lock; SpeechBrain and HyperPyYAML are not on conda-forge and come from PyPI
+# with their hashes in voice-pip.txt:
+#   conda create -n multimodal-voice --file environments/voice-win-64.lock
+#   python -m pip install --no-deps --only-binary :all: --require-hashes -r environments/voice-pip.txt
+name: multimodal-voice
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python=3.12.16
+  - pytorch=2.13.0=cpu_mkl_py312_h9735288_105
+  - torchaudio=2.11.0=cpu_py312h66480a5_4
+  - kaldi=5.5.1172=cpu_hf03c2bf_5
+  - torchcodec=0.17.0=cpu_py312_h903759c_1
+  - pysoundfile=0.14.0
+  - libsndfile=1.2.2
+  - numpy=2.5.4
+  - scipy=1.18.1
+  - huggingface_hub=2.3.0
+  - sentencepiece=0.2.1
+  - joblib=1.6.0
+  - packaging=26.3
+  - requests=2.34.2
+  - tqdm=4.70.1
+  - pyyaml=6.0.3
+  - ruamel.yaml=0.18.17
+  - pip

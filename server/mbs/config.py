@@ -1,9 +1,10 @@
-"""Machine-specific settings, kept in the git-ignored local/server.toml (H11, H14, H19, H33, H48).
+"""Machine-specific settings, kept in the git-ignored local/server.toml (H11, H14, H19, H33, H48, H54).
 
 The repository is public, so none of its files holds a local path: `python -m mbs setup` writes
-this file with this machine's defaults, and it can be edited afterwards. The fingerprint and face settings
-are optional: without them the server runs, and that modality answers that it is unavailable. The face
-settings default to the face environment next to the server's and to local/models/face.
+this file with this machine's defaults, and it can be edited afterwards. The fingerprint, face and voice
+settings are optional: without them the server runs, and that modality answers that it is unavailable. The
+face and voice settings default to their environments next to the server's and to local/models/face and
+local/models/voice.
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ RESEARCH_LOCAL = REPOSITORY / "local" / "research.toml"  # the research link's m
 SCANNER_EXE = REPOSITORY / "scanner" / "ScannerCapture" / "bin" / "Release" / "net48" / "ScannerCapture.exe"
 NFIQ2_BIN = REPOSITORY / "local" / "nfiq2" / "2.3.0-fix" / "bin"
 FACE_MODELS = REPOSITORY / "local" / "models" / "face"  # YuNet and SFace from OpenCV Zoo (H48)
+VOICE_MODELS = REPOSITORY / "local" / "models" / "voice"  # SpeechBrain's ECAPA-TDNN from Hugging Face (H54)
 
 
 def face_python_default() -> Path | None:
@@ -30,6 +32,16 @@ def face_python_default() -> Path | None:
 
 def face_models_default() -> Path | None:
     return FACE_MODELS if FACE_MODELS.is_dir() else None
+
+
+def voice_python_default() -> Path | None:
+    """The multimodal-voice environment beside the server's (environments/voice.yml)."""
+    candidate = Path(sys.prefix).parent / "multimodal-voice" / "python.exe"
+    return candidate if candidate.exists() else None
+
+
+def voice_models_default() -> Path | None:
+    return VOICE_MODELS if VOICE_MODELS.is_dir() else None
 
 
 @dataclass(frozen=True)
@@ -44,6 +56,8 @@ class Config:
     nfiq2_bin: Path | None = None  # NFIQ 2.3.0 built with NIST's fix (engines/README.md, H33)
     face_python: Path | None = None  # the face environment's python.exe (H48)
     face_models: Path | None = None  # the folder with the two pinned ONNX models (H48)
+    voice_python: Path | None = None  # the voice environment's python.exe (H54)
+    voice_models: Path | None = None  # the folder with the pinned model's five files (H54)
 
     @property
     def postgres_log(self) -> Path:
@@ -64,6 +78,8 @@ def defaults() -> Config:
         nfiq2_bin=NFIQ2_BIN if (NFIQ2_BIN / "Nfiq2Api.dll").exists() else None,
         face_python=face_python_default(),
         face_models=face_models_default(),
+        voice_python=voice_python_default(),
+        voice_models=voice_models_default(),
     )
 
 
@@ -86,6 +102,8 @@ def load(path: Path = LOCAL) -> Config:
         nfiq2_bin=_path(values.get("nfiq2_bin")),
         face_python=_path(values.get("face_python")) or face_python_default(),
         face_models=_path(values.get("face_models")) or face_models_default(),
+        voice_python=_path(values.get("voice_python")) or voice_python_default(),
+        voice_models=_path(values.get("voice_models")) or voice_models_default(),
     )
 
 
@@ -108,6 +126,11 @@ def write(config: Config, path: Path = LOCAL) -> None:
         else '# face_python = "<the multimodal-face environment>/python.exe"',
         f'face_models = "{config.face_models.as_posix()}"' if config.face_models
         else '# face_models = "<the folder with the two OpenCV Zoo models>"',
+        "# Voice (H54): the voice environment's python.exe and the folder of the model's five pinned files.",
+        f'voice_python = "{config.voice_python.as_posix()}"' if config.voice_python
+        else '# voice_python = "<the multimodal-voice environment>/python.exe"',
+        f'voice_models = "{config.voice_models.as_posix()}"' if config.voice_models
+        else '# voice_models = "<the folder with the five files of speechbrain/spkrec-ecapa-voxceleb>"',
     ]
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 

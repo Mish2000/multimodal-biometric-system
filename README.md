@@ -12,7 +12,7 @@
   <img alt=".NET Framework 4.8" src="https://img.shields.io/badge/.NET_Framework-4.8-512BD4?logo=dotnet&logoColor=white">
 </p>
 <p align="center">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-276%20server%20%C2%B7%20142%20client%20%C2%B7%2015%20scanner%20%C2%B7%2027%20engines-2EA44F">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-297%20server%20%C2%B7%20160%20client%20%C2%B7%2015%20scanner%20%C2%B7%2037%20engines-2EA44F">
   <img alt="Cryptography" src="https://img.shields.io/badge/crypto-AES--256--GCM%20%C2%B7%20Argon2id%20%C2%B7%20HMAC-7C3AED">
   <img alt="Build" src="https://img.shields.io/badge/build-increment%204%20of%206%20complete-F59E0B">
 </p>
@@ -101,7 +101,7 @@ checked 1000 ppi images.
 <td valign="top">
 
 **📜 Every decision on record**<br>
-Each design choice is numbered (H1 to H53), dated, and cited in the code and the commits.
+Each design choice is numbered (H1 to H54), dated, and cited in the code and the commits.
 
 </td>
 <td valign="top">
@@ -120,7 +120,7 @@ have tests of their own.
 | --- | --- | --- | --- | --- |
 | 👆 **Fingerprint** | Biometrika HiScan PRO, native 1000 ppi | OpenCV SIFT · Pore SIFT · Pore CNN · fusion | local descriptors, sealed | score above the method's threshold |
 | 🙂 **Face** | the built-in camera or a USB camera, chosen by the client | YuNet detection + SFace | 128-value embedding in pgvector | cosine similarity above 0.363 |
-| 🎙️ **Voice** | the PC's microphone, 16 kHz mono | SpeechBrain ECAPA-TDNN | 192-value embedding in pgvector | cosine similarity above 0.25 |
+| 🎙️ **Voice** | the PC's microphones, chosen by the client, 16 kHz mono | SpeechBrain ECAPA-TDNN | 192-value embedding in pgvector | cosine similarity above 0.25 |
 
 Run unchanged on the scanner's own captures, OpenCV SIFT accepted 28 of 30 same-finger pairs and
 none of 405 different-finger pairs within one session; across two sessions, results fell sharply
@@ -165,7 +165,7 @@ flowchart LR
 | 🟢 | **2 · Fingerprint, 1:1** | enrolment, NFIQ 2 quality checks, sealed captures and templates, the stored-template screen and OpenCV SIFT verification with saved attempts. Verification passed a manual check on the scanner |
 | 🟢 | **3 · Fingerprint, complete** | all three methods for verification and identification, with match drawings in 1:1 and for the user's own print in 1:N, checked on HiScan PRO |
 | 🟢 | **4 · Face, complete** | enrolment, 1:1 verification and 1:N identification from the built-in or a USB camera, chosen by the client, and from image files for 1:1 and 1:N; faces of every size from 112 pixels, checked by hand |
-| ⚪ | **5 · Voice** | enrolment, 1:1 and 1:N |
+| 🟡 | **5 · Voice** | enrolment from the PC's microphones, chosen by the client, checked by hand; 1:1, 1:N and recordings from files next |
 | ⚪ | **6 · Finish** | thresholds and history in the administration, fusion, the finished experience |
 
 ## Repository
@@ -177,7 +177,7 @@ scanner/       ScannerCapture: native 1000 ppi capture (C#, .NET Framework 4.8, 
 engines/       engine processes: the three research fingerprint methods and NIST's NFIQ 2 quality score
 methods/       pinned link to the research methods and their evaluation on the scanner
 docs/          specification, data model, decision record and validations
-environments/  locked conda environments of the server, the database and the face engine
+environments/  locked conda environments of the server, the database and the face and voice engines
 ```
 
 <details>
@@ -188,17 +188,18 @@ environments/  locked conda environments of the server, the database and the fac
 conda create -n multimodal-server --file environments/server-win-64.lock
 conda create -n multimodal-postgres --file environments/postgres-win-64.lock
 conda create -n multimodal-face --file environments/face-win-64.lock    # its two models: engines/README.md
+conda create -n multimodal-voice --file environments/voice-win-64.lock  # with voice-pip.txt and its model: engines/README.md
 conda activate multimodal-server
 cd server
 python -m mbs setup        # key file, local settings, cluster and databases
 python -m mbs serve        # the API on 127.0.0.1:55433
-python -m pytest           # 276 tests, including four local checks with MBS_LIVE_CAPTURES
+python -m pytest           # 297 tests, including four local checks with MBS_LIVE_CAPTURES
 
 # The client, from its lock file
 cd ../client
 npm ci
 npm run dev                # the app, with the server running
-npm test                   # 142 tests
+npm test                   # 160 tests
 ```
 
 Details: [server](server/README.md) · [scanner](scanner/README.md) · [research methods](methods/README.md)

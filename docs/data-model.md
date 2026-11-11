@@ -247,7 +247,7 @@ erDiagram
 | `threshold_origin` | `varchar(120)` | where the value comes from, shown with it |
 | `threshold_changed_at` | `timestamptz` | null until an administrator changes the value; who changed it is in the audit log |
 
-The first rows (the fingerprint ones exist since H33 and SFace's since H48; the voice joins when its model is pinned):
+The first rows (the fingerprint ones exist since H33, SFace's since H48 and ECAPA-TDNN's since H54, migration `biometric_0006`):
 
 | `code` | `threshold` | Provisional | Origin |
 | --- | --- | --- | --- |
@@ -288,7 +288,7 @@ One current enrolment per subject, modality and finger: a unique index over
 | `width`, `height` | `smallint` | images only |
 | `ppi` | `smallint` | fingerprints only: 1000 (H7) |
 | `duration_ms` | `integer` | voices only |
-| `checks` | `jsonb` | fingerprints: H7's four checks, each with its measured value and whether it passed, then NFIQ 2's quality score against its minimum (H33); faces: H48's four checks (one face, YuNet's score, the whole face inside, its width), each with its value; null for voices |
+| `checks` | `jsonb` | fingerprints: H7's four checks, each with its measured value and whether it passed, then NFIQ 2's quality score against its minimum (H33); faces: H48's four checks (one face, YuNet's score, the whole face inside, its width), each with its value; voices: H54's three checks (the length, the seconds of speech above the room's noise, the share of clipped samples), each with its value |
 | `data` | `bytea` | the sealed file |
 
 An enrolment keeps the three captures that pass its checks: H7's for every

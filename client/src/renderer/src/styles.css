@@ -1050,3 +1050,23 @@ button.danger {
 .drop-zone { display: grid; justify-items: center; gap: 0.5rem; width: min(100%, 640px); margin-block: 0.5rem 1rem; padding: 2.5rem 1.5rem; text-align: center; border: 2px dashed var(--line); border-radius: var(--radius); background: var(--surface); }
 .drop-zone p { margin: 0; }
 .drop-zone.dragging { border-color: var(--accent); background: var(--notice-bg); }
+
+/* H54: the microphone's panel: the sentence to read, the level meter, the timer of a recording, and the kept
+   recordings as waveforms. The meter shows the level as it is, so it has no transition to switch off. */
+.microphone { display: grid; gap: 0.75rem; width: min(100%, 640px); padding: 1rem 1.25rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.microphone.recording { border-color: var(--accent); }
+.microphone .actions { margin: 0; }
+.sentence { margin: 0; font-size: 1.15rem; line-height: 1.5; }
+.sentence q { quotes: none; font-weight: 600; }
+.level { display: flex; align-items: flex-end; gap: 3px; height: 2.25rem; }
+.level i { flex: 1; height: 100%; border-radius: 2px; background: var(--line); }
+.level i.on { background: var(--ok); }
+.level i.on.loud { background: var(--error); }
+.timer { display: grid; gap: 0.35rem; font-variant-numeric: tabular-nums; }
+.timer .track { display: block; height: 4px; overflow: hidden; border-radius: 2px; background: var(--line); }
+.timer .run { display: block; height: 100%; background: var(--accent); }
+.recordings { display: grid; gap: 0.5rem; width: min(100%, 640px); padding: 0; list-style: none; }
+.recording-row { display: grid; grid-template-columns: 7rem 1fr auto; align-items: center; gap: 0.75rem; }
+.waveform { width: 100%; height: 3rem; color: var(--accent); background: var(--bg); border-radius: var(--radius); }
+.waveform path { stroke: currentColor; stroke-width: 0.7; fill: none; }
+.voice-enrolment .prompt:empty { padding: 0; margin: 0; border: 0; background: none; }

@@ -1,18 +1,20 @@
-# Server (increments 1 to 4 of H20)
+# Server (increments 1 to 5 of H20)
 
 The FastAPI server of the system: the local PostgreSQL cluster, the key file, registration with the
 national ID and the mobile phone, sign-in, password recovery, roles and the accounts part of the
 administration (H3, H11, H12, H14, H19, H29 to H32), fingerprint enrolment (H33)
 and 1:1 verification with OpenCV SIFT, Pore SIFT and Pore CNN
 (H35, H38, H39) and 1:N identification (H41, H42) with all three methods, and face enrolment (H48),
-1:1 verification (H49) and 1:N identification (H50), also from image files (H51).
-It runs with the `multimodal-server` environment and starts PostgreSQL from the
-`multimodal-postgres` environment (`environments/`); the face engine runs in `multimodal-face`.
+1:1 verification (H49) and 1:N identification (H50), also from image files (H51), and voice enrolment
+(H54). It runs with the `multimodal-server` environment and starts PostgreSQL from the
+`multimodal-postgres` environment (`environments/`); the face engine runs in `multimodal-face` and the
+voice engine in `multimodal-voice`.
 
 ```powershell
 conda create -n multimodal-server --file environments/server-win-64.lock
 conda create -n multimodal-postgres --file environments/postgres-win-64.lock
 conda create -n multimodal-face --file environments/face-win-64.lock   # and the two models: engines/README.md
+conda create -n multimodal-voice --file environments/voice-win-64.lock # with voice-pip.txt and the model: engines/README.md
 cd server
 $python = '<conda envs>\multimodal-server\python.exe'
 & $python -m mbs setup        # key file, local/server.toml, cluster, both databases (safe to rerun)
@@ -38,12 +40,15 @@ $python = '<conda envs>\multimodal-server\python.exe'
 | `nfiq2_bin` | `local/nfiq2/2.3.0-fix/bin` when it holds `Nfiq2Api.dll`: the NFIQ 2 build of `engines/README.md` |
 | `face_python` | `python.exe` of the `multimodal-face` environment beside the server's, when it exists (H48) |
 | `face_models` | `local/models/face` when it exists: YuNet and SFace, pinned by SHA-256 (`engines/README.md`) |
+| `voice_python` | `python.exe` of the `multimodal-voice` environment beside the server's, when it exists (H54) |
+| `voice_models` | `local/models/voice` when it exists: the five files of ECAPA-TDNN, pinned by SHA-256 (`engines/README.md`) |
 
 Fingerprint enrolment also needs the research project environment of `local/research.toml` (H10),
 which runs the engines (`engines/`). Without any of these the server runs as before, says at its start
 what is missing, and answers enrolment requests with `fingerprint_unavailable`. The face settings fall back
 to their defaults when `local/server.toml` does not name them; without them the face routes answer
-`face_unavailable`.
+`face_unavailable`. The voice settings do the same, and without them the voice routes answer
+`voice_unavailable`.
 
 ## Keys and data
 
@@ -116,13 +121,17 @@ to their defaults when `local/server.toml` does not name them; without them the 
 | `POST /api/face/verifications` | user | verify the face with one taken image (H49): `rejected` with its checks and no attempt, or `verified` with the three scores, the decision and the two aligned faces, sent after the attempt is saved; 409 `not_enrolled` before an enrolment |
 | `POST /api/face/identifications` | user | identify the face with one taken image (H50): `rejected` with its checks and no attempt, or `identified` with the five leading enrolments (the caller's own marked, others anonymous), the tie count, the gallery's size and, when the caller's enrolment is among the five, the two aligned faces, sent after the attempt is saved; 409 `not_enrolled` before an enrolment, 409 `gallery_changed` when the gallery changed during the search |
 | `DELETE /api/face/enrolment` | user | delete the face's current and replaced enrolments with their images, embeddings and verification attempts; identification attempts stay, without the link; 404 when it is not enrolled |
+| `GET /api/voice/method` | user | ECAPA-TDNN's threshold, its origin, whether the voice engine is set up, and the rules of an enrolment and its recordings (H54) |
+| `POST /api/voice/checks` | user | one recording (`{"recording": base64}`, a WAV of 16 kHz, one channel and 16-bit PCM, at most 1 MB): its checks; nothing is kept |
+| `POST /api/voice/enrolments` | user | three to six recordings with their times, in order: 201 `saved` when three match each other, otherwise 200 `another`, or `failed` after six |
+| `DELETE /api/voice/enrolment` | user | delete the voice's current and replaced enrolments with their recordings and embeddings; 404 when it is not enrolled |
 | `GET /api/admin/accounts`, `POST /api/admin/accounts/{id}/status` | administrator | accounts; disable or enable |
 | `POST /api/admin/administrators`, `GET /api/admin/audit` | administrator | a new administrator; the audit log |
 
 Errors answer `{"error": "<code>"}`; the client turns codes into English or Hebrew text.
 
 Verification uses the existing capture and engine settings. On startup, `serve`
-applies the biometric migrations through `biometric_0005` (H48), preserving enrolled
+applies the biometric migrations through `biometric_0006` (H54), preserving enrolled
 fingers and attempts while updating identification retention (H41).
 The highest of the three scores decides, strictly above the threshold; a result
 is sent only after storage. Its probe is sealed under `mbs/probe/v1`, bound to
@@ -216,7 +225,16 @@ shown, its winning image is extracted again as in H49. The accounts, then the en
 templates are locked and checked again before the attempt is saved (otherwise `gallery_changed`); the
 leading enrolment is stored even below the threshold, and its later deletion keeps the attempt (H41).
 
-Both routes take `{"image": base64, "source": "device" | "file"}` (H51): a camera image up to 8 MB, an image
+Voice enrolment (H54) keeps nothing between requests either: the page sends the recordings that passed
+their checks, in the order they were made, and the server checks each again (3 to 30 seconds long, at least
+two seconds of speech above the room's noise, at most 0.1 % of the samples clipped). It compares every pair by
+pgvector's cosine similarity and keeps the three whose lowest pair is highest, when all three pairs are above
+SpeechBrain's threshold of 0.25. The kept recordings are sealed under `mbs/sample/v1` as WAV made by the engine
+from their samples, with their checks and durations; their embeddings are `vector` values of 192 numbers,
+unsealed (H14), under the embedding model's SHA-256 as their version. A voice engine that reports another model
+is refused (`method_version_differs`). Migration `biometric_0006` adds ECAPA-TDNN's row to the algorithm table.
+
+Both face routes take `{"image": base64, "source": "device" | "file"}` (H51): a camera image up to 8 MB, an image
 file up to 10 MB. Before the engine reads a file, the server takes its kind from its first bytes (JPEG or
 PNG) and its width and height from its header (at least 240 pixels on the shorter side, at most 50 million
 pixels); a file that fails is answered `rejected` with these checks and makes no attempt. The engine turns

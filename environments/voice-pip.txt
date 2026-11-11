@@ -1,0 +1,5 @@
+# The voice engine's packages from PyPI (H54), which conda-forge does not have. Installed into the
+# multimodal-voice environment without their dependencies, which voice-win-64.lock provides:
+#   python -m pip install --no-deps --only-binary :all: --require-hashes -r environments/voice-pip.txt
+speechbrain==1.1.2 --hash=sha256:9fea4144c917ea58bcf13f17a1a1759179ed7472a30ec8416e7c7c8cf21d9c9a
+hyperpyyaml==1.2.3 --hash=sha256:0088c8ce97dc7c7d3460112b6ccc92dca46fade4d0320bc39f58b1fdda60f7f1

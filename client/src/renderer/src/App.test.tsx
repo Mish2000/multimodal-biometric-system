@@ -3,11 +3,14 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { StrictMode } from 'react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import type { Account, ApiResult, DisplayState, FaceIdentificationResult, FaceVerificationResult, EnrolmentEvent, Language, MbsBridge, OpenedLink, RouteName, Theme, VerificationEvent, FingerprintAlgorithm, IdentificationEvent } from '../../shared/bridge'
+import type { Account, ApiResult, DisplayState, FaceIdentificationResult, FaceVerificationResult, EnrolmentEvent, Language, MbsBridge, OpenedLink, RouteName, Theme, VerificationEvent, FingerprintAlgorithm, IdentificationEvent, VoiceEnrolmentAnswer, VoiceMethod, VoiceSaved } from '../../shared/bridge'
 import { App } from './App'
 import { FaceIdentificationView } from './face/FaceIdentification'
 import { FaceVerificationView } from './face/FaceVerification'
 import { SessionProvider } from './session'
+import type { PanelProps } from './voice/MicrophonePanel'
+import { VoiceEnrolment, type KeptRecording } from './voice/VoiceEnrolment'
+import { VoiceResult } from './voice/VoiceResult'
 
 interface Stored extends Account {
   password: string
@@ -52,6 +55,14 @@ class FakeServer implements MbsBridge {
   faceVerifications = 0
   faceIdentifications = 0
   faceSent: Array<{ image: string; source: string }> = [] // H51
+  // The voice (H54): its enrolment state, whether the engine is set up, the recordings checked, the enrolments
+  // asked for with how many recordings, the answers the next enrolments give, and deletions.
+  voice: { enrolled: boolean; enrolled_at?: string } = { enrolled: false }
+  voiceAvailable = true
+  voiceChecked: string[] = []
+  voiceEnrolments: number[] = []
+  voiceAnswers: VoiceEnrolmentAnswer[] = []
+  voiceDeletes = 0
 
   displays = async (): Promise<DisplayState> => ({ internalDisplay: false })
 
@@ -230,7 +241,7 @@ class FakeServer implements MbsBridge {
     switch (route) {
       case 'me': {
         const fingerprint = { enrolled: this.fingers.length > 0, fingers: [...this.fingers].sort((a, b) => a - b) }
-        const modalities = { fingerprint, face: this.face, voice: { enrolled: false } }
+        const modalities = { fingerprint, face: this.face, voice: this.voice }
         return ok({ account: view(me), modalities: me.role === 'user' ? modalities : null })
       }
       case 'faceMethod':
@@ -247,6 +258,29 @@ class FakeServer implements MbsBridge {
         const result = route === 'verifyFace' ? FACE_VERIFIED : FACE_IDENTIFIED
         return ok(body.source === 'file' ? { ...result, source: 'file', size: { decoded: [4000, 3000], stored: [1920, 1440] } } : result)
       }
+      case 'voiceMethod':
+        return ok({ ...VOICE_METHOD, available: this.voiceAvailable })
+      case 'checkVoice': {
+        this.voiceChecked.push(body.recording ?? '')
+        const quiet = body.recording === 'quiet'
+        return ok({ passed: !quiet, duration: 5, speech: quiet ? 0.8 : 3.4, checks: [
+          { name: 'length', passed: true, detail: '', seconds: 5, minimum: 3, maximum: 30 },
+          { name: 'speech', passed: !quiet, detail: '', seconds: quiet ? 0.8 : 3.4, minimum: 2, above_noise: 31.4 },
+          { name: 'clipping', passed: true, detail: '', share: 0, maximum: 0.001 },
+        ] })
+      }
+      case 'enrolVoice': {
+        const recordings = (body as unknown as { recordings: unknown[] }).recordings
+        this.voiceEnrolments.push(recordings.length)
+        const answer = this.voiceAnswers.shift() ?? VOICE_SAVED
+        if (answer.status === 'saved') this.voice = { enrolled: true, enrolled_at: answer.enrolment.created_at }
+        return ok(answer)
+      }
+      case 'deleteVoice':
+        if (!this.voice.enrolled) return no(404, 'not_enrolled')
+        this.voice = { enrolled: false }
+        this.voiceDeletes++
+        return ok()
       case 'deleteFace':
         if (!this.face.enrolled) return no(404, 'not_enrolled')
         this.face = { enrolled: false }
@@ -295,6 +329,31 @@ class FakeServer implements MbsBridge {
     }
     return no(404, 'unknown_route')
   }
+}
+
+// H54: ECAPA-TDNN's card, and a saved voice enrolment as the server answers it.
+const VOICE_METHOD: VoiceMethod = {
+  code: 'ecapa-voxceleb', threshold: 0.25, threshold_provisional: false, threshold_origin: "SpeechBrain's verification threshold",
+  available: true, recordings: 3, most_kept: 6, embedding_length: 192, sample_rate: 16000, recording_seconds: 5,
+  duration_minimum: 3, duration_maximum: 30, speech_minimum: 2, clipped_maximum: 0.001,
+}
+
+const VOICE_CHECKS = [
+  { name: 'length', passed: true, detail: '', seconds: 5, minimum: 3, maximum: 30 },
+  { name: 'speech', passed: true, detail: '', seconds: 3.4, minimum: 2, above_noise: 31.4 },
+  { name: 'clipping', passed: true, detail: '', share: 0, maximum: 0.001 },
+]
+
+const VOICE_SAVED: VoiceSaved = {
+  status: 'saved',
+  enrolment: { id: 'e-voice', created_at: '2026-11-11T12:00:00+00:00', replaced_previous: false },
+  samples: [1, 2, 3].map((placement) => ({ id: `s${placement}`, placement, captured_at: '2026-11-11T11:59:00+00:00', duration_ms: 5000,
+    sealed_length: 160098, checks: VOICE_CHECKS })),
+  templates: [1, 2, 3].map((n) => ({ id: `t${n}`, sample_id: `s${n}`, algorithm: 'ecapa-voxceleb', version: 'pinned', embedding_length: 192 })),
+  pairs: [{ probe: 2, reference: 1, score: 0.712, accepted: true }, { probe: 3, reference: 1, score: 0.655, accepted: true },
+    { probe: 3, reference: 2, score: 0.689, accepted: true }],
+  threshold: 0.25,
+  not_kept: [],
 }
 
 // H49: a face verification's answer, as the server sends it after saving the attempt.
@@ -1381,7 +1440,7 @@ describe('the face (H48)', () => {
     expect(enrol.disabled).toBe(false)
     expect(screen.getByRole('heading', { name: 'SFace' })).toBeTruthy()
     expect(screen.getByText(/Accepts above 0.363/)).toBeTruthy()
-    expect(screen.getByText(/Recognition by voice comes in the next build step/)).toBeTruthy()
+    expect(screen.getByText(/The voice has its own page, from the home screen/)).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Delete the face enrolment' })).toBeNull()
   })
 
@@ -1682,5 +1741,158 @@ describe('the choice of the camera or an existing image, and the outcome screens
     await choice('זיהוי (1:N)', 'he')
     expect(screen.getByRole('button', { name: 'זיהוי חי' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'העלאת תמונה קיימת' })).toBeTruthy()
+  })
+})
+
+describe('the voice (H54)', () => {
+  async function openVoice(language: Language = 'en') {
+    server.add('dana', 'user', { language })
+    open('/sign-in')
+    await signIn('dana', 'dana password 1')
+    fireEvent.click(await cardLink(language === 'he' ? 'קול' : 'Voice'))
+  }
+
+  it('opens from its home card; a user who is not enrolled can enrol, and sees ECAPA-TDNN and its threshold', async () => {
+    await openVoice()
+    expect(await screen.findByText('Not enrolled yet.')).toBeTruthy()
+    expect((screen.getByRole('button', { name: 'Enrol my voice' }) as HTMLButtonElement).disabled).toBe(false)
+    expect(screen.getByRole('heading', { name: 'ECAPA-TDNN' })).toBeTruthy()
+    expect(screen.getByText(/Accepts above 0.25, SpeechBrain’s own verification threshold/)).toBeTruthy()
+    expect(screen.getByText(/equal error rate of 0.80%/)).toBeTruthy()
+    expect(screen.getByText(/Verification \(1:1\) and identification \(1:N\) by voice come in the next build steps/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Delete the voice enrolment' })).toBeNull()
+  })
+
+  it('shows when the voice was enrolled, and deletes the enrolment only after a confirmation', async () => {
+    server.voice = { enrolled: true, enrolled_at: '2026-11-11T12:00:00+00:00' }
+    await openVoice()
+    expect(await screen.findByText(/^Enrolled on .*2026/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Enrol my voice again' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete the voice enrolment' }))
+    expect(screen.getByRole('alertdialog').textContent).toContain('Delete your voice enrolment?')
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(server.voiceDeletes).toBe(0)
+    fireEvent.click(screen.getByRole('button', { name: 'Delete the voice enrolment' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    expect(await screen.findByText(/The voice enrolment was deleted/)).toBeTruthy()
+    expect(server.voiceDeletes).toBe(1)
+    expect(await screen.findByText('Not enrolled yet.')).toBeTruthy()
+  })
+
+  it('cannot start an enrolment when the voice engine is not set up', async () => {
+    server.voiceAvailable = false
+    await openVoice()
+    expect(await screen.findByText(/The voice engine is not set up on this computer/)).toBeTruthy()
+    expect((screen.getByRole('button', { name: 'Enrol my voice' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('opens the enrolment with its first sentence; without a microphone interface it says so', async () => {
+    await openVoice()
+    fireEvent.click(await screen.findByRole('button', { name: 'Enrol my voice' }))
+    expect(await screen.findByRole('heading', { name: 'Enrolling your voice' })).toBeTruthy()
+    expect(screen.getByText('Recording 1 of 3')).toBeTruthy()
+    expect(await screen.findByText('No microphone is connected.')).toBeTruthy() // jsdom has no media interface
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(await screen.findByText('Not enrolled yet.')).toBeTruthy()
+  })
+
+  it('speaks Hebrew, right to left', async () => {
+    await openVoice('he')
+    expect(await screen.findByText('עוד לא נרשם.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'רישום הקול שלי' })).toBeTruthy()
+    expect(document.documentElement.dir).toBe('rtl')
+  })
+})
+
+describe('voice enrolment (H54)', () => {
+  // A stand-in for the microphone: it shows the sentence it was given, and its button hands over the next
+  // recording of the queue, as the panel does after five seconds of recording.
+  let queue: string[] = []
+  function FakePanel({ busy, sentence, onRecorded }: PanelProps) {
+    return (
+      <div>
+        <p data-testid="sentence">{sentence}</p>
+        <button type="button" disabled={busy} onClick={() => onRecorded({ recording: queue.shift() ?? 'voice', capturedAt: new Date().toISOString(), pcm: new Int16Array(800) })}>
+          Fake recording
+        </button>
+      </div>
+    )
+  }
+
+  function enrol(language: Language = 'en') {
+    server.current = server.add('dana', 'user', { language })
+    const saved: Array<{ saved: VoiceSaved; kept: KeptRecording[] }> = []
+    render(<MemoryRouter><SessionProvider>
+      <VoiceEnrolment method={VOICE_METHOD} Panel={FakePanel} onSaved={(result, kept) => saved.push({ saved: result, kept })} onLeave={() => undefined} />
+    </SessionProvider></MemoryRouter>)
+    return saved
+  }
+
+  async function recordOnce() {
+    const button = await screen.findByRole('button', { name: 'Fake recording' }) as HTMLButtonElement
+    await waitFor(() => expect(button.disabled).toBe(false))
+    fireEvent.click(button)
+  }
+
+  it('checks every recording at once, shows another sentence each time and enrols three that pass', async () => {
+    queue = ['one', 'two', 'three']
+    const saved = enrol()
+    expect(screen.getByTestId('sentence').textContent).toBe('The sun rises over the hills, and the wind blows in from the sea.')
+    await recordOnce()
+    expect(await screen.findByText('Recording 1 was kept.')).toBeTruthy()
+    expect(screen.getByTestId('sentence').textContent).toBe('In the morning we drink hot coffee, and then we set out on our way.')
+    await recordOnce()
+    await recordOnce()
+    await waitFor(() => expect(saved.length).toBe(1))
+    expect(server.voiceChecked).toEqual(['one', 'two', 'three'])
+    expect(server.voiceEnrolments).toEqual([3])
+    expect(saved[0]!.kept.map((item) => [item.number, item.recording])).toEqual([[1, 'one'], [2, 'two'], [3, 'three']])
+  })
+
+  it('shows why a recording was not kept, and counts it among the recordings made', async () => {
+    queue = ['quiet']
+    enrol()
+    await recordOnce()
+    expect(await screen.findByText('The recording was not kept:')).toBeTruthy()
+    expect(screen.getByText(/Speech heard: 0.8 seconds of speech, 31 dB above the room’s noise; at least 2 needed/)).toBeTruthy()
+    expect(screen.getByText(/Length: 5.0 seconds, 3 to 30 needed/)).toBeTruthy()
+    expect(screen.getByText('Recording 1 of 3')).toBeTruthy() // nothing was kept
+    expect(screen.getByTestId('sentence').textContent).toBe('In the morning we drink hot coffee, and then we set out on our way.')
+  })
+
+  it('records another when three do not match each other, and shows how alike they are', async () => {
+    queue = ['one', 'two', 'other', 'four']
+    server.voiceAnswers = [{ status: 'another', threshold: 0.25, kept: 3, pairs: [
+      { probe: 2, reference: 1, score: 0.7, accepted: true }, { probe: 3, reference: 1, score: 0.08, accepted: false },
+      { probe: 3, reference: 2, score: 0.11, accepted: false }] }]
+    const saved = enrol()
+    await recordOnce()
+    await recordOnce()
+    await recordOnce()
+    expect(await screen.findByText(/do not all match each other well enough. Record another/)).toBeTruthy()
+    expect(screen.getByText('Recordings 1 and 3')).toBeTruthy()
+    expect(screen.getByText('Recording 4 of 4')).toBeTruthy()
+    await recordOnce()
+    await waitFor(() => expect(saved.length).toBe(1))
+    expect(server.voiceEnrolments).toEqual([3, 4])
+  })
+
+  it('speaks Hebrew, with the Hebrew sentences', async () => {
+    queue = ['one']
+    enrol('he')
+    expect(await screen.findByRole('heading', { name: 'רישום הקול' })).toBeTruthy()
+    expect(screen.getByTestId('sentence').textContent).toBe('השמש זורחת מעל הגבעות, והרוח נושבת מן הים.')
+  })
+
+  it('shows the enrolled voice: each recording’s waveform and checks, the pairs against the threshold, and what was stored', () => {
+    const kept: KeptRecording[] = [1, 2, 3].map((number) => ({ number, recording: '', capturedAt: '', pcm: new Int16Array(1600).fill(1000 * number) }))
+    render(<MemoryRouter><SessionProvider><VoiceResult saved={VOICE_SAVED} kept={kept} rate={16000} onDone={() => undefined} /></SessionProvider></MemoryRouter>)
+    expect(screen.getByRole('heading', { name: 'Your voice is enrolled' })).toBeTruthy()
+    expect(screen.getAllByRole('img').map((item) => item.getAttribute('aria-label'))).toEqual(
+      ['The waveform of recording 1', 'The waveform of recording 2', 'The waveform of recording 3'])
+    expect(screen.getAllByRole('button', { name: 'Play' }).every((button) => (button as HTMLButtonElement).disabled)).toBe(true) // no audio in jsdom
+    expect(screen.getAllByText(/Speech heard: 3.4 seconds of speech/).length).toBe(3)
+    expect(screen.getByText('Recordings 1 and 2')).toBeTruthy()
+    expect(screen.getByText(/Stored: 3 recordings, each sealed with AES-256-GCM, and 3 embeddings of 192 numbers each/)).toBeTruthy()
   })
 })

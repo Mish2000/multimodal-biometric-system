@@ -15,7 +15,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
-from . import accounts, face, fingerprint, verification, identification
+from . import accounts, face, fingerprint, verification, identification, voice
 from .accounts import AccountError, SignedIn, Throttle
 from .db import Databases
 from .engines import EngineError
@@ -24,6 +24,7 @@ from .fingerprint import FingerprintService
 from .keys import Keys
 from .models import ADMIN, USER
 from .outbox import Outbox
+from .voice import VoiceError, VoiceService
 
 PUBLIC = "public"
 
@@ -180,6 +181,21 @@ class FaceEnrolment(BaseModel):
     images: list[FaceTaken] = Field(min_length=face.IMAGES, max_length=face.MOST_KEPT)
 
 
+class VoiceRecording(BaseModel):
+    """A recording the user made, as a WAV of 16 kHz, one channel and 16-bit PCM, in base64 (H54)."""
+    model_config = {"extra": "forbid"}
+    recording: str = Field(max_length=_base64_length(voice.RECORDING_BYTES))
+
+
+class VoiceMade(VoiceRecording):
+    captured_at: datetime
+
+
+class VoiceEnrolment(BaseModel):
+    model_config = {"extra": "forbid"}
+    recordings: list[VoiceMade] = Field(min_length=voice.RECORDINGS, max_length=voice.MOST_KEPT)
+
+
 def account_json(account: SignedIn) -> dict:
     return {"id": str(account.id), "username": account.username, "email": account.email, "role": account.role,
             "must_change_password": account.must_change_password, "theme": account.theme,
@@ -187,13 +203,14 @@ def account_json(account: SignedIn) -> dict:
 
 
 def create_app(databases: Databases, keys: Keys, outbox: Outbox, fingerprints: FingerprintService | None = None,
-               faces: FaceService | None = None) -> FastAPI:
+               faces: FaceService | None = None, voices: VoiceService | None = None) -> FastAPI:
     # The policy runs for every route of the application, also for routes added later.
     app = FastAPI(title="Multimodal biometric system", docs_url=None, redoc_url=None, openapi_url=None,
                   dependencies=[Depends(policy)])
     app.state.databases, app.state.keys, app.state.throttle = databases, keys, Throttle()
     app.state.fingerprints = fingerprints
     app.state.faces = faces
+    app.state.voices = voices
 
     @app.exception_handler(AccountError)
     def account_error(request: Request, error: AccountError) -> JSONResponse:
@@ -209,6 +226,24 @@ def create_app(databases: Databases, keys: Keys, outbox: Outbox, fingerprints: F
         if service is None:
             raise FaceError("face_unavailable", 503)
         return service
+
+    @app.exception_handler(VoiceError)
+    def voice_error(request: Request, error: VoiceError) -> JSONResponse:
+        return JSONResponse({"error": error.code, **error.extra}, status_code=error.status)
+
+    def voice_service() -> VoiceService:
+        service = app.state.voices
+        if service is None:
+            raise VoiceError("voice_unavailable", 503)
+        return service
+
+    def voice_work(work):
+        """H54: an engine that cannot answer is the server's failure, reported without the recording."""
+        try:
+            return work()
+        except EngineError:
+            voice.logger.warning("the voice engine failed a request")
+            raise VoiceError("engine_unavailable", 503) from None
 
     def engine_work(work):
         """H48: an engine that cannot answer is the server's failure, reported without the image."""
@@ -384,6 +419,39 @@ def create_app(databases: Databases, keys: Keys, outbox: Outbox, fingerprints: F
     def delete_face(account: SignedIn = Depends(signed_in)) -> None:
         subject = accounts.subject_of(databases, keys, account.id)
         if not face.delete_face(databases, subject):
+            raise AccountError("not_enrolled", 404)
+
+    # H54: the page records with the microphone and sends each recording to be checked at once, then sends the
+    # recordings that passed to be enrolled; the server keeps nothing between these requests and checks
+    # everything again before it saves.
+    @app.get("/api/voice/method")
+    @allow(USER)
+    def voice_method() -> dict:
+        return voice.method(databases, app.state.voices)
+
+    @app.post("/api/voice/checks")
+    @allow(USER)
+    def check_voice(body: VoiceRecording) -> dict:
+        service = voice_service()
+        recording = voice.decode_recording(body.recording, voice.RECORDING_BYTES)
+        return voice_work(lambda: voice.check(service, recording))
+
+    @app.post("/api/voice/enrolments")
+    @allow(USER)
+    def enrol_voice(body: VoiceEnrolment, account: SignedIn = Depends(signed_in)) -> JSONResponse:
+        service = voice_service()
+        recordings = [(voice.decode_recording(made.recording, voice.RECORDING_BYTES), made.captured_at)
+                      for made in body.recordings]
+        subject = accounts.subject_of(databases, keys, account.id)
+        result = voice_work(lambda: voice.enrol(service, databases, keys, subject, recordings))
+        return JSONResponse(result, status_code=201 if result["status"] == "saved" else 200)
+
+    # As H34 for a finger and H48 for the face: the voice's enrolment is erased with its recordings and embeddings.
+    @app.delete("/api/voice/enrolment", status_code=204)
+    @allow(USER)
+    def delete_voice(account: SignedIn = Depends(signed_in)) -> None:
+        subject = accounts.subject_of(databases, keys, account.id)
+        if not voice.delete_voice(databases, subject):
             raise AccountError("not_enrolled", 404)
 
     @app.get("/api/admin/accounts")

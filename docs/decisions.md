@@ -1355,3 +1355,63 @@ server is unchanged since its 276 tests passed for H52.
 The choice of H53 passed a manual check on the researcher's PC: live and
 uploaded images in verification and identification, refused images on their
 outcome screen, and "again" returning to the choice.
+
+## 2026-11-11: voice enrolment from the PC's microphones
+
+Approved on 2026-11-11. Enrol the voice from the PC's own microphones, the first step of increment 5 (H17,
+H20); verification, identification and the recordings from files of H27 follow as steps of their own.
+
+- **H54** The voice engine runs in a new environment, `multimodal-voice`. From conda-forge come Python
+  3.12.16, PyTorch 2.13.0 for the CPU, torchaudio 2.11.0, libsndfile 1.2.2 and the packages SpeechBrain
+  needs, each the newest version published at least 14 days earlier that works with the others (H23):
+  torchaudio's builds of that age are made for PyTorch 2.13, and conda-forge's torchaudio brings kaldi and
+  torchcodec, pinned to CPU builds. SpeechBrain 1.1.2 and HyperPyYAML 1.2.3 are not on conda-forge; they come
+  from PyPI, pinned by SHA-256 and installed without dependencies (`environments/voice-pip.txt`).
+- The model is SpeechBrain's ECAPA-TDNN, `speechbrain/spkrec-ecapa-voxceleb` (Apache 2.0), at a pinned Hugging
+  Face commit. Its five files are pinned by SHA-256 (`engines/README.md`) and loaded with SpeechBrain's own
+  interface from their folder, without the network. The embedding of 192 values is read from the model and
+  computed as SpeechBrain's verification does; the engine always uses eight threads, since PyTorch gives
+  exactly the same values in every run only with the same number of threads.
+- The page owns the microphone, and the client chooses it: the user's last choice, then a camera's own
+  microphone (one device group in Chromium), then Windows' default microphone, then the others, USB ones
+  first. A microphone that sends nothing but digital silence is passed over, and a selector appears when more
+  than one can be used. The microphone is granted to the app's own page, for audio only, never with the camera
+  in one request, and its sound is taken as it is, without the browser's echo cancellation, noise suppression
+  and automatic gain. Each recording lasts five seconds and starts on an explicit "Record"; a sentence of about
+  four seconds is shown in the interface's language, a different one each time, with a level meter and a
+  timer. The page sends the recording as a WAV of 16 kHz, one channel and 16-bit PCM.
+- A recording must be 3 to 30 seconds long, hold at least two seconds of speech that stands at least 15 dB
+  above the room's noise (the level of its quietest tenth, in windows of 25 ms every 10 ms, with pauses of up
+  to 0.2 s counted as speech), and have at most 0.1 % of its samples at the 16-bit limits. No standard voice
+  quality score is used in this step.
+- As H48 does for the face, the enrolment keeps three recordings whose three pairs are all above SpeechBrain's
+  threshold of 0.25, by pgvector's cosine similarity, and another recording is made until six pass or twelve
+  are made. The recordings are sealed as WAV made by the engine from their samples, with their checks in
+  `sample.checks`; the embeddings are unsealed `vector` values under the embedding model's SHA-256 (H14). The
+  server keeps nothing between requests and checks every recording again before it saves. A new enrolment
+  replaces the current one, and the voice's enrolments can be deleted. Migration `biometric_0006` adds the
+  model's row.
+
+Checked on 2026-11-11, without recording anyone. Chromium names the LifeCam's microphone with its model
+(045e:0779) and gives it the LifeCam camera's device group; Windows' default microphone on the researcher's PC
+was a USB audio adapter (1b3f:2008), and the laptop's own microphone array has no model; all three deliver 48
+kHz. SpeechBrain 1.1.2 loaded the model from its folder without the network and without linking or copying a
+file; a five-second recording took 80 to 150 ms with 24 and 8 threads, and its 192 values were the same in
+every repeat and in another process with the same number of threads, while 1, 8 and 12 threads each gave
+values slightly unlike those of 2, 4, 6, 16 and 24.
+
+The full server run passed 297 tests, including the four local checks with stored captures; all 37 engine
+tests (ten of them for the voice, on synthetic recordings), 160 client tests, type checks and the build
+passed. The built client passed 63 offscreen checks with the real face and voice engines and Chromium's
+synthetic microphone, playing a synthetic recording of tones in bursts, never a person's voice: three of its
+recordings passed the checks (4.0 seconds of speech, 35 dB above the noise) and matched each other at 0.94 to
+0.97, so the synthetic voice was enrolled, shown and deleted again. Enrolment of a real voice is checked by
+hand.
+
+## 2026-11-11: live voice enrolment check
+
+Voice enrolment (H54) passed a manual check on the researcher's PC. The local database holds one voice
+enrolment with three sealed five-second recordings of about 160 KB each, every check passed (3.05 to 3.64
+seconds of speech, 21 to 23 dB above the room's noise, no clipped samples), and three ECAPA-TDNN embeddings of
+192 values under the pinned model's SHA-256; their three pairs are 0.795 to 0.810 alike, against the threshold
+of 0.25.

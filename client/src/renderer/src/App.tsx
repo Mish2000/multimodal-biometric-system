@@ -5,6 +5,7 @@ import { Layout } from './Layout'
 import { Admin } from './pages/Admin'
 import { ChangePassword } from './pages/ChangePassword'
 import { Face } from './pages/Face'
+import { Voice } from './pages/Voice'
 import { Fingerprint } from './pages/Fingerprint'
 import { ForgotPassword } from './pages/ForgotPassword'
 import { Home } from './pages/Home'
@@ -45,6 +46,7 @@ export function App() {
         <Route path="/" element={only('user', <Home />)} />
         <Route path="/fingerprint" element={only('user', <Fingerprint />)} />
         <Route path="/face" element={only('user', <Face />)} />
+        <Route path="/voice" element={only('user', <Voice />)} />
         <Route path="/admin" element={only('admin', <Admin />)} />
         <Route path="/settings" element={only('any', <Settings />)} />
         <Route path="/password" element={account?.must_change_password ? <ChangePassword /> : <Navigate to={home} replace />} />
