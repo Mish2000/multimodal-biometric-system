@@ -6,7 +6,7 @@ administration (H3, H11, H12, H14, H19, H29 to H32), fingerprint enrolment (H33)
 and 1:1 verification with OpenCV SIFT, Pore SIFT and Pore CNN
 (H35, H38, H39) and 1:N identification (H41, H42) with all three methods, and face enrolment (H48),
 1:1 verification (H49) and 1:N identification (H50), also from image files (H51), and voice enrolment
-(H54). It runs with the `multimodal-server` environment and starts PostgreSQL from the
+(H54) and 1:1 verification (H55). It runs with the `multimodal-server` environment and starts PostgreSQL from the
 `multimodal-postgres` environment (`environments/`); the face engine runs in `multimodal-face` and the
 voice engine in `multimodal-voice`.
 
@@ -124,7 +124,8 @@ to their defaults when `local/server.toml` does not name them; without them the 
 | `GET /api/voice/method` | user | ECAPA-TDNN's threshold, its origin, whether the voice engine is set up, and the rules of an enrolment and its recordings (H54) |
 | `POST /api/voice/checks` | user | one recording (`{"recording": base64}`, a WAV of 16 kHz, one channel and 16-bit PCM, at most 1 MB): its checks; nothing is kept |
 | `POST /api/voice/enrolments` | user | three to six recordings with their times, in order: 201 `saved` when three match each other, otherwise 200 `another`, or `failed` after six |
-| `DELETE /api/voice/enrolment` | user | delete the voice's current and replaced enrolments with their recordings and embeddings; 404 when it is not enrolled |
+| `POST /api/voice/verifications` | user | verify the voice with one recording (H55): `rejected` with its checks and no attempt, or `verified` with the three scores, the decision and the closest enrolled recording (a WAV, the caller's own), sent after the attempt is saved; 409 `not_enrolled` before an enrolment |
+| `DELETE /api/voice/enrolment` | user | delete the voice's current and replaced enrolments with their recordings, embeddings and verification attempts; 404 when it is not enrolled |
 | `GET /api/admin/accounts`, `POST /api/admin/accounts/{id}/status` | administrator | accounts; disable or enable |
 | `POST /api/admin/administrators`, `GET /api/admin/audit` | administrator | a new administrator; the audit log |
 
@@ -233,6 +234,13 @@ SpeechBrain's threshold of 0.25. The kept recordings are sealed under `mbs/sampl
 from their samples, with their checks and durations; their embeddings are `vector` values of 192 numbers,
 unsealed (H14), under the embedding model's SHA-256 as their version. A voice engine that reports another model
 is refused (`method_version_differs`). Migration `biometric_0006` adds ECAPA-TDNN's row to the algorithm table.
+
+Voice verification (H55) compares one recording that passes H54's checks with the caller's three current
+ECAPA-TDNN embeddings in one SQL statement, as H49 does for the face: the highest score decides, strictly above
+0.25, and equal scores go to the earliest recording. The winning stored recording is opened for its owner only
+and described again; its embedding must equal the stored one, or the run ends unsaved. The attempt is saved with
+the recording sealed under `mbs/probe/v1`, while the enrolment is locked and still current (otherwise
+`enrolment_changed`), and only then is the answer sent.
 
 Both face routes take `{"image": base64, "source": "device" | "file"}` (H51): a camera image up to 8 MB, an image
 file up to 10 MB. Before the engine reads a file, the server takes its kind from its first bytes (JPEG or

@@ -4,9 +4,10 @@ recording is b"FAKEVOICE" followed by JSON: its measurements ("duration", "speec
 "variant"). The embedding is a fixed random direction per person with a small change per variant, so
 recordings of one person match and recordings of two people do not.
 
-    python fake_voice_engine.py [--ecapa-sha256 HEX] [--broken] [--bad-rate]
+    python fake_voice_engine.py [--ecapa-sha256 HEX] [--broken] [--bad-rate] [--drift]
 
---broken gives an embedding with a value that is not a number; --bad-rate answers for another sample rate.
+--broken gives an embedding with a value that is not a number; --bad-rate answers for another sample rate;
+--drift changes the embedding slightly on every extraction, so a repeated extraction differs (H55).
 """
 
 import json
@@ -21,6 +22,7 @@ import protocol  # noqa: E402
 ECAPA_SHA256 = "0575cb64845e6b9a10db9bcb74d5ac32b326b8dc90352671d345e2ee3d0126a2"
 LENGTH = 192
 PASSING = {"duration": 5.0, "speech": 3.6, "speech_level": -24.0, "noise_level": -58.0, "clipped": 0.0}
+EXTRACTIONS: list[int] = []
 
 
 def option(name: str, default=None):
@@ -28,6 +30,8 @@ def option(name: str, default=None):
 
 
 def read(data: bytes) -> dict | None:
+    while data.startswith(b"RIFFWAV:"):  # a recording this engine made again from its samples (a stored one, H55)
+        data = data[len(b"RIFFWAV:"):]
     if not data.startswith(b"FAKEVOICE"):
         return None
     return json.loads(data[len(b"FAKEVOICE"):])
@@ -50,6 +54,9 @@ def extract(_header, parts):
     values = embedding(spec.get("person", "a"), spec.get("variant", 0))
     if "--broken" in sys.argv:
         values[0] = float("nan")
+    if "--drift" in sys.argv:
+        EXTRACTIONS.append(1)
+        values[0] += 0.01 * len(EXTRACTIONS)
     return reply, [b"RIFF" + b"WAV:" + parts[0], struct.pack(f"<{LENGTH}f", *values)]
 
 

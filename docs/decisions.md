@@ -1415,3 +1415,41 @@ enrolment with three sealed five-second recordings of about 160 KB each, every c
 seconds of speech, 21 to 23 dB above the room's noise, no clipped samples), and three ECAPA-TDNN embeddings of
 192 values under the pinned model's SHA-256; their three pairs are 0.795 to 0.810 alike, against the threshold
 of 0.25.
+
+## 2026-11-11: voice verification
+
+Approved on 2026-11-11. Verify the voice with one recording from the PC's microphones, the second step of
+increment 5 (H15, H20), as H49 does for the face.
+
+- **H55** "Verify my voice (1:1)" leads, without a voice enrolment, to the message of H15; with one, to
+  ECAPA-TDNN's card, which offers "Live verification" and "Back" as H53 does for the face (an existing recording
+  joins this choice with the files of H27). The microphone of H54 opens only on that choice (H40), and one
+  recording of five seconds, reading the last of the sentences, must pass H54's checks; a refused recording
+  makes no attempt.
+- In one SQL statement, pgvector's cosine similarity compares it with the user's three current embeddings; the
+  highest decides, strictly above 0.25, and equal scores go to the earliest recording (H43). Templates of
+  another model version are refused. The winning stored recording is opened for its owner only and described
+  again, and its embedding must equal the stored one, which the engine's fixed number of threads makes exact;
+  otherwise the run ends unsaved.
+- Every completed comparison, match or not, is saved as H49's attempt: `voice`, `verify`, `ecapa-voxceleb`,
+  the enrolment compared, the score and the threshold used, the decision, the time from the recording's
+  receipt through the comparisons, `source = device`, and the engine's WAV of the recording sealed under
+  `mbs/probe/v1`. It is saved while the enrolment is locked and still current, and the answer is sent only after
+  the save. Deleting the voice erases its verification attempts; a new enrolment keeps the earlier ones.
+- Every attempt ends on an outcome screen, as H53 has it: the result, a refused recording with its checks, or a
+  failure, each with "Verify again", which returns to the choice, and "Back". The result shows the decision, the
+  new recording beside the closest enrolled one, each as a waveform that can be played, the similarity against
+  the threshold, the time and all three scores.
+
+The full server run passed 307 tests, including the four local checks with stored captures; all 166 client
+tests, type checks and the build passed, and the 37 engine tests are unchanged. The built client passed 67
+offscreen checks: the synthetic voice of H54's check, enrolled through the real engine, was verified with a
+recording of the same synthetic microphone at 0.954 to 0.996, and "Verify again" returned to the choice.
+Verification of a real voice is checked by hand.
+
+## 2026-11-12: live voice verification check
+
+Voice verification (H55) passed a manual check on the researcher's PC: the local database holds one voice
+verification attempt, a match with a similarity of 0.749 against the threshold of 0.25 and 127 ms of processing,
+saved against the current enrolment with its recording sealed (about 160 KB). A refused recording makes no
+attempt, so the database does not show whether one was tried.

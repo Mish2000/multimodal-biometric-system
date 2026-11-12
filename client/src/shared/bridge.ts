@@ -34,6 +34,7 @@ export const ROUTES = {
   checkVoice: ['POST', '/api/voice/checks'],
   enrolVoice: ['POST', '/api/voice/enrolments'],
   deleteVoice: ['DELETE', '/api/voice/enrolment'],
+  verifyVoice: ['POST', '/api/voice/verifications'], // H55
 } as const satisfies Record<string, readonly ['GET' | 'POST' | 'DELETE', string]>
 
 export type RouteName = keyof typeof ROUTES
@@ -378,6 +379,25 @@ export type VoiceEnrolmentAnswer =
   | VoiceSaved
   | { status: 'another'; pairs: VoicePair[]; threshold: number; kept: number }
   | { status: 'failed'; error: string; pairs: VoicePair[]; threshold: number; kept: number }
+
+// H55: a voice verification's answer. A refused recording made no attempt; a verified one was saved first. `view`
+// is the caller's own closest enrolled recording, a WAV in base64.
+export interface VoiceVerificationResult {
+  status: 'verified'
+  attempt_id: string
+  at: string
+  score: number
+  threshold: number
+  threshold_origin: string
+  threshold_provisional: boolean
+  accepted: boolean
+  duration_ms: number
+  comparisons: Array<{ placement: number; score: number; accepted: boolean }>
+  source: 'device'
+  view: { placement: number; reference: string }
+}
+
+export type VoiceVerificationAnswer = VoiceVerificationResult | { status: 'rejected'; source: 'device'; checks: VoiceCheck[] }
 
 // H48: whether the laptop's own screen is in use. With the lid closed and external monitors on, Windows turns
 // it off, and the built-in camera sees only the inside of the lid.

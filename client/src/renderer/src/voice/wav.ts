@@ -33,6 +33,28 @@ export function wavBytes(pcm: Int16Array, rate: number): Uint8Array {
   return bytes
 }
 
+// H55: the samples of a WAV of 16-bit PCM in base64, such as the enrolled recording the server sends back; its data
+// chunk is found by name, so other chunks before it do no harm.
+export function pcmOfWav(base64: string): Int16Array {
+  const text = atob(base64)
+  const bytes = new Uint8Array(text.length)
+  for (let i = 0; i < text.length; i += 1) bytes[i] = text.charCodeAt(i)
+  const view = new DataView(bytes.buffer)
+  let at = 12
+  while (at + 8 <= bytes.length) {
+    const name = String.fromCharCode(...bytes.subarray(at, at + 4))
+    const size = view.getUint32(at + 4, true)
+    if (name === 'data') {
+      const count = Math.floor(Math.min(size, bytes.length - at - 8) / 2)
+      const pcm = new Int16Array(count)
+      for (let i = 0; i < count; i += 1) pcm[i] = view.getInt16(at + 8 + 2 * i, true)
+      return pcm
+    }
+    at += 8 + size + (size % 2)
+  }
+  return new Int16Array(0)
+}
+
 export function base64Of(bytes: Uint8Array): string {
   let text = ''
   for (let i = 0; i < bytes.length; i += 0x8000) text += String.fromCharCode(...bytes.subarray(i, i + 0x8000))

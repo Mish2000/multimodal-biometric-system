@@ -370,6 +370,10 @@ after its EXIF orientation, scaled down to 1920 pixels when its longer side
 is above that; the comparison uses the image's own pixels (H52). The file,
 its name and its metadata are not kept.
 
+Voice verification (H55) stores the same row with `modality = voice`,
+`algorithm = ecapa-voxceleb` and `source = device`; its probe is the engine's
+WAV of the recording (16 kHz, one channel, 16-bit PCM).
+
 Identification uses `mode = identify`, `enrolment_id = null` and the number
 of compared templates in `gallery_size` (H41). The selected method is
 `opencv-sift`, `pore-sift` or `learned-pore` (H42). It stores the

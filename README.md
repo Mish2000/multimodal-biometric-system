@@ -12,7 +12,7 @@
   <img alt=".NET Framework 4.8" src="https://img.shields.io/badge/.NET_Framework-4.8-512BD4?logo=dotnet&logoColor=white">
 </p>
 <p align="center">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-297%20server%20%C2%B7%20160%20client%20%C2%B7%2015%20scanner%20%C2%B7%2037%20engines-2EA44F">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-307%20server%20%C2%B7%20166%20client%20%C2%B7%2015%20scanner%20%C2%B7%2037%20engines-2EA44F">
   <img alt="Cryptography" src="https://img.shields.io/badge/crypto-AES--256--GCM%20%C2%B7%20Argon2id%20%C2%B7%20HMAC-7C3AED">
   <img alt="Build" src="https://img.shields.io/badge/build-increment%204%20of%206%20complete-F59E0B">
 </p>
@@ -101,7 +101,7 @@ checked 1000 ppi images.
 <td valign="top">
 
 **📜 Every decision on record**<br>
-Each design choice is numbered (H1 to H54), dated, and cited in the code and the commits.
+Each design choice is numbered (H1 to H55), dated, and cited in the code and the commits.
 
 </td>
 <td valign="top">
@@ -165,7 +165,7 @@ flowchart LR
 | 🟢 | **2 · Fingerprint, 1:1** | enrolment, NFIQ 2 quality checks, sealed captures and templates, the stored-template screen and OpenCV SIFT verification with saved attempts. Verification passed a manual check on the scanner |
 | 🟢 | **3 · Fingerprint, complete** | all three methods for verification and identification, with match drawings in 1:1 and for the user's own print in 1:N, checked on HiScan PRO |
 | 🟢 | **4 · Face, complete** | enrolment, 1:1 verification and 1:N identification from the built-in or a USB camera, chosen by the client, and from image files for 1:1 and 1:N; faces of every size from 112 pixels, checked by hand |
-| 🟡 | **5 · Voice** | enrolment from the PC's microphones, chosen by the client, checked by hand; 1:1, 1:N and recordings from files next |
+| 🟡 | **5 · Voice** | enrolment and 1:1 verification from the PC's microphones, chosen by the client, checked by hand; 1:N and recordings from files next |
 | ⚪ | **6 · Finish** | thresholds and history in the administration, fusion, the finished experience |
 
 ## Repository
@@ -193,13 +193,13 @@ conda activate multimodal-server
 cd server
 python -m mbs setup        # key file, local settings, cluster and databases
 python -m mbs serve        # the API on 127.0.0.1:55433
-python -m pytest           # 297 tests, including four local checks with MBS_LIVE_CAPTURES
+python -m pytest           # 307 tests, including four local checks with MBS_LIVE_CAPTURES
 
 # The client, from its lock file
 cd ../client
 npm ci
 npm run dev                # the app, with the server running
-npm test                   # 160 tests
+npm test                   # 166 tests
 ```
 
 Details: [server](server/README.md) · [scanner](scanner/README.md) · [research methods](methods/README.md)

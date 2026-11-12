@@ -1,4 +1,4 @@
-"""Voice enrolment (H17, H25, H54).
+"""Voice enrolment (H17, H25, H54) and verification (H55).
 
 The microphone belongs to the client: the page records a sentence of about four seconds as a WAV of 16 kHz, one
 channel and 16-bit PCM, shows its own level meter and timer, and sends each recording. Every recording passes
@@ -21,11 +21,12 @@ import logging
 import math
 import struct
 import threading
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import CursorResult, delete, select, update
+from sqlalchemy import CursorResult, delete, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DbSession
 
@@ -36,7 +37,7 @@ from .engines import Engine, EngineError, conda_environment
 from .face import similarity
 from .fingerprint import best_three
 from .keys import Keys
-from .models import Algorithm, Enrolment, Sample, Template
+from .models import Algorithm, Attempt, Enrolment, Sample, Template, vector_text, vector_values
 
 logger = logging.getLogger("mbs.voice")
 
@@ -289,7 +290,8 @@ def _save(databases: Databases, keys: Keys, subject: uuid.UUID, chosen: list[tup
 
 def delete_voice(databases: Databases, subject: uuid.UUID) -> bool:
     """As H34 for a finger and H48 for the face: the voice enrolment and those it replaced are erased with their
-    sealed recordings and embeddings; False when the voice is not enrolled."""
+    sealed recordings and embeddings, and (H55) with their verification attempts, whose link cascades; False when
+    the voice is not enrolled."""
     with _db(databases.biometric) as db, db.begin():
         rows = db.execute(select(Enrolment.id, Enrolment.replaced_at).where(
             Enrolment.subject_id == subject, Enrolment.modality == VOICE
@@ -302,3 +304,79 @@ def delete_voice(databases: Databases, subject: uuid.UUID) -> bool:
         db.execute(delete(Sample).where(Sample.enrolment_id.in_(enrolments)))
         db.execute(delete(Enrolment).where(Enrolment.id.in_(enrolments)))
     return True
+
+
+# Voice verification (H55): one recording against the caller's current voice enrolment, as H49 does for the face.
+# The highest of the three cosine similarities decides, strictly above the threshold, and equal scores go to the
+# earliest recording (H43). A refused recording makes no attempt; a completed comparison is saved, match or not,
+# with its recording sealed, and the answer is sent only after that.
+
+COMPARISONS = """
+SELECT s.id AS sample_id, s.placement, t.version, t.embedding::text AS embedding,
+       1 - (t.embedding <=> CAST(:probe AS vector)) AS score
+FROM template t JOIN sample s ON s.id = t.sample_id
+WHERE s.enrolment_id = :enrolment AND t.algorithm = 'ecapa-voxceleb'
+ORDER BY s.placement
+"""
+
+
+def _b64(data: bytes) -> str:
+    return base64.b64encode(data).decode("ascii")
+
+
+def _repeat_view(service: VoiceService, keys: Keys, databases: Databases, subject: uuid.UUID, sample_id: uuid.UUID,
+                 stored: list[float]) -> bytes:
+    """The caller's own winning recording, for the result screen: the sealed recording is opened for its owner only
+    and described again, and the repeated embedding must equal the stored one (the engine's fixed threads make it
+    exact)."""
+    with _db(databases.biometric) as db:
+        sample = db.get(Sample, sample_id)
+    wav = keyring.open_sealed(keys, keyring.SAMPLE, sample.id.bytes + subject.bytes, sample.data)
+    again = _extract(service, wav)
+    if not again.passed or again.embedding is None or vector_values(vector_text(again.embedding)) != stored:
+        raise EngineError("the stored recording did not give its stored embedding again")
+    return wav
+
+
+def verify(service: VoiceService, databases: Databases, keys: Keys, subject: uuid.UUID, recording: bytes) -> dict:
+    at = datetime.now(timezone.utc)
+    started = time.perf_counter()
+    with _db(databases.biometric) as db:
+        algorithm = db.get(Algorithm, ECAPA)
+        version, threshold = algorithm.version, algorithm.threshold
+        origin, provisional = algorithm.threshold_origin, algorithm.threshold_provisional
+    enrolment = current_enrolment(databases, subject)
+    if enrolment is None:
+        raise VoiceError("not_enrolled", 409)  # H15: the client offers the enrolment
+    if service.engine.start().get("ecapa_sha256") != version:
+        raise VoiceError("method_version_differs", 503)
+    probe = _extract(service, recording)
+    if not probe.passed:
+        return {"status": "rejected", "source": "device", "checks": probe.checks}
+    with _db(databases.biometric) as db:
+        rows = db.execute(text(COMPARISONS), {"probe": vector_text(probe.embedding), "enrolment": enrolment.id}).all()
+    if len(rows) != RECORDINGS:
+        raise VoiceError("enrolment_changed", 409)
+    if any(row.version != version for row in rows):
+        raise VoiceError("method_version_differs", 503)
+    comparisons = [{"placement": row.placement, "score": float(row.score), "accepted": float(row.score) > threshold}
+                   for row in rows]
+    best = sorted(rows, key=lambda row: (-float(row.score), row.placement))[0]
+    score = float(best.score)
+    duration_ms = round((time.perf_counter() - started) * 1000)  # receipt through the comparisons (H35)
+    reference = _repeat_view(service, keys, databases, subject, best.sample_id, vector_values(best.embedding))
+    attempt = Attempt(id=uuid.uuid4(), at=at, subject_id=subject, modality=VOICE, mode="verify", algorithm=ECAPA,
+                      enrolment_id=enrolment.id, score=score, threshold=threshold, accepted=score > threshold,
+                      duration_ms=duration_ms, source="device")
+    attempt.probe = keyring.seal(keys, keyring.PROBE, attempt.id.bytes + subject.bytes, probe.wav)
+    with _db(databases.biometric) as db, db.begin():
+        # A deletion or a new enrolment since the comparison invalidates it (H35); a later deletion cascades.
+        locked = db.scalar(select(Enrolment).where(Enrolment.id == enrolment.id, Enrolment.subject_id == subject)
+                           .with_for_update())
+        if locked is None or locked.replaced_at is not None:
+            raise VoiceError("enrolment_changed", 409)
+        db.add(attempt)
+    return {"status": "verified", "attempt_id": str(attempt.id), "at": at.isoformat(), "score": score,
+            "threshold": threshold, "threshold_origin": origin, "threshold_provisional": provisional,
+            "accepted": attempt.accepted, "duration_ms": duration_ms, "comparisons": comparisons, "source": "device",
+            "view": {"placement": best.placement, "reference": _b64(reference)}}

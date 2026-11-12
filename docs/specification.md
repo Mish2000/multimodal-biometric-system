@@ -2,7 +2,7 @@
 
 Approved on 2026-10-20 (H11–H20 in `docs/decisions.md`),
 from the draft of 2026-10-19 as revised on 2026-10-20, and amended with his
-approval since (H24 to H54). Every decision is cited by its ID; a change needs
+approval since (H24 to H55). Every decision is cited by its ID; a change needs
 the researcher's approval and a new entry in the decision record.
 
 ## 1. Purpose and scope
@@ -367,7 +367,15 @@ flow of 2026-10-18).
   made until six pass or twelve are made, and every score is pgvector's cosine
   similarity. The server keeps nothing between requests and checks every
   recording again before it saves.
-- **1:1 and 1:N:** as for the face, in the next steps of increment 5.
+- **1:1 (H55):** after ECAPA-TDNN's card and the choice of "Live verification"
+  (H53), one recording that passes the checks is compared with the user's
+  three current embeddings; the highest cosine similarity decides, strictly
+  above the threshold, and equal scores go to the earliest recording. A
+  refused recording makes no attempt and ends on its outcome screen. The
+  result shows the new recording beside the closest enrolled one, whose stored
+  recording is described again for its owner only and must give its stored
+  embedding.
+- **1:N:** as for the face, in the next step of increment 5.
 
 Model files are downloaded only with the researcher's approval and pinned by
 SHA-256.
@@ -387,7 +395,7 @@ SHA-256.
 | Stored template (H33) | after an enrolment, once: the captures with their checks, OpenCV SIFT's points, one point's 128 numbers in SIFT's 4 x 4 x 8 layout, the whole template as a picture, its row with the sealed value's parts, and the pair scores against the threshold; sent from the server's memory before sealing, kept by the page only while the screen is open |
 | Face capture | live camera view with the detected face box and what to do next; the camera chosen by the client, with a selector when more than one can be used; after an enrolment, the three aligned faces and their pair scores (H48) |
 | Voice capture | the sentence to read in the interface's language, a level meter and a timer; the microphone chosen by the client, with a selector when more than one can be used; after an enrolment, the three recordings as waveforms with playback, their checks and their pair scores (H54) |
-| 1:1 result | the new print beside the enrolled one with lines between matched points or pores, or the new aligned face beside the closest enrolled one (H49), a score gauge marked with the threshold, the decision and the time it took |
+| 1:1 result | the new print beside the enrolled one with lines between matched points or pores, the new aligned face beside the closest enrolled one (H49), or the new recording beside the closest enrolled one as waveforms that can be played (H55), a score gauge marked with the threshold, the decision and the time it took |
 | 1:N result | an animated pass over the enrolled gallery, the ranked candidates with their scores, the top one marked when it passes the threshold; for the face the search takes milliseconds, so the pass plays once, for about 0.6 s, when the answer arrives (skipped when Windows' animation effects are off), and the caller's own closest enrolled face is shown beside the new one when it is among the five candidates (H50) |
 | Administration area (H12) | accounts with role and status, new administrators, disabling and enabling; the attempt history with filters; thresholds; the audit log; never national IDs or samples |
 
@@ -450,6 +458,11 @@ image's receipt through every comparison; and deleting a face keeps the
 identification attempts that it led, with their link emptied. An image from
 a file (H51) is stored the same way, with `source = file`; a file refused by
 its own checks makes no attempt.
+
+Voice verification follows the face's rules (H55): a completed comparison is
+stored with its sealed recording, a refused recording is not, the time runs
+from the recording's receipt through the comparisons, and deleting the voice
+erases its verification attempts.
 
 Administrative changes are stored in the audit log of the accounts database:
 time, administrator, action and target (an account, or the algorithm whose
@@ -606,3 +619,6 @@ themes during that work.
   the pinned model, the microphone chosen by the client, the recording and its
   checks, three recordings matching pairwise, and pgvector's cosine similarity
   as every voice score (1, 3, 5.3, 6, 8).
+- **H55** Voice verification (1:1): the choice before the microphone, the
+  comparison with the three current embeddings, the attempt as H49's, and the
+  result with the closest enrolled recording (5.3, 6, 7).

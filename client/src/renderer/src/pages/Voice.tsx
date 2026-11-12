@@ -1,10 +1,11 @@
 // The voice screen (H15, H54): its enrolment state, ECAPA-TDNN's card, and the enrolment from the microphone; a
 // new enrolment replaces the current one, and the enrolment can be deleted, as H34 does for a finger and H48 for
-// the face. Verification (1:1) and identification (1:N) by voice are the next steps of increment 5.
+// the face. Verification (1:1, H55) starts from here; identification (1:N) is the next step of increment 5.
 import { useCallback, useEffect, useState } from 'react'
 import type { VoiceMethod, VoiceSaved } from '../../../shared/bridge'
 import { VoiceEnrolment, type KeptRecording } from '../voice/VoiceEnrolment'
 import { VoiceResult } from '../voice/VoiceResult'
+import { VoiceVerification } from '../voice/VoiceVerification'
 import { errorText } from '../texts'
 import { useSession } from '../session'
 
@@ -16,6 +17,7 @@ export function Voice() {
   const [state, setState] = useState<VoiceState | null>(null)
   const [method, setMethod] = useState<VoiceMethod | null>(null)
   const [enrolling, setEnrolling] = useState(false)
+  const [verifying, setVerifying] = useState(false) // H55
   const [saved, setSaved] = useState<{ saved: VoiceSaved; kept: KeptRecording[] } | null>(null)
   const [confirming, setConfirming] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -45,6 +47,21 @@ export function Voice() {
 
   if (saved !== null && method !== null)
     return <VoiceResult saved={saved.saved} kept={saved.kept} rate={method.sample_rate} onDone={() => { setSaved(null); load() }} />
+  if (verifying && method !== null && state !== null)
+    return (
+      <VoiceVerification
+        method={method}
+        enrolled={state.enrolled}
+        onEnrol={() => {
+          setVerifying(false)
+          setEnrolling(true)
+        }}
+        onLeave={() => {
+          setVerifying(false)
+          load()
+        }}
+      />
+    )
   if (enrolling && method !== null)
     return (
       <VoiceEnrolment
@@ -96,12 +113,24 @@ export function Voice() {
               </div>
             ) : (
               <div className="actions">
-                <button type="button" disabled={!method.available} onClick={() => {
+                {state.enrolled && (
+                  <button type="button" disabled={!method.available} onClick={() => {
+                    setMessage(null)
+                    setVerifying(true)
+                  }}>{v.verify.open}</button>
+                )}
+                <button type="button" className={state.enrolled ? 'secondary' : ''} disabled={!method.available} onClick={() => {
                   setMessage(null)
                   setEnrolling(true)
                 }}>
                   {state.enrolled ? v.enrolAgain : v.enrol}
                 </button>
+                {!state.enrolled && (
+                  <button type="button" className="secondary" disabled={!method.available} onClick={() => {
+                    setMessage(null)
+                    setVerifying(true)
+                  }}>{v.verify.open}</button>
+                )}
                 {state.enrolled && (
                   <button type="button" className="secondary" onClick={() => setConfirming(true)}>{v.deleteEnrolment}</button>
                 )}

@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { StrictMode } from 'react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import type { Account, ApiResult, DisplayState, FaceIdentificationResult, FaceVerificationResult, EnrolmentEvent, Language, MbsBridge, OpenedLink, RouteName, Theme, VerificationEvent, FingerprintAlgorithm, IdentificationEvent, VoiceEnrolmentAnswer, VoiceMethod, VoiceSaved } from '../../shared/bridge'
+import type { Account, ApiResult, DisplayState, FaceIdentificationResult, FaceVerificationResult, EnrolmentEvent, Language, MbsBridge, OpenedLink, RouteName, Theme, VerificationEvent, FingerprintAlgorithm, IdentificationEvent, VoiceEnrolmentAnswer, VoiceMethod, VoiceSaved, VoiceVerificationResult } from '../../shared/bridge'
 import { App } from './App'
 import { FaceIdentificationView } from './face/FaceIdentification'
 import { FaceVerificationView } from './face/FaceVerification'
@@ -11,6 +11,8 @@ import { SessionProvider } from './session'
 import type { PanelProps } from './voice/MicrophonePanel'
 import { VoiceEnrolment, type KeptRecording } from './voice/VoiceEnrolment'
 import { VoiceResult } from './voice/VoiceResult'
+import { VoiceVerification } from './voice/VoiceVerification'
+import { base64Of, wavBytes } from './voice/wav'
 
 interface Stored extends Account {
   password: string
@@ -63,6 +65,7 @@ class FakeServer implements MbsBridge {
   voiceEnrolments: number[] = []
   voiceAnswers: VoiceEnrolmentAnswer[] = []
   voiceDeletes = 0
+  voiceVerifications = 0
 
   displays = async (): Promise<DisplayState> => ({ internalDisplay: false })
 
@@ -276,6 +279,15 @@ class FakeServer implements MbsBridge {
         if (answer.status === 'saved') this.voice = { enrolled: true, enrolled_at: answer.enrolment.created_at }
         return ok(answer)
       }
+      case 'verifyVoice':
+        this.voiceVerifications++
+        if (body.recording === 'quiet')
+          return ok({ status: 'rejected', source: 'device', checks: [
+            { name: 'length', passed: true, detail: '', seconds: 5, minimum: 3, maximum: 30 },
+            { name: 'speech', passed: false, detail: '', seconds: 0.6, minimum: 2 },
+            { name: 'clipping', passed: true, detail: '', share: 0, maximum: 0.001 },
+          ] })
+        return ok(VOICE_VERIFIED)
       case 'deleteVoice':
         if (!this.voice.enrolled) return no(404, 'not_enrolled')
         this.voice = { enrolled: false }
@@ -354,6 +366,14 @@ const VOICE_SAVED: VoiceSaved = {
     { probe: 3, reference: 2, score: 0.689, accepted: true }],
   threshold: 0.25,
   not_kept: [],
+}
+
+// H55: a voice verification's answer, as the server sends it after saving the attempt.
+const VOICE_VERIFIED: VoiceVerificationResult = {
+  status: 'verified', attempt_id: 'a-voice', at: '2026-11-11T14:00:00+00:00', score: 0.712, threshold: 0.25,
+  threshold_origin: "SpeechBrain's verification threshold", threshold_provisional: false, accepted: true, duration_ms: 164,
+  comparisons: [{ placement: 1, score: 0.655, accepted: true }, { placement: 2, score: 0.712, accepted: true }, { placement: 3, score: 0.689, accepted: true }],
+  source: 'device', view: { placement: 2, reference: base64Of(wavBytes(new Int16Array([0, 1000, -1000, 500]), 16000)) },
 }
 
 // H49: a face verification's answer, as the server sends it after saving the attempt.
@@ -1759,7 +1779,7 @@ describe('the voice (H54)', () => {
     expect(screen.getByRole('heading', { name: 'ECAPA-TDNN' })).toBeTruthy()
     expect(screen.getByText(/Accepts above 0.25, SpeechBrain’s own verification threshold/)).toBeTruthy()
     expect(screen.getByText(/equal error rate of 0.80%/)).toBeTruthy()
-    expect(screen.getByText(/Verification \(1:1\) and identification \(1:N\) by voice come in the next build steps/)).toBeTruthy()
+    expect(screen.getByText(/Identification \(1:N\) by voice comes in the next build step/)).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Delete the voice enrolment' })).toBeNull()
   })
 
@@ -1894,5 +1914,87 @@ describe('voice enrolment (H54)', () => {
     expect(screen.getAllByText(/Speech heard: 3.4 seconds of speech/).length).toBe(3)
     expect(screen.getByText('Recordings 1 and 2')).toBeTruthy()
     expect(screen.getByText(/Stored: 3 recordings, each sealed with AES-256-GCM, and 3 embeddings of 192 numbers each/)).toBeTruthy()
+  })
+})
+
+describe('voice verification (H55)', () => {
+  async function openVoiceAs(enrolled: boolean, language: Language = 'en') {
+    if (enrolled) server.voice = { enrolled: true, enrolled_at: '2026-11-11T12:00:00+00:00' }
+    server.add('dana', 'user', { language })
+    open('/sign-in')
+    await signIn('dana', 'dana password 1')
+    fireEvent.click(await cardLink(language === 'he' ? 'קול' : 'Voice'))
+  }
+
+  // A stand-in for the microphone, as in the enrolment's tests.
+  let queue: string[] = []
+  function FakePanel({ busy, sentence, onRecorded }: PanelProps) {
+    return (
+      <div>
+        <p data-testid="sentence">{sentence}</p>
+        <button type="button" disabled={busy} onClick={() => onRecorded({ recording: queue.shift() ?? 'voice', capturedAt: new Date().toISOString(), pcm: new Int16Array(800) })}>
+          Fake recording
+        </button>
+      </div>
+    )
+  }
+
+  function verifyHere() {
+    server.current = server.add('dana', 'user')
+    render(<MemoryRouter><SessionProvider>
+      <VoiceVerification method={VOICE_METHOD} enrolled Panel={FakePanel} onEnrol={() => undefined} onLeave={() => undefined} />
+    </SessionProvider></MemoryRouter>)
+  }
+
+  it('offers the enrolment first when the voice is not enrolled (H15)', async () => {
+    await openVoiceAs(false)
+    fireEvent.click(await screen.findByRole('button', { name: 'Verify my voice (1:1)' }))
+    expect(await screen.findByText(/Voice verification is not available yet: your voice is not enrolled/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Enrol my voice' }))
+    expect(await screen.findByRole('heading', { name: 'Enrolling your voice' })).toBeTruthy()
+  })
+
+  it('opens on ECAPA-TDNN’s card with the live verification and Back, before any microphone', async () => {
+    await openVoiceAs(true)
+    fireEvent.click(await screen.findByRole('button', { name: 'Verify my voice (1:1)' }))
+    expect(screen.getByRole('heading', { name: 'Verify your voice' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Live verification' })).toBeTruthy()
+    expect(screen.queryByText(/Upload/)).toBeNull()
+    expect(screen.queryByRole('meter')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+    expect(await screen.findByRole('button', { name: 'Enrol my voice again' })).toBeTruthy()
+  })
+
+  it('reads the last sentence and shows the new recording beside the closest enrolled one, then returns to the choice', async () => {
+    queue = ['voice']
+    verifyHere()
+    fireEvent.click(screen.getByRole('button', { name: 'Live verification' }))
+    expect(screen.getByTestId('sentence').textContent).toBe('The numbers seven, four and nine are written on the board.')
+    fireEvent.click(screen.getByRole('button', { name: 'Fake recording' }))
+    expect(await screen.findByRole('heading', { name: 'Your voice matches' })).toBeTruthy()
+    expect(server.voiceVerifications).toBe(1)
+    expect(screen.getAllByRole('img').map((item) => item.getAttribute('aria-label'))).toEqual(['New recording', 'Enrolled recording 2'])
+    expect(screen.getByText('Similarity 0.712; a match needs more than 0.25.')).toBeTruthy()
+    expect(screen.getByText(/Processing took 0.16 s. The result and its encrypted recording were saved./)).toBeTruthy()
+    expect(screen.getAllByText(/^Enrolled recording [123]$/).length).toBe(4) // the row's label and the three comparisons
+    fireEvent.click(screen.getByRole('button', { name: 'Verify again' }))
+    expect(screen.getByRole('button', { name: 'Live verification' })).toBeTruthy()
+  })
+
+  it('ends a refused recording on its own outcome screen, whose Verify again returns to the choice', async () => {
+    queue = ['quiet']
+    verifyHere()
+    fireEvent.click(screen.getByRole('button', { name: 'Live verification' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Fake recording' }))
+    expect(await screen.findByRole('heading', { name: 'The recording did not pass its checks' })).toBeTruthy()
+    expect(screen.getByText(/Speech heard: 0.6 seconds of speech; at least 2 needed/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Verify again' }))
+    expect(screen.getByRole('button', { name: 'Live verification' })).toBeTruthy()
+  })
+
+  it('speaks Hebrew', async () => {
+    await openVoiceAs(true, 'he')
+    fireEvent.click(await screen.findByRole('button', { name: 'אימות הקול שלי (1:1)' }))
+    expect(screen.getByRole('button', { name: 'אימות חי' })).toBeTruthy()
   })
 })

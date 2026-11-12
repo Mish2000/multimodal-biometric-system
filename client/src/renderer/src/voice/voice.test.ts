@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { looksSilent, microphonesFrom, ranked, type DeviceEntry } from './microphone'
-import { base64Of, envelope, levelOf, toPcm16, wavBytes } from './wav'
+import { base64Of, envelope, levelOf, pcmOfWav, toPcm16, wavBytes } from './wav'
 
 // The microphones of the researcher's PC as Chromium listed them on 2026-11-11 (the probe read no sound).
 const DEVICES: DeviceEntry[] = [
@@ -64,6 +64,16 @@ describe('the recording as the server takes it (H54)', () => {
     expect([view.getUint32(28, true), view.getUint16(32, true), view.getUint16(34, true), view.getUint32(40, true)]).toEqual([32000, 2, 16, 6])
     expect([view.getInt16(44, true), view.getInt16(46, true), view.getInt16(48, true)]).toEqual([1, -2, 300])
     expect(atob(base64Of(bytes)).length).toBe(50)
+  })
+
+  it('reads the samples of a WAV back, past any chunk before its data (H55)', () => {
+    const wav = wavBytes(new Int16Array([5, -6, 32767]), 16000)
+    expect(Array.from(pcmOfWav(base64Of(wav)))).toEqual([5, -6, 32767])
+    const extra = new Uint8Array(wav.length + 12)
+    extra.set(wav.subarray(0, 36))
+    extra.set([76, 73, 83, 84, 4, 0, 0, 0, 1, 2, 3, 4], 36) // a LIST chunk of four bytes
+    extra.set(wav.subarray(36), 48)
+    expect(Array.from(pcmOfWav(base64Of(extra)))).toEqual([5, -6, 32767])
   })
 
   it('measures a block’s level and draws its envelope', () => {

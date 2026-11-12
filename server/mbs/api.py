@@ -446,7 +446,18 @@ def create_app(databases: Databases, keys: Keys, outbox: Outbox, fingerprints: F
         result = voice_work(lambda: voice.enrol(service, databases, keys, subject, recordings))
         return JSONResponse(result, status_code=201 if result["status"] == "saved" else 200)
 
-    # As H34 for a finger and H48 for the face: the voice's enrolment is erased with its recordings and embeddings.
+    # H55: one recording against the caller's current voice enrolment; a completed comparison is saved with its
+    # sealed recording before the answer, a refused recording is not.
+    @app.post("/api/voice/verifications")
+    @allow(USER)
+    def verify_voice(body: VoiceRecording, account: SignedIn = Depends(signed_in)) -> dict:
+        service = voice_service()
+        recording = voice.decode_recording(body.recording, voice.RECORDING_BYTES)
+        subject = accounts.subject_of(databases, keys, account.id)
+        return voice_work(lambda: voice.verify(service, databases, keys, subject, recording))
+
+    # As H34 for a finger and H48 for the face: the voice's enrolment is erased with its recordings and embeddings,
+    # and (H55) with its verification attempts and their sealed recordings.
     @app.delete("/api/voice/enrolment", status_code=204)
     @allow(USER)
     def delete_voice(account: SignedIn = Depends(signed_in)) -> None:

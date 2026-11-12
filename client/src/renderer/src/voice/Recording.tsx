@@ -60,14 +60,18 @@ export function PlayButton({ pcm, rate }: { pcm: Int16Array; rate: number }) {
   )
 }
 
-export function RecordingCard({ number, pcm, rate }: { number: number; pcm: Int16Array; rate: number }) {
-  const { t } = useSession()
-  const v = t.voice
+export function RecordingRow({ label, waveformLabel, pcm, rate }: { label: string; waveformLabel: string; pcm: Int16Array; rate: number }) {
   return (
     <li className="recording-row">
-      <span>{v.recordingN(number)}</span>
-      <Waveform pcm={pcm} label={v.waveformOf(number)} />
+      <span>{label}</span>
+      <Waveform pcm={pcm} label={waveformLabel} />
       <PlayButton pcm={pcm} rate={rate} />
     </li>
   )
+}
+
+export function RecordingCard({ number, pcm, rate }: { number: number; pcm: Int16Array; rate: number }) {
+  const { t } = useSession()
+  const v = t.voice
+  return <RecordingRow label={v.recordingN(number)} waveformLabel={v.waveformOf(number)} pcm={pcm} rate={rate} />
 }
