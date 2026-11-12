@@ -35,6 +35,7 @@ export const ROUTES = {
   enrolVoice: ['POST', '/api/voice/enrolments'],
   deleteVoice: ['DELETE', '/api/voice/enrolment'],
   verifyVoice: ['POST', '/api/voice/verifications'], // H55
+  identifyVoice: ['POST', '/api/voice/identifications'], // H56
 } as const satisfies Record<string, readonly ['GET' | 'POST' | 'DELETE', string]>
 
 export type RouteName = keyof typeof ROUTES
@@ -398,6 +399,29 @@ export interface VoiceVerificationResult {
 }
 
 export type VoiceVerificationAnswer = VoiceVerificationResult | { status: 'rejected'; source: 'device'; checks: VoiceCheck[] }
+
+// H56: a voice identification's answer, saved first. Other candidates have only a rank for this attempt and no
+// recording (H18); `view` is the caller's own closest enrolled recording, a WAV in base64, when it is among the
+// candidates shown.
+export interface VoiceIdentificationResult {
+  status: 'identified'
+  attempt_id: string
+  at: string
+  score: number
+  threshold: number
+  threshold_origin: string
+  threshold_provisional: boolean
+  accepted: boolean
+  duration_ms: number
+  gallery_size: number // the recordings (embeddings) searched
+  enrolments: number
+  tied_leaders: number
+  candidates: Array<{ rank: number; own: boolean; score: number; accepted: boolean }>
+  source: 'device'
+  view?: { rank: number; placement: number; reference: string }
+}
+
+export type VoiceIdentificationAnswer = VoiceIdentificationResult | { status: 'rejected'; source: 'device'; checks: VoiceCheck[] }
 
 // H48: whether the laptop's own screen is in use. With the lid closed and external monitors on, Windows turns
 // it off, and the built-in camera sees only the inside of the lid.

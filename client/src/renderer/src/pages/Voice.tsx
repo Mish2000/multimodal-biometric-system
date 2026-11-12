@@ -1,9 +1,10 @@
 // The voice screen (H15, H54): its enrolment state, ECAPA-TDNN's card, and the enrolment from the microphone; a
 // new enrolment replaces the current one, and the enrolment can be deleted, as H34 does for a finger and H48 for
-// the face. Verification (1:1, H55) starts from here; identification (1:N) is the next step of increment 5.
+// the face. Verification (1:1, H55) and identification (1:N, H56) start from here.
 import { useCallback, useEffect, useState } from 'react'
 import type { VoiceMethod, VoiceSaved } from '../../../shared/bridge'
 import { VoiceEnrolment, type KeptRecording } from '../voice/VoiceEnrolment'
+import { VoiceIdentification } from '../voice/VoiceIdentification'
 import { VoiceResult } from '../voice/VoiceResult'
 import { VoiceVerification } from '../voice/VoiceVerification'
 import { errorText } from '../texts'
@@ -18,6 +19,7 @@ export function Voice() {
   const [method, setMethod] = useState<VoiceMethod | null>(null)
   const [enrolling, setEnrolling] = useState(false)
   const [verifying, setVerifying] = useState(false) // H55
+  const [identifying, setIdentifying] = useState(false) // H56
   const [saved, setSaved] = useState<{ saved: VoiceSaved; kept: KeptRecording[] } | null>(null)
   const [confirming, setConfirming] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -58,6 +60,21 @@ export function Voice() {
         }}
         onLeave={() => {
           setVerifying(false)
+          load()
+        }}
+      />
+    )
+  if (identifying && method !== null && state !== null)
+    return (
+      <VoiceIdentification
+        method={method}
+        enrolled={state.enrolled}
+        onEnrol={() => {
+          setIdentifying(false)
+          setEnrolling(true)
+        }}
+        onLeave={() => {
+          setIdentifying(false)
           load()
         }}
       />
@@ -114,10 +131,16 @@ export function Voice() {
             ) : (
               <div className="actions">
                 {state.enrolled && (
-                  <button type="button" disabled={!method.available} onClick={() => {
-                    setMessage(null)
-                    setVerifying(true)
-                  }}>{v.verify.open}</button>
+                  <>
+                    <button type="button" disabled={!method.available} onClick={() => {
+                      setMessage(null)
+                      setVerifying(true)
+                    }}>{v.verify.open}</button>
+                    <button type="button" className="secondary" disabled={!method.available} onClick={() => {
+                      setMessage(null)
+                      setIdentifying(true)
+                    }}>{v.identify.open}</button>
+                  </>
                 )}
                 <button type="button" className={state.enrolled ? 'secondary' : ''} disabled={!method.available} onClick={() => {
                   setMessage(null)
@@ -126,10 +149,16 @@ export function Voice() {
                   {state.enrolled ? v.enrolAgain : v.enrol}
                 </button>
                 {!state.enrolled && (
-                  <button type="button" className="secondary" disabled={!method.available} onClick={() => {
-                    setMessage(null)
-                    setVerifying(true)
-                  }}>{v.verify.open}</button>
+                  <>
+                    <button type="button" className="secondary" disabled={!method.available} onClick={() => {
+                      setMessage(null)
+                      setVerifying(true)
+                    }}>{v.verify.open}</button>
+                    <button type="button" className="secondary" disabled={!method.available} onClick={() => {
+                      setMessage(null)
+                      setIdentifying(true)
+                    }}>{v.identify.open}</button>
+                  </>
                 )}
                 {state.enrolled && (
                   <button type="button" className="secondary" onClick={() => setConfirming(true)}>{v.deleteEnrolment}</button>

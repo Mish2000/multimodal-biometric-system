@@ -2,20 +2,13 @@
 // panel of H48, as in verification. The server ranks every current face enrolment of the active users by its
 // highest similarity, saves the attempt with its sealed image, and only then answers. Other users stay anonymous,
 // without a picture or a name, and only the caller's own enrolled face is shown (H18). The search itself is one
-// database query of a few milliseconds, so the pass over the gallery of the specification plays once, for about
-// 0.6 s, when the answer arrives; the time shown stays the server's processing time, and with Windows' animation
-// effects off the pass is skipped.
-import { useEffect, useRef, useState } from 'react'
+// database query of a few milliseconds, so the pass over the gallery plays once when the answer arrives
+// (GalleryPass.tsx, shared with the voice since H56).
+import { useState } from 'react'
 import type { FaceIdentificationResult, FaceMethod } from '../../../shared/bridge'
+import { GalleryPass, usePass } from '../GalleryPass'
 import { useSession } from '../session'
 import { FaceChoice, FaceNotEnrolled, FaceTake, SourceLine } from './FaceTake'
-
-export const PASS_MS = 600
-const CELLS = 12
-
-function reducedMotion(): boolean {
-  return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
-}
 
 function Title() {
   const { t } = useSession()
@@ -27,30 +20,14 @@ export function FaceIdentificationView({ result, onAgain, onLeave }: { result: F
   const f = t.face
   const n = f.identify
   const v = f.verify
-  const [passing, setPassing] = useState(() => !reducedMotion())
-  const heading = useRef<HTMLHeadingElement>(null)
-
-  useEffect(() => {
-    if (!passing) {
-      heading.current?.focus()
-      return
-    }
-    const timer = window.setTimeout(() => setPassing(false), PASS_MS)
-    return () => window.clearTimeout(timer)
-  }, [passing])
+  const [passing, heading] = usePass()
 
   const gallery = <p>{n.gallery(result.enrolments, result.gallery_size)}</p>
   if (passing)
     return (
       <section className="face-identification">
         <h1><Title /></h1>
-        <div className="gallery-progress" role="status">
-          <p>{n.comparing}</p>
-          <div className="gallery-sweep passing" aria-hidden="true">
-            {Array.from({ length: CELLS }, (_, index) => <span key={index} style={{ animationDelay: `${index * 35}ms` }} />)}
-          </div>
-          {gallery}
-        </div>
+        <GalleryPass comparing={n.comparing}>{gallery}</GalleryPass>
       </section>
     )
 

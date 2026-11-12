@@ -2,7 +2,7 @@
 
 Approved on 2026-10-20 (H11–H20 in `docs/decisions.md`),
 from the draft of 2026-10-19 as revised on 2026-10-20, and amended with his
-approval since (H24 to H55). Every decision is cited by its ID; a change needs
+approval since (H24 to H56). Every decision is cited by its ID; a change needs
 the researcher's approval and a new entry in the decision record.
 
 ## 1. Purpose and scope
@@ -375,7 +375,15 @@ flow of 2026-10-18).
   result shows the new recording beside the closest enrolled one, whose stored
   recording is described again for its owner only and must give its stored
   embedding.
-- **1:N:** as for the face, in the next step of increment 5.
+- **1:N (H56):** after ECAPA-TDNN's card and the choice of "Live
+  identification", one recording that passes the checks is compared with the
+  current voice enrolments of the active user accounts, fixed with the
+  threshold when the recording arrives, by the face's one SQL statement (H50);
+  the leader is found only strictly above the threshold, and equal leaders are
+  marked as a tie. A refused recording makes no attempt, and a changed gallery
+  ends the search unsaved. The result shows the five leading enrolments, other
+  users anonymous (H18), and the caller's own closest enrolled recording beside
+  the new one when it is among them.
 
 Model files are downloaded only with the researcher's approval and pinned by
 SHA-256.
@@ -396,7 +404,7 @@ SHA-256.
 | Face capture | live camera view with the detected face box and what to do next; the camera chosen by the client, with a selector when more than one can be used; after an enrolment, the three aligned faces and their pair scores (H48) |
 | Voice capture | the sentence to read in the interface's language, a level meter and a timer; the microphone chosen by the client, with a selector when more than one can be used; after an enrolment, the three recordings as waveforms with playback, their checks and their pair scores (H54) |
 | 1:1 result | the new print beside the enrolled one with lines between matched points or pores, the new aligned face beside the closest enrolled one (H49), or the new recording beside the closest enrolled one as waveforms that can be played (H55), a score gauge marked with the threshold, the decision and the time it took |
-| 1:N result | an animated pass over the enrolled gallery, the ranked candidates with their scores, the top one marked when it passes the threshold; for the face the search takes milliseconds, so the pass plays once, for about 0.6 s, when the answer arrives (skipped when Windows' animation effects are off), and the caller's own closest enrolled face is shown beside the new one when it is among the five candidates (H50) |
+| 1:N result | an animated pass over the enrolled gallery, the ranked candidates with their scores, the top one marked when it passes the threshold; for the face the search takes milliseconds, so the pass plays once, for about 0.6 s, when the answer arrives (skipped when Windows' animation effects are off), and the caller's own closest enrolled face is shown beside the new one when it is among the five candidates (H50); the voice does the same, with its own closest enrolled recording beside the new one as waveforms that can be played (H56) |
 | Administration area (H12) | accounts with role and status, new administrators, disabling and enabling; the attempt history with filters; thresholds; the audit log; never national IDs or samples |
 
 OpenCV SIFT comes first because its threshold is the only one that is not
@@ -463,6 +471,12 @@ Voice verification follows the face's rules (H55): a completed comparison is
 stored with its sealed recording, a refused recording is not, the time runs
 from the recording's receipt through the comparisons, and deleting the voice
 erases its verification attempts.
+
+Voice identification follows the face's rules (H56): a completed search is
+stored, found or not, with its leading enrolment, the number of embeddings
+searched and its sealed recording; a refused recording is not; the time runs
+from the recording's receipt through every comparison; and deleting a voice
+keeps the identification attempts that it led, with their link emptied.
 
 Administrative changes are stored in the audit log of the accounts database:
 time, administrator, action and target (an account, or the algorithm whose
@@ -622,3 +636,7 @@ themes during that work.
 - **H55** Voice verification (1:1): the choice before the microphone, the
   comparison with the three current embeddings, the attempt as H49's, and the
   result with the closest enrolled recording (5.3, 6, 7).
+- **H56** Voice identification (1:N): the face's gallery, ranking and locked
+  save as one implementation for both modalities, the attempt as H50's,
+  anonymous candidates, the caller's own closest recording, and the pass over
+  the gallery when the answer arrives (5.3, 6, 7).

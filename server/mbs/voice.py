@@ -1,4 +1,4 @@
-"""Voice enrolment (H17, H25, H54) and verification (H55).
+"""Voice enrolment (H17, H25, H54), verification (H55) and identification (H56).
 
 The microphone belongs to the client: the page records a sentence of about four seconds as a WAV of 16 kHz, one
 channel and 16-bit PCM, shows its own level meter and timer, and sends each recording. Every recording passes
@@ -33,6 +33,7 @@ from sqlalchemy.orm import Session as DbSession
 from . import keys as keyring
 from .config import REPOSITORY, Config
 from .db import Databases
+from .embeddings import Search
 from .engines import Engine, EngineError, conda_environment
 from .face import similarity
 from .fingerprint import best_three
@@ -290,8 +291,8 @@ def _save(databases: Databases, keys: Keys, subject: uuid.UUID, chosen: list[tup
 
 def delete_voice(databases: Databases, subject: uuid.UUID) -> bool:
     """As H34 for a finger and H48 for the face: the voice enrolment and those it replaced are erased with their
-    sealed recordings and embeddings, and (H55) with their verification attempts, whose link cascades; False when
-    the voice is not enrolled."""
+    sealed recordings and embeddings, and (H55) with their verification attempts, whose link cascades; the
+    identification attempts they led stay, with the link emptied (H41, H56). False when the voice is not enrolled."""
     with _db(databases.biometric) as db, db.begin():
         rows = db.execute(select(Enrolment.id, Enrolment.replaced_at).where(
             Enrolment.subject_id == subject, Enrolment.modality == VOICE
@@ -380,3 +381,47 @@ def verify(service: VoiceService, databases: Databases, keys: Keys, subject: uui
             "threshold": threshold, "threshold_origin": origin, "threshold_provisional": provisional,
             "accepted": attempt.accepted, "duration_ms": duration_ms, "comparisons": comparisons, "source": "device",
             "view": {"placement": best.placement, "reference": _b64(reference)}}
+
+
+# Voice identification (H56): one recording against every current voice enrolment of the active user accounts, as H50
+# does for the face, with the same gallery, ranking and locked save (mbs/embeddings.py). The gallery and the threshold
+# are fixed when the recording arrives; the leader is found only strictly above the threshold, and equal leaders are
+# ordered by enrolment and reported as a tie. A refused recording makes no attempt; a completed search is saved, found
+# or not, with its recording sealed, and the answer is sent only after that. Only the caller's own enrolment is named,
+# and only its recording is sent (H18).
+
+SEARCH = Search(VOICE, ECAPA, RECORDINGS, VoiceError)
+
+
+def identify(service: VoiceService, databases: Databases, keys: Keys, subject: uuid.UUID, recording: bytes) -> dict:
+    at = datetime.now(timezone.utc)
+    started = time.perf_counter()
+    with _db(databases.biometric) as db:
+        algorithm = db.get(Algorithm, ECAPA)
+        version, threshold = algorithm.version, algorithm.threshold
+        origin, provisional = algorithm.threshold_origin, algorithm.threshold_provisional
+    gallery = SEARCH.gallery(databases, keys, subject, version)
+    if service.engine.start().get("ecapa_sha256") != version:
+        raise VoiceError("method_version_differs", 503)
+    probe = _extract(service, recording)
+    if not probe.passed:
+        return {"status": "rejected", "source": "device", "checks": probe.checks}
+    ranked = SEARCH.rank(databases, gallery, probe.embedding)
+    duration_ms = round((time.perf_counter() - started) * 1000)  # receipt through every comparison (H41)
+    own = ranked.own(subject)
+    view = None
+    if own is not None:  # the caller's own enrolled recording only, described again as H55 does
+        rank, row = own
+        reference = _repeat_view(service, keys, databases, subject, row.sample_id, vector_values(row.embedding))
+        view = {"rank": rank, "placement": row.placement, "reference": _b64(reference)}
+    attempt = Attempt(id=uuid.uuid4(), at=at, subject_id=subject, modality=VOICE, mode="identify", algorithm=ECAPA,
+                      top_enrolment_id=ranked.leader.enrolment_id, gallery_size=len(gallery.rows), score=ranked.score,
+                      threshold=threshold, accepted=ranked.score > threshold, duration_ms=duration_ms, source="device")
+    attempt.probe = keyring.seal(keys, keyring.PROBE, attempt.id.bytes + subject.bytes, probe.wav)
+    SEARCH.save(databases, gallery, attempt)
+    return {"status": "identified", "attempt_id": str(attempt.id), "at": at.isoformat(), "score": ranked.score,
+            "threshold": threshold, "threshold_origin": origin, "threshold_provisional": provisional,
+            "accepted": attempt.accepted, "duration_ms": duration_ms, "gallery_size": len(gallery.rows),
+            "enrolments": len(ranked.rows), "tied_leaders": ranked.tied_leaders(), "source": "device",
+            "candidates": ranked.candidates(subject, threshold),
+            **({"view": view} if view is not None else {})}

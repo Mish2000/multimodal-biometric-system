@@ -8,8 +8,9 @@ accounts database, with the account's `theme` column (H24, H26), its `phone`
 and `language` columns and the `password_reset` table (H29, H31, H32), and the
 biometric `subject`, `algorithm`, `enrolment`, `sample` and `template` tables
 exist (H23, H33); `attempt` exists for fingerprint verification (H35) and
-fingerprint identification (H41, H42), and for face verification (H49) and
-face identification (H50).
+fingerprint identification (H41, H42), for face verification (H49) and face
+identification (H50), and for voice verification (H55) and voice
+identification (H56).
 
 H38 and H39 use these tables for OpenCV SIFT, Pore SIFT and Pore CNN.
 Each new finding gets one sealed template per available method.
@@ -373,6 +374,14 @@ its name and its metadata are not kept.
 Voice verification (H55) stores the same row with `modality = voice`,
 `algorithm = ecapa-voxceleb` and `source = device`; its probe is the engine's
 WAV of the recording (16 kHz, one channel, 16-bit PCM).
+
+Voice identification (H56) stores the row of face identification with
+`modality = voice` and `algorithm = ecapa-voxceleb`: the leading voice
+enrolment in `top_enrolment_id`, also below the threshold, and the number of
+embeddings searched in `gallery_size`, three for each enrolment; its probe is
+the engine's WAV of the recording. The search is the face's, over the current
+ECAPA-TDNN templates of the active user accounts. Deleting a voice keeps the
+identification attempts that it led, with their link emptied.
 
 Identification uses `mode = identify`, `enrolment_id = null` and the number
 of compared templates in `gallery_size` (H41). The selected method is

@@ -1453,3 +1453,49 @@ Voice verification (H55) passed a manual check on the researcher's PC: the local
 verification attempt, a match with a similarity of 0.749 against the threshold of 0.25 and 127 ms of processing,
 saved against the current enrolment with its recording sealed (about 160 KB). A refused recording makes no
 attempt, so the database does not show whether one was tried.
+
+## 2026-11-12: voice identification
+
+Approved on 2026-11-12. Identify the voice with one recording from the PC's microphones, the third step of increment 5
+(H15, H20), as H50 does for the face.
+
+- **H56** "Identify (1:N)" leads, without a voice enrolment, to the message of H15; with one, to ECAPA-TDNN's card,
+  which offers "Live identification" and "Back" as H55 does for verification. The microphone of H54 opens only on that
+  choice (H40), and one recording of five seconds, reading the last of the sentences, must pass H54's checks; a
+  refused recording makes no attempt and ends on its outcome screen.
+- The gallery is the current voice enrolments of the active user accounts, found through their sealed identity links,
+  each with three ECAPA-TDNN embeddings of the pinned model; it and the threshold are fixed when the recording
+  arrives. One SQL statement ranks the enrolments by their highest pgvector cosine similarity, an exact search without
+  an index. The leader is found only strictly above 0.25, and equal leaders are ordered by enrolment identifier and
+  reported as a tie. Before the save, the accounts, then the enrolments and their templates are locked and checked
+  again; a deletion, a new enrolment, a disabled account or a changed template ends the search unsaved. The gallery,
+  the ranking and the locked save are now one implementation for the face and the voice, given the modality and its
+  model, and the face's behaviour is unchanged.
+- Every completed search, found or not, is saved as H50's attempt: `voice`, `identify`, `ecapa-voxceleb`, the leading
+  enrolment even below the threshold, the number of embeddings searched, the score and the threshold used, the
+  decision, the time from the recording's receipt through every comparison, `source = device`, and the engine's WAV of
+  the recording sealed under `mbs/probe/v1`. The answer is sent only after the save. Deleting a voice keeps the
+  identification attempts that it led, with their link emptied (H41), and erases its verification attempts (H55); the
+  confirmation says both.
+- The result shows the five leading enrolments with their similarities. The caller's own enrolment is named; the
+  others are "another registered user", without a recording, a name or an identifier (H18). When the caller's
+  enrolment is among the five, its winning recording is described again as in H55 and shown beside the new one, each
+  as a waveform that can be played; otherwise the page says why no recording is shown. The pass over the gallery of
+  H50 plays once when the answer arrives; the gallery's size, the processing time and the source follow, and
+  "Identify again" returns to the choice.
+
+The full server run passed 326 tests, including the four local checks with stored captures and the face's 18
+identification tests, unchanged; all 175 client tests, type checks and the build passed, and the 37 engine tests are
+unchanged. The built client passed 72 offscreen checks: the synthetic voice of H54's check, enrolled through the real
+engine, was identified from a recording of the same synthetic microphone at 0.982, its own enrolment first and its
+closest recording beside the new one, and "Identify again" returned to the choice. Identification of real voices is
+checked by hand.
+
+## 2026-11-12: live voice identification check
+
+Voice identification (H56) passed a manual check on the researcher's PC with two accounts, the second enrolled for this
+check: the local database holds two voice identifications, both made from the second account over a gallery of six
+embeddings (two enrolments), both found, with similarities of 0.789 and 0.733 against the threshold of 0.25 and 81 and
+78 ms of processing; the first was led by the other account's enrolment and the second by the caller's own, each saved
+with its recording sealed (about 160 KB). A refused recording makes no attempt, so the database does not show whether
+one was tried.

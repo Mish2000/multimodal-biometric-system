@@ -90,8 +90,8 @@ def _validate_reference(reference: Reference, version: str) -> None:
 
 
 def active_owners(databases: Databases, keys: Keys) -> list[Owner]:
-    """The active user accounts and their subjects, through their sealed identity links (H3, H41); face
-    identification (H50) fixes its gallery from the same list."""
+    """The active user accounts and their subjects, through their sealed identity links (H3, H41); face and voice
+    identification (H50, H56) fix their galleries from the same list."""
     with Session(databases.accounts) as db:
         rows = db.execute(select(Account.id, IdentityLink.subject).join(IdentityLink).where(
             Account.role == USER, Account.status == ACTIVE).order_by(Account.id)).all()
@@ -101,7 +101,7 @@ def active_owners(databases: Databases, keys: Keys) -> list[Owner]:
 
 def owners_unchanged(db: Session, owners: list[Owner]) -> bool:
     """Lock the gallery's accounts, before any enrolment is locked, and tell whether each is still the same
-    active user account (H41, H50)."""
+    active user account (H41, H50, H56)."""
     rows = db.execute(select(Account.id, Account.status, Account.role, IdentityLink.subject).join(
         IdentityLink).where(Account.id.in_([owner.account_id for owner in owners])).order_by(
         Account.id).with_for_update()).all()

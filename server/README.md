@@ -6,9 +6,9 @@ administration (H3, H11, H12, H14, H19, H29 to H32), fingerprint enrolment (H33)
 and 1:1 verification with OpenCV SIFT, Pore SIFT and Pore CNN
 (H35, H38, H39) and 1:N identification (H41, H42) with all three methods, and face enrolment (H48),
 1:1 verification (H49) and 1:N identification (H50), also from image files (H51), and voice enrolment
-(H54) and 1:1 verification (H55). It runs with the `multimodal-server` environment and starts PostgreSQL from the
-`multimodal-postgres` environment (`environments/`); the face engine runs in `multimodal-face` and the
-voice engine in `multimodal-voice`.
+(H54), 1:1 verification (H55) and 1:N identification (H56). It runs with the `multimodal-server` environment and
+starts PostgreSQL from the `multimodal-postgres` environment (`environments/`); the face engine runs in
+`multimodal-face` and the voice engine in `multimodal-voice`.
 
 ```powershell
 conda create -n multimodal-server --file environments/server-win-64.lock
@@ -125,7 +125,8 @@ to their defaults when `local/server.toml` does not name them; without them the 
 | `POST /api/voice/checks` | user | one recording (`{"recording": base64}`, a WAV of 16 kHz, one channel and 16-bit PCM, at most 1 MB): its checks; nothing is kept |
 | `POST /api/voice/enrolments` | user | three to six recordings with their times, in order: 201 `saved` when three match each other, otherwise 200 `another`, or `failed` after six |
 | `POST /api/voice/verifications` | user | verify the voice with one recording (H55): `rejected` with its checks and no attempt, or `verified` with the three scores, the decision and the closest enrolled recording (a WAV, the caller's own), sent after the attempt is saved; 409 `not_enrolled` before an enrolment |
-| `DELETE /api/voice/enrolment` | user | delete the voice's current and replaced enrolments with their recordings, embeddings and verification attempts; 404 when it is not enrolled |
+| `POST /api/voice/identifications` | user | identify the voice with one recording (H56): `rejected` with its checks and no attempt, or `identified` with the five leading enrolments (the caller's own marked, others anonymous), the tie count, the gallery's size and, when the caller's enrolment is among the five, its closest enrolled recording (a WAV), sent after the attempt is saved; 409 `not_enrolled` before an enrolment, 409 `gallery_changed` when the gallery changed during the search |
+| `DELETE /api/voice/enrolment` | user | delete the voice's current and replaced enrolments with their recordings, embeddings and verification attempts; identification attempts stay, without the link; 404 when it is not enrolled |
 | `GET /api/admin/accounts`, `POST /api/admin/accounts/{id}/status` | administrator | accounts; disable or enable |
 | `POST /api/admin/administrators`, `GET /api/admin/audit` | administrator | a new administrator; the audit log |
 
@@ -241,6 +242,12 @@ ECAPA-TDNN embeddings in one SQL statement, as H49 does for the face: the highes
 and described again; its embedding must equal the stored one, or the run ends unsaved. The attempt is saved with
 the recording sealed under `mbs/probe/v1`, while the enrolment is locked and still current (otherwise
 `enrolment_changed`), and only then is the answer sent.
+
+Voice identification (H56) is face identification (H50) with the voice's recordings: the gallery of the current
+voice enrolments of the active user accounts, fixed when the recording arrives, each with three ECAPA-TDNN embeddings
+of the pinned version, the same ranking statement and the same locked save, one implementation for both modalities
+(`mbs/embeddings.py`). The leader is found only strictly above 0.25; when the caller's own enrolment is among the five
+shown, its winning recording is described again as in H55 and sent with the answer.
 
 Both face routes take `{"image": base64, "source": "device" | "file"}` (H51): a camera image up to 8 MB, an image
 file up to 10 MB. Before the engine reads a file, the server takes its kind from its first bytes (JPEG or

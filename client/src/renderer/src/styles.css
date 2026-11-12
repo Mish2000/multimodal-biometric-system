@@ -1044,7 +1044,7 @@ button.danger {
 .gallery-sweep.passing span { animation: gallery-pass 200ms ease-out both; }
 @keyframes gallery-pass { from { opacity: 0.12; } to { opacity: 0.8; } }
 @media (prefers-reduced-motion: reduce) { .gallery-sweep.passing span { animation: none; opacity: 0.8; } }
-.face-identification tr.own td { font-weight: 600; }
+.face-identification tr.own td, .voice-identification tr.own td { font-weight: 600; }
 
 /* H53: an existing image has a screen of its own, with a visible drop zone that a dragged file highlights. */
 .drop-zone { display: grid; justify-items: center; gap: 0.5rem; width: min(100%, 640px); margin-block: 0.5rem 1rem; padding: 2.5rem 1.5rem; text-align: center; border: 2px dashed var(--line); border-radius: var(--radius); background: var(--surface); }
@@ -1070,3 +1070,4 @@ button.danger {
 .waveform { width: 100%; height: 3rem; color: var(--accent); background: var(--bg); border-radius: var(--radius); }
 .waveform path { stroke: currentColor; stroke-width: 0.7; fill: none; }
 .voice-enrolment .prompt:empty { padding: 0; margin: 0; border: 0; background: none; }
+.voice-identification .prompt:empty { padding: 0; margin: 0; border: 0; background: none; }

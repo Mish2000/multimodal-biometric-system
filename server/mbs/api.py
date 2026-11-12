@@ -456,8 +456,20 @@ def create_app(databases: Databases, keys: Keys, outbox: Outbox, fingerprints: F
         subject = accounts.subject_of(databases, keys, account.id)
         return voice_work(lambda: voice.verify(service, databases, keys, subject, recording))
 
+    # H56: one recording against every current voice enrolment of the active users, as H50 does for the face. A
+    # completed search is saved with its sealed recording before the answer, a refused recording is not; other users
+    # stay anonymous (H18).
+    @app.post("/api/voice/identifications")
+    @allow(USER)
+    def identify_voice(body: VoiceRecording, account: SignedIn = Depends(signed_in)) -> dict:
+        service = voice_service()
+        recording = voice.decode_recording(body.recording, voice.RECORDING_BYTES)
+        subject = accounts.subject_of(databases, keys, account.id)
+        return voice_work(lambda: voice.identify(service, databases, keys, subject, recording))
+
     # As H34 for a finger and H48 for the face: the voice's enrolment is erased with its recordings and embeddings,
-    # and (H55) with its verification attempts and their sealed recordings.
+    # and (H55) with its verification attempts and their sealed recordings; identification attempts stay, without
+    # the link (H41, H56).
     @app.delete("/api/voice/enrolment", status_code=204)
     @allow(USER)
     def delete_voice(account: SignedIn = Depends(signed_in)) -> None:

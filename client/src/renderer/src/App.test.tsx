@@ -3,13 +3,14 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { StrictMode } from 'react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import type { Account, ApiResult, DisplayState, FaceIdentificationResult, FaceVerificationResult, EnrolmentEvent, Language, MbsBridge, OpenedLink, RouteName, Theme, VerificationEvent, FingerprintAlgorithm, IdentificationEvent, VoiceEnrolmentAnswer, VoiceMethod, VoiceSaved, VoiceVerificationResult } from '../../shared/bridge'
+import type { Account, ApiResult, DisplayState, FaceIdentificationResult, FaceVerificationResult, EnrolmentEvent, Language, MbsBridge, OpenedLink, RouteName, Theme, VerificationEvent, FingerprintAlgorithm, IdentificationEvent, VoiceEnrolmentAnswer, VoiceIdentificationResult, VoiceMethod, VoiceSaved, VoiceVerificationResult } from '../../shared/bridge'
 import { App } from './App'
 import { FaceIdentificationView } from './face/FaceIdentification'
 import { FaceVerificationView } from './face/FaceVerification'
 import { SessionProvider } from './session'
 import type { PanelProps } from './voice/MicrophonePanel'
 import { VoiceEnrolment, type KeptRecording } from './voice/VoiceEnrolment'
+import { VoiceIdentification, VoiceIdentificationView } from './voice/VoiceIdentification'
 import { VoiceResult } from './voice/VoiceResult'
 import { VoiceVerification } from './voice/VoiceVerification'
 import { base64Of, wavBytes } from './voice/wav'
@@ -66,6 +67,8 @@ class FakeServer implements MbsBridge {
   voiceAnswers: VoiceEnrolmentAnswer[] = []
   voiceDeletes = 0
   voiceVerifications = 0
+  voiceIdentifications = 0 // H56
+  voiceIdentifyErrors: string[] = [] // the errors the next identifications answer with
 
   displays = async (): Promise<DisplayState> => ({ internalDisplay: false })
 
@@ -288,6 +291,18 @@ class FakeServer implements MbsBridge {
             { name: 'clipping', passed: true, detail: '', share: 0, maximum: 0.001 },
           ] })
         return ok(VOICE_VERIFIED)
+      case 'identifyVoice': {
+        this.voiceIdentifications++
+        const failure = this.voiceIdentifyErrors.shift()
+        if (failure) return no(409, failure)
+        if (body.recording === 'quiet')
+          return ok({ status: 'rejected', source: 'device', checks: [
+            { name: 'length', passed: true, detail: '', seconds: 5, minimum: 3, maximum: 30 },
+            { name: 'speech', passed: false, detail: '', seconds: 0.6, minimum: 2 },
+            { name: 'clipping', passed: true, detail: '', share: 0, maximum: 0.001 },
+          ] })
+        return ok(VOICE_IDENTIFIED)
+      }
       case 'deleteVoice':
         if (!this.voice.enrolled) return no(404, 'not_enrolled')
         this.voice = { enrolled: false }
@@ -374,6 +389,16 @@ const VOICE_VERIFIED: VoiceVerificationResult = {
   threshold_origin: "SpeechBrain's verification threshold", threshold_provisional: false, accepted: true, duration_ms: 164,
   comparisons: [{ placement: 1, score: 0.655, accepted: true }, { placement: 2, score: 0.712, accepted: true }, { placement: 3, score: 0.689, accepted: true }],
   source: 'device', view: { placement: 2, reference: base64Of(wavBytes(new Int16Array([0, 1000, -1000, 500]), 16000)) },
+}
+
+// H56: a voice identification's answer, as the server sends it after saving the attempt.
+const VOICE_IDENTIFIED: VoiceIdentificationResult = {
+  status: 'identified', attempt_id: 'a-voice-1n', at: '2026-11-12T15:00:00+00:00', score: 0.749, threshold: 0.25,
+  threshold_origin: "SpeechBrain's verification threshold", threshold_provisional: false, accepted: true, duration_ms: 171,
+  gallery_size: 9, enrolments: 3, tied_leaders: 1,
+  candidates: [{ rank: 1, own: true, score: 0.749, accepted: true }, { rank: 2, own: false, score: 0.188, accepted: false },
+    { rank: 3, own: false, score: 0.041, accepted: false }],
+  source: 'device', view: { rank: 1, placement: 3, reference: base64Of(wavBytes(new Int16Array([0, 800, -800, 400]), 16000)) },
 }
 
 // H49: a face verification's answer, as the server sends it after saving the attempt.
@@ -1779,7 +1804,7 @@ describe('the voice (H54)', () => {
     expect(screen.getByRole('heading', { name: 'ECAPA-TDNN' })).toBeTruthy()
     expect(screen.getByText(/Accepts above 0.25, SpeechBrain’s own verification threshold/)).toBeTruthy()
     expect(screen.getByText(/equal error rate of 0.80%/)).toBeTruthy()
-    expect(screen.getByText(/Identification \(1:N\) by voice comes in the next build step/)).toBeTruthy()
+    expect(screen.getByText(/Recordings from a file, for verification and identification, come in the next build step/)).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Delete the voice enrolment' })).toBeNull()
   })
 
@@ -1996,5 +2021,175 @@ describe('voice verification (H55)', () => {
     await openVoiceAs(true, 'he')
     fireEvent.click(await screen.findByRole('button', { name: 'אימות הקול שלי (1:1)' }))
     expect(screen.getByRole('button', { name: 'אימות חי' })).toBeTruthy()
+  })
+})
+
+describe('voice identification (H56)', () => {
+  const original = window.matchMedia
+  afterEach(() => {
+    window.matchMedia = original
+  })
+
+  function reducedMotion() {
+    window.matchMedia = ((query: string) => ({
+      matches: query === '(prefers-reduced-motion: reduce)', media: query, onchange: null, addListener: () => undefined,
+      removeListener: () => undefined, addEventListener: () => undefined, removeEventListener: () => undefined,
+      dispatchEvent: () => false,
+    })) as typeof window.matchMedia
+  }
+
+  async function openVoiceAs(enrolled: boolean, language: Language = 'en') {
+    if (enrolled) server.voice = { enrolled: true, enrolled_at: '2026-11-11T12:00:00+00:00' }
+    server.add('dana', 'user', { language })
+    open('/sign-in')
+    await signIn('dana', 'dana password 1')
+    fireEvent.click(await cardLink(language === 'he' ? 'קול' : 'Voice'))
+  }
+
+  // A stand-in for the microphone, as in the enrolment's tests.
+  let queue: string[] = []
+  function FakePanel({ busy, sentence, onRecorded }: PanelProps) {
+    return (
+      <div>
+        <p data-testid="sentence">{sentence}</p>
+        <button type="button" disabled={busy} onClick={() => onRecorded({ recording: queue.shift() ?? 'voice', capturedAt: new Date().toISOString(), pcm: new Int16Array(800) })}>
+          Fake recording
+        </button>
+      </div>
+    )
+  }
+
+  function identifyHere() {
+    reducedMotion()
+    server.current = server.add('dana', 'user')
+    render(<MemoryRouter><SessionProvider>
+      <VoiceIdentification method={VOICE_METHOD} enrolled Panel={FakePanel} onEnrol={() => undefined} onLeave={() => undefined} />
+    </SessionProvider></MemoryRouter>)
+  }
+
+  function view(result: VoiceIdentificationResult) {
+    render(<MemoryRouter><SessionProvider>
+      <VoiceIdentificationView result={result} probe={new Int16Array(800)} rate={16000} onAgain={() => undefined} onLeave={() => undefined} />
+    </SessionProvider></MemoryRouter>)
+  }
+
+  it('offers the enrolment first when the voice is not enrolled, or a way home (H15)', async () => {
+    await openVoiceAs(false)
+    fireEvent.click(await screen.findByRole('button', { name: 'Identify (1:N)' }))
+    expect(screen.getByRole('heading', { name: 'Voice identification (1:N)' })).toBeTruthy()
+    expect(screen.getByText(/Voice identification is not available yet: your voice is not enrolled/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Home' }))
+    fireEvent.click(await cardLink('Voice'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Identify (1:N)' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Enrol my voice' }))
+    expect(await screen.findByRole('heading', { name: 'Enrolling your voice' })).toBeTruthy()
+    expect(server.voiceIdentifications).toBe(0)
+  })
+
+  it('opens on ECAPA-TDNN’s card with the live identification and Back, before any microphone', async () => {
+    await openVoiceAs(true)
+    fireEvent.click(await screen.findByRole('button', { name: 'Identify (1:N)' }))
+    expect(screen.getByRole('heading', { name: 'Voice identification (1:N)' })).toBeTruthy()
+    expect(screen.getByText(/Other users appear anonymously, without a recording or a name/)).toBeTruthy()
+    expect(screen.getByText(/the search itself is one database query/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Live identification' })).toBeTruthy()
+    expect(screen.queryByText(/Upload/)).toBeNull()
+    expect(screen.queryByRole('meter')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+    expect(await screen.findByRole('button', { name: 'Enrol my voice again' })).toBeTruthy()
+    expect(server.voiceIdentifications).toBe(0)
+  })
+
+  it('reads the last sentence, ranks the candidates and puts the caller’s own recording beside the new one', async () => {
+    queue = ['voice']
+    identifyHere()
+    fireEvent.click(screen.getByRole('button', { name: 'Live identification' }))
+    expect(screen.getByTestId('sentence').textContent).toBe('The numbers seven, four and nine are written on the board.')
+    fireEvent.click(screen.getByRole('button', { name: 'Fake recording' }))
+    expect(await screen.findByRole('heading', { name: 'A matching voice was found' })).toBeTruthy()
+    expect(server.voiceIdentifications).toBe(1)
+    expect(screen.getAllByText('Your voice')).toHaveLength(2) // the leader line and its row
+    expect(screen.getByText('Highest similarity 0.749; a match needs more than 0.25.')).toBeTruthy()
+    expect(screen.getAllByRole('row').slice(1).map((row) => row.textContent)).toEqual([
+      '1Your voice0.749above the threshold', '2Another registered user0.188not above the threshold',
+      '3Another registered user0.041not above the threshold'])
+    expect(screen.getByRole('table', { name: 'Leading candidates, 3 of 3' })).toBeTruthy()
+    expect(screen.getAllByRole('img').map((item) => item.getAttribute('aria-label'))).toEqual(['New recording', 'Your enrolled recording 3'])
+    expect(screen.getByText(/^Your enrolled recording, rank 1 in the list, beside the new one/)).toBeTruthy()
+    expect(screen.getByText('3 voice enrolments, 9 recordings, in this search.')).toBeTruthy()
+    expect(screen.getByText('Processing took 0.17 s. The result and its encrypted recording were saved.')).toBeTruthy()
+    expect(screen.getByText('Source: the microphone.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Identify again' }))
+    expect(screen.getByRole('button', { name: 'Live identification' })).toBeTruthy()
+  })
+
+  it('plays the pass over the gallery once, then shows the result', async () => {
+    view(VOICE_IDENTIFIED)
+    expect(screen.getByRole('heading', { name: 'Voice identification (1:N)' })).toBeTruthy()
+    expect(screen.getByText('Searching the enrolled voices…')).toBeTruthy()
+    expect(document.querySelectorAll('.gallery-sweep.passing span')).toHaveLength(12)
+    expect(screen.queryByRole('table')).toBeNull()
+    expect(await screen.findByRole('heading', { name: 'A matching voice was found' })).toBeTruthy()
+    expect(document.querySelector('.gallery-sweep')).toBeNull()
+  })
+
+  it('names another user’s leading voice only anonymously, and says why no recording is shown', () => {
+    reducedMotion()
+    const { view: _shown, ...unseen } = VOICE_IDENTIFIED
+    view({ ...unseen, score: 0.81, enrolments: 6, gallery_size: 18,
+      candidates: [0.81, 0.4, 0.3, 0.2, 0.1].map((score, index) => ({ rank: index + 1, own: false, score, accepted: score > 0.25 })) })
+    expect(screen.getByRole('heading', { name: 'A matching voice was found' })).toBeTruthy()
+    expect(screen.getAllByText('Another registered user')).toHaveLength(6) // the leader line and five rows
+    expect(screen.queryAllByRole('img')).toHaveLength(0)
+    expect(screen.queryByRole('button', { name: 'Play' })).toBeNull()
+    expect(screen.getByText(/^Your own voice is not among the candidates shown/)).toBeTruthy()
+    expect(screen.getByRole('table', { name: 'Leading candidates, 5 of 6' })).toBeTruthy()
+    expect(screen.getByText('6 voice enrolments, 18 recordings, in this search.')).toBeTruthy()
+  })
+
+  it('reports a tie without choosing a candidate, and a leader below the threshold as not found', () => {
+    reducedMotion()
+    view({ ...VOICE_IDENTIFIED, tied_leaders: 2, candidates: [{ rank: 1, own: true, score: 0.749, accepted: true },
+      { rank: 2, own: false, score: 0.749, accepted: true }, { rank: 3, own: false, score: 0.041, accepted: false }] })
+    expect(screen.getByText('2 candidates share the highest similarity. The result does not select a unique candidate.')).toBeTruthy()
+    cleanup()
+    view({ ...VOICE_IDENTIFIED, score: 0.2, accepted: false, enrolments: 1, gallery_size: 3,
+      candidates: [{ rank: 1, own: true, score: 0.2, accepted: false }] })
+    expect(screen.getByRole('heading', { name: 'No matching voice was found' })).toBeTruthy()
+    expect(screen.getByText('One voice enrolment, 3 recordings, in this search.')).toBeTruthy()
+    expect(screen.getAllByText('Your voice')).toHaveLength(1)
+  })
+
+  it('ends a refused recording or a changed gallery on an outcome screen, whose Identify again returns to the choice', async () => {
+    queue = ['quiet', 'voice']
+    server.voiceIdentifyErrors = ['', 'gallery_changed']
+    identifyHere()
+    fireEvent.click(screen.getByRole('button', { name: 'Live identification' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Fake recording' }))
+    expect(await screen.findByRole('heading', { name: 'The recording did not pass its checks' })).toBeTruthy()
+    expect(screen.getByText(/Speech heard: 0.6 seconds of speech; at least 2 needed/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Identify again' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Live identification' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Fake recording' }))
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      'An enrolled voice or an account changed during the search. Start a new search to use the current enrolments.')
+    fireEvent.click(screen.getByRole('button', { name: 'Identify again' }))
+    expect(screen.getByRole('button', { name: 'Live identification' })).toBeTruthy()
+    expect(server.voiceIdentifications).toBe(2)
+  })
+
+  it('says before a deletion that identification attempts stay, without the link', async () => {
+    await openVoiceAs(true)
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete the voice enrolment' }))
+    expect(screen.getByRole('alertdialog').textContent).toContain(
+      'Identification (1:N) attempts and their recordings stay stored, with the link to this enrolment removed.')
+  })
+
+  it('speaks Hebrew, right to left', async () => {
+    await openVoiceAs(true, 'he')
+    fireEvent.click(await screen.findByRole('button', { name: 'זיהוי (1:N)' }))
+    expect(screen.getByRole('heading', { name: 'זיהוי קול (1:N)' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'זיהוי חי' })).toBeTruthy()
+    expect(document.documentElement.dir).toBe('rtl')
   })
 })
