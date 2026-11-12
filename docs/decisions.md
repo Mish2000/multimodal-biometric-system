@@ -1499,3 +1499,16 @@ embeddings (two enrolments), both found, with similarities of 0.789 and 0.733 ag
 78 ms of processing; the first was led by the other account's enrolment and the second by the caller's own, each saved
 with its recording sealed (about 160 KB). A refused recording makes no attempt, so the database does not show whether
 one was tried.
+
+## 2026-11-12: two corrections of voice verification
+
+Approved on 2026-11-12, found while H56 was built; no decision changed (H15, H55).
+
+- On the live screen of voice verification, the empty status line under the microphone showed as a tinted strip, 18
+  pixels high, until the comparison started; it now takes no room, as on the enrolment's and identification's screens.
+- Before a voice enrolment, the "Home" of H15's message returned to the voice page; it now returns to the home screen,
+  as H15 says and the face's messages do. Verification and identification share that message.
+
+All 175 client tests, one of them extended, type checks and the build passed, and the built client passed 74 offscreen
+checks, two of them new: they measure the empty status line of live verification (18 pixels high before the
+correction, none after) and of live identification. The server is unchanged.

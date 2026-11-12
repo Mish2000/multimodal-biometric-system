@@ -6,7 +6,6 @@
 // recording is sent and can be played (H18). The search itself is one database query of a few milliseconds, so the
 // pass over the gallery plays once when the answer arrives (GalleryPass.tsx); "Identify again" returns to the choice.
 import { useState, type ComponentType } from 'react'
-import { useNavigate } from 'react-router'
 import type { VoiceCheck, VoiceIdentificationAnswer, VoiceIdentificationResult, VoiceMethod } from '../../../shared/bridge'
 import { GalleryPass, usePass } from '../GalleryPass'
 import { errorText } from '../texts'
@@ -14,6 +13,7 @@ import { useSession } from '../session'
 import { MicrophonePanel, type PanelProps, type Recorded } from './MicrophonePanel'
 import { RecordingRow } from './Recording'
 import { VoiceChecks } from './VoiceEnrolment'
+import { VoiceNotEnrolled } from './VoiceVerification'
 import { pcmOfWav } from './wav'
 
 function Title() {
@@ -106,22 +106,11 @@ interface Props {
 
 export function VoiceIdentification({ method, enrolled, onEnrol, onLeave, Panel = MicrophonePanel }: Props) {
   const { call, t } = useSession()
-  const navigate = useNavigate()
   const v = t.voice
   const n = v.identify
   const [stage, setStage] = useState<Stage>({ kind: 'choice' })
 
-  if (!enrolled)
-    return (
-      <section>
-        <h1><Title /></h1>
-        <p className="notice" role="status">{n.notEnrolled}</p>
-        <div className="actions">
-          <button type="button" onClick={onEnrol}>{v.verify.enrolNow}</button>
-          <button type="button" className="secondary" onClick={() => navigate('/')}>{v.verify.home}</button>
-        </div>
-      </section>
-    )
+  if (!enrolled) return <VoiceNotEnrolled title={<Title />} text={n.notEnrolled} onEnrol={onEnrol} />
 
   async function identify(recorded: Recorded) {
     setStage({ kind: 'live', busy: true })

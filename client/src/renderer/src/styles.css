@@ -1070,4 +1070,4 @@ button.danger {
 .waveform { width: 100%; height: 3rem; color: var(--accent); background: var(--bg); border-radius: var(--radius); }
 .waveform path { stroke: currentColor; stroke-width: 0.7; fill: none; }
 .voice-enrolment .prompt:empty { padding: 0; margin: 0; border: 0; background: none; }
-.voice-identification .prompt:empty { padding: 0; margin: 0; border: 0; background: none; }
+.voice-verification .prompt:empty, .voice-identification .prompt:empty { padding: 0; margin: 0; border: 0; background: none; }

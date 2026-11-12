@@ -3,7 +3,8 @@
 // recording that fails its checks makes no attempt and ends on its own outcome screen. The server compares a passing
 // recording with the three enrolled ones, saves the attempt with its sealed recording, and only then answers; the
 // result shows the new recording beside the closest enrolled one, and "Verify again" returns to the choice.
-import { useState, type ComponentType } from 'react'
+import { useState, type ComponentType, type ReactNode } from 'react'
+import { useNavigate } from 'react-router'
 import type { VoiceCheck, VoiceMethod, VoiceVerificationAnswer, VoiceVerificationResult } from '../../../shared/bridge'
 import { errorText } from '../texts'
 import { useSession } from '../session'
@@ -11,6 +12,23 @@ import { MicrophonePanel, type PanelProps, type Recorded } from './MicrophonePan
 import { RecordingRow } from './Recording'
 import { VoiceChecks } from './VoiceEnrolment'
 import { pcmOfWav } from './wav'
+
+// H15: before a voice enrolment, verification and identification (H56) offer the enrolment or the home screen.
+export function VoiceNotEnrolled({ title, text, onEnrol }: { title: ReactNode; text: string; onEnrol: () => void }) {
+  const { t } = useSession()
+  const navigate = useNavigate()
+  const v = t.voice.verify
+  return (
+    <section>
+      <h1>{title}</h1>
+      <p className="notice" role="status">{text}</p>
+      <div className="actions">
+        <button type="button" onClick={onEnrol}>{v.enrolNow}</button>
+        <button type="button" className="secondary" onClick={() => navigate('/')}>{v.home}</button>
+      </div>
+    </section>
+  )
+}
 
 export function VoiceVerificationView({ result, probe, rate, onAgain, onLeave }: {
   result: VoiceVerificationResult
@@ -72,17 +90,7 @@ export function VoiceVerification({ method, enrolled, onEnrol, onLeave, Panel = 
   const v = t.voice.verify
   const [stage, setStage] = useState<Stage>({ kind: 'choice' })
 
-  if (!enrolled)
-    return (
-      <section>
-        <h1>{v.title}</h1>
-        <p className="notice" role="status">{v.notEnrolled}</p>
-        <div className="actions">
-          <button type="button" onClick={onEnrol}>{v.enrolNow}</button>
-          <button type="button" className="secondary" onClick={onLeave}>{v.home}</button>
-        </div>
-      </section>
-    )
+  if (!enrolled) return <VoiceNotEnrolled title={v.title} text={v.notEnrolled} onEnrol={onEnrol} />
 
   async function verify(recorded: Recorded) {
     setStage({ kind: 'live', busy: true })

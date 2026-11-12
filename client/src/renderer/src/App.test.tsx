@@ -1971,10 +1971,13 @@ describe('voice verification (H55)', () => {
     </SessionProvider></MemoryRouter>)
   }
 
-  it('offers the enrolment first when the voice is not enrolled (H15)', async () => {
+  it('offers the enrolment first when the voice is not enrolled, or a way home (H15)', async () => {
     await openVoiceAs(false)
     fireEvent.click(await screen.findByRole('button', { name: 'Verify my voice (1:1)' }))
     expect(await screen.findByText(/Voice verification is not available yet: your voice is not enrolled/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Home' }))
+    fireEvent.click(await cardLink('Voice')) // the home screen's voice card
+    fireEvent.click(await screen.findByRole('button', { name: 'Verify my voice (1:1)' }))
     fireEvent.click(screen.getByRole('button', { name: 'Enrol my voice' }))
     expect(await screen.findByRole('heading', { name: 'Enrolling your voice' })).toBeTruthy()
   })
