@@ -12,6 +12,12 @@ Operations (protocol.py):
            the seconds of speech, the levels of the speech and of the room's noise, and the share of clipped
            samples (`measure`); for a recording of at least a second, two parts: the recording again as a WAV
            made from its samples alone, and ECAPA's embedding as float32 values, little-endian
+  extract with `"file": true` (H57)
+           data: a recording file -> `file`, what libsndfile reads from its header before anything is decoded (its
+           format and encoding, sample rate, channels and seconds), and `decoded`; only a file within FILE_FORMATS,
+           FILE_RATES, FILE_CHANNELS and FILE_SECONDS is decoded, converted to 16 kHz, one channel and 16-bit PCM
+           as SpeechBrain's own load_audio converts a file, and then answered as above, its WAV being the converted
+           recording
 Data that is not such a recording is answered with `invalid` and its reason, so the server can tell a refused
 recording from a failed engine. The measurements need numpy alone, so the engine tests can run them in any
 environment; PyTorch and SpeechBrain load only when the engine starts.
@@ -55,6 +61,17 @@ FLOOR_PERCENTILE = 10  # the room's noise: the level of the recording's quietest
 SPEECH_MARGIN = 15.0  # speech stands this many dB above the room's noise
 PAUSE_FRAMES = 20  # a pause of up to 0.2 s inside speech counts as speech
 SILENCE = -100.0  # the level, in dB of full scale, given to digital silence
+# H27, H57: the recording files read, as libsndfile names their formats and encodings (None: any encoding it reads;
+# WAVEX is the extended WAV that many recorders write). Below 16 kHz a file lacks part of the model's band, which
+# resampling cannot add (SpeechBrain's own note); the upper rate and the two channels keep a file's header from
+# asking for an unbounded read. ECAPA-TDNN describes a recording whole, and its memory grows with the length
+# (measured on 2026-11-12: about 0.9 GB at 30 s, 2.3 GB at two minutes, 9.9 GB at ten), so a file is compared
+# whole up to two minutes. The server decides with the same limits (server/mbs/voice.py).
+FILE_FORMATS = {"WAV": None, "WAVEX": None, "OGG": {"VORBIS", "OPUS"}, "MP3": {"MPEG_LAYER_III"}}
+FILE_RATES = (16000, 192000)
+FILE_CHANNELS = (1, 2)
+FILE_SECONDS = (3.0, 120.0)
+FILE_BLOCK = 65536  # frames read at a time
 
 
 def check_models(folder: Path) -> None:
@@ -122,6 +139,27 @@ def decode(data: bytes) -> np.ndarray:
     return np.asarray(samples, dtype=np.int16).reshape(-1)
 
 
+def file_facts(data: bytes) -> dict:
+    """H57: what libsndfile reads from a recording file's header, from memory, before anything is decoded."""
+    import soundfile
+    try:
+        info = soundfile.info(io.BytesIO(data))
+    except (RuntimeError, TypeError):  # libsndfile cannot read it
+        raise ValueError("the data is not a recording") from None
+    seconds = info.frames / info.samplerate if info.samplerate > 0 else 0.0
+    return {"format": info.format, "subtype": info.subtype, "sample_rate": info.samplerate,
+            "channels": info.channels, "seconds": round(seconds, 3)}
+
+
+def readable(facts: dict) -> bool:
+    """Whether a file is decoded: its format and encoding, rate, channels and length within the limits."""
+    encodings = FILE_FORMATS.get(facts["format"], set())
+    return ((facts["format"] in FILE_FORMATS and (encodings is None or facts["subtype"] in encodings))
+            and FILE_RATES[0] <= facts["sample_rate"] <= FILE_RATES[1]
+            and FILE_CHANNELS[0] <= facts["channels"] <= FILE_CHANNELS[1]
+            and FILE_SECONDS[0] <= facts["seconds"] <= FILE_SECONDS[1])
+
+
 def wav(samples: np.ndarray) -> bytes:
     """A WAV of the samples alone: 16 kHz, one channel, 16-bit PCM, no other chunk."""
     out = io.BytesIO()
@@ -138,10 +176,14 @@ class Voices:
         check_models(folder)
         os.environ["HF_HUB_OFFLINE"] = "1"  # before huggingface_hub loads: the model comes from the folder only
         import torch
+        from speechbrain.dataio.preprocess import AudioNormalizer
         from speechbrain.inference.speaker import SpeakerRecognition
         from speechbrain.utils.fetching import LocalStrategy
         torch.set_num_threads(THREADS)
         self.torch = torch
+        # H57: what SpeechBrain's load_audio applies to a file: every channel resampled to the model's rate by
+        # torchaudio's sinc resampler, then the channels averaged.
+        self.normalizer = AudioNormalizer(sample_rate=SAMPLE_RATE, mix="avg-to-mono")
         source = str(folder)
         # SpeechBrain's own interface for this model (its model card), loading the files where they are: with
         # NO_LINK it neither copies nor links them, so the folder stays as downloaded.
@@ -159,12 +201,34 @@ class Voices:
             values = self.model.encode_batch(signal, normalize=False)
         return values.reshape(-1).numpy().astype("<f4")
 
-    def extract(self, _header: dict, parts: list[bytes]):
+    def convert(self, data: bytes) -> np.ndarray:
+        """H57: a recording file as SpeechBrain's load_audio converts it (libsndfile's float samples, read in blocks,
+        then the normalizer), then 16-bit PCM, as the page records; the checks and ECAPA then use these samples."""
+        import soundfile
+        with soundfile.SoundFile(io.BytesIO(data)) as file:
+            blocks = list(file.blocks(blocksize=FILE_BLOCK, dtype="float32", always_2d=True))
+            rate = file.samplerate
+        signal = np.concatenate(blocks) if blocks else np.zeros((0, 1), np.float32)
+        with self.torch.inference_mode():
+            mono = self.normalizer(self.torch.from_numpy(signal), rate).numpy()
+        return np.clip(np.round(mono.astype(np.float64) * 32768), -32768, 32767).astype(np.int16)
+
+    def extract(self, header: dict, parts: list[bytes]):
+        facts = None
         try:
-            samples = decode(parts[0])
+            if header.get("file"):
+                facts = file_facts(parts[0])
+                if not readable(facts):
+                    return {"file": facts, "decoded": False}, b""
+                samples = self.convert(parts[0])
+            else:
+                samples = decode(parts[0])
         except ValueError as error:
             return {"invalid": str(error)}, b""
-        reply = {"sample_rate": SAMPLE_RATE, **measure(samples), "embedding_length": self.length}
+        except (RuntimeError, TypeError):  # a file whose header reads but whose data does not
+            return {"invalid": "the data is not a recording"}, b""
+        reply = {**({"file": facts, "decoded": True} if facts is not None else {}), "sample_rate": SAMPLE_RATE,
+                 **measure(samples), "embedding_length": self.length}
         if len(samples) < EMBED_MINIMUM:
             return reply, b""
         embedding = self.embed(samples)

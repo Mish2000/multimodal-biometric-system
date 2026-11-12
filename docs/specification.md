@@ -2,7 +2,7 @@
 
 Approved on 2026-10-20 (H11–H20 in `docs/decisions.md`),
 from the draft of 2026-10-19 as revised on 2026-10-20, and amended with his
-approval since (H24 to H56). Every decision is cited by its ID; a change needs
+approval since (H24 to H57). Every decision is cited by its ID; a change needs
 the researcher's approval and a new entry in the decision record.
 
 ## 1. Purpose and scope
@@ -351,8 +351,18 @@ flow of 2026-10-18).
   tenth, in windows of 25 ms every 10 ms, pauses of up to 0.2 s counted as
   speech); at most 0.1 % of the samples at the 16-bit limits. No standard
   voice quality score is used yet.
-- **Files (H27):** for 1:1 and 1:N only, never for enrolment: WAV, MP3 or OGG
-  up to 10 MB and 3 to 30 seconds long, converted to 16 kHz mono.
+- **Files (H27, H57):** for 1:1 and 1:N only, never for enrolment: WAV, MP3
+  or OGG up to 10 MB, taken as "Upload an existing recording" beside the live
+  choice (as H53). The server takes the kind from the first bytes; the engine
+  reads the header with libsndfile before decoding: a WAV (any encoding it
+  reads), an OGG of Vorbis or Opus, or an MP3; 16 to 192 kHz, since resampling
+  cannot add a band a slower recording lacks; one or two channels; 3 seconds
+  to 2 minutes, which replaces H27's 30 seconds (the model's memory grows
+  with the length: about 2.3 GB at 2 minutes, 9.9 GB at 10). Only such a file
+  is decoded and converted as SpeechBrain's own
+  `load_audio` converts it (every channel to 16 kHz, then the channels
+  averaged), then made 16-bit PCM; the checks and the model then use it as a
+  recording from the microphone. The attempt records `source = file`.
 - **Model:** SpeechBrain's ECAPA-TDNN trained on VoxCeleb
   (`speechbrain/spkrec-ecapa-voxceleb`, Apache 2.0): a 192-value embedding
   compared by cosine similarity; SpeechBrain's verification threshold is 0.25,
@@ -431,7 +441,8 @@ dragged. Enrolment offers neither, and a result names its source. For the
 face, H53 replaced that menu with a visible choice before 1:1 and 1:N, between
 the camera and an existing image, each on a screen of its own; one file at a
 time, whose name never leaves the page. Every attempt ends on an outcome
-screen whose "again" returns to the choice.
+screen whose "again" returns to the choice. The voice offers the same choice
+between the microphone and an existing recording (H57).
 
 ## 7. Attempts and audit (H6, H12)
 
@@ -477,6 +488,9 @@ stored, found or not, with its leading enrolment, the number of embeddings
 searched and its sealed recording; a refused recording is not; the time runs
 from the recording's receipt through every comparison; and deleting a voice
 keeps the identification attempts that it led, with their link emptied.
+A recording from a file (H57) is stored the same way, with `source = file`
+and the converted recording as its probe; a file refused by its own checks
+makes no attempt.
 
 Administrative changes are stored in the audit log of the accounts database:
 time, administrator, action and target (an account, or the algorithm whose
@@ -640,3 +654,8 @@ themes during that work.
   save as one implementation for both modalities, the attempt as H50's,
   anonymous candidates, the caller's own closest recording, and the pass over
   the gallery when the answer arrives (5.3, 6, 7).
+- **H57** Voice recordings from files in 1:1 and 1:N: the visible choice of
+  H53, the kind from the first bytes, the header read before decoding (WAV,
+  OGG of Vorbis or Opus, MP3; 16 to 192 kHz; one or two channels; 3 seconds
+  to 2 minutes), SpeechBrain's own conversion to 16 kHz and `source = file`
+  (5.3, 6, 7).

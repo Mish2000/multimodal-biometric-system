@@ -1512,3 +1512,63 @@ Approved on 2026-11-12, found while H56 was built; no decision changed (H15, H55
 All 175 client tests, one of them extended, type checks and the build passed, and the built client passed 74 offscreen
 checks, two of them new: they measure the empty status line of live verification (18 pixels high before the
 correction, none after) and of live identification. The server is unchanged.
+
+## 2026-11-12: voice recordings from files
+
+Approved on 2026-11-12. Let a recording file take the microphone's place in voice verification and identification, the
+fourth and last step of increment 5, within H27 (H20, H53, H55, H56).
+
+- **H57** ECAPA-TDNN's card in 1:1 and 1:N offers "Upload an existing recording" beside the live choice and "Back", as
+  H53 does for the face: a screen of its own with a visible drop zone, a button that chooses a file and the rules. The
+  microphone does not open there, and enrolment still takes its recordings from the microphone only. One file at a
+  time; the page checks only its size, up to 10 MB, and sends its content alone, never its name.
+- Both routes take the recording's source, `device` (up to 1 MB, as before) or `file` (up to 10 MB). The server takes
+  a file's kind from its first bytes: a WAV, an OGG or an MP3 (an ID3 tag or an MPEG frame of Layer III); any other
+  file is answered as a refused recording with its check and makes no attempt.
+- The voice engine reads the file's header with libsndfile, from memory, before anything is decoded: a WAV (any
+  encoding libsndfile reads, the extended WAV included), an OGG of Vorbis or Opus, or an MP3; a sample rate of 16 to
+  192 kHz, since resampling cannot add the band that a slower recording lacks (SpeechBrain's own note) and the upper
+  bound keeps a header from asking for an unbounded read; one or two channels; and 3 seconds to two minutes, which
+  replaces H27's thirty seconds. Only a file within these limits is decoded, then converted as SpeechBrain's own `load_audio` converts a file (torchaudio's sinc
+  resampler takes every channel to 16 kHz, then the channels are averaged) and made 16-bit PCM. The checks of H54 and
+  ECAPA-TDNN then run on that recording exactly as on one from the microphone.
+- The attempt records `source = file`, and its sealed probe is the engine's WAV of the converted recording, so the
+  recording stored is the one compared; the original file, its name and its metadata are not kept. The answer adds
+  what was read from the header and the converted recording, the caller's own, so the result shows and plays it
+  beside the enrolled one and names its source; a refused file ends on the outcome screen with its checks.
+
+ECAPA-TDNN describes a recording whole, and its time and memory grow with the length. Measured on 2026-11-12 in the
+engine, on synthetic signals, the time and the process's peak memory were 0.8 s and 0.9 GB at thirty seconds, 1.8 s
+and 2.3 GB at two minutes, 3.9 s and 5.5 GB at five minutes, and 7.8 s and 9.9 GB at ten, on a PC of 31.4 GB with
+11.5 GB free at the time; the synthetic voice gave 0.988 to 0.990 alike embeddings at every length. Thirty seconds was
+a cautious bound rather than a need of the model, so a file is compared whole up to two minutes, and a longer one is
+refused by its header. The limit of 10 MB of H27 stays: a WAV of 48 kHz and two channels reaches it after about 55
+seconds, an MP3 or OGG of two minutes takes 1 to 2 MB.
+
+Checked on 2026-11-12 with synthetic signals only, in the voice environment: its libsndfile 1.2.2 is built with
+mpg123, LAME, libvorbis and libopus and reads WAV, OGG and MP3 from memory, so no download was needed. The header gave
+the rate, the channels and the length in under a millisecond, and an MP3 of 3.3 MB held 600 seconds, which is why the
+length is read before decoding. Against a lossless WAV of the same signal, ECAPA-TDNN found the MP3 0.996 to 0.999
+alike, the Vorbis 0.980 to 0.994 and the Opus 0.997; an 8 kHz copy brought back to 16 kHz was only 0.907 alike its 16
+kHz original. A 30-second MP3 of 44.1 kHz and two channels was decoded in 33 ms and converted in 18 ms. Writing the
+test files showed two faults of libsndfile's encoders, which the system never uses: its MP3 encoder garbled 16-bit
+stereo samples and its Vorbis encoder overflowed the stack on twelve seconds in one call, so the tests write floats in
+blocks.
+
+The full server run passed 341 tests, including the four local checks with stored captures; all 39
+engine tests, among them two new ones in which every format is converted exactly as SpeechBrain's `load_audio` converts
+it, 179 client tests, type checks and the build passed. The built client passed 78 offscreen checks with the real
+engines: the synthetic voice of H54's check, as an MP3 of 44.1 kHz and two channels, was verified at 0.958 and
+identified with its own enrolment first, and an 8 kHz copy was refused by its header. Recordings of a real voice from
+files are checked by hand.
+
+## 2026-11-12: live check of voice recordings from files
+
+Voice recordings from files (H57) passed a manual check on the researcher's PC: the local database holds four attempts
+from files, all made from his own account and all matches. Three are verifications: a recording of about 18 seconds,
+twice, at a similarity of 0.690 in 212 and 292 ms, and one of about 35 seconds, longer than the thirty seconds that
+H57 replaced, at 0.283 in 491 ms; the fourth identified that second recording, led by his own enrolment among two, at
+0.283 in 454 ms. Each was saved with `source = file` and its converted recording sealed (about 0.58 and 1.12 MB). The
+files' formats are not kept, and a refused file makes no attempt, so the database does not show which formats or which
+refused files were tried. Increment 5 is complete: the voice from the PC's microphones and from files, in enrolment,
+1:1 and 1:N (H20).

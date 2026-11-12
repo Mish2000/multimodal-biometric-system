@@ -1,4 +1,4 @@
-"""Voice enrolment (H17, H25, H54), verification (H55) and identification (H56).
+"""Voice enrolment (H17, H25, H54), verification (H55) and identification (H56), both also from recording files (H57).
 
 The microphone belongs to the client: the page records a sentence of about four seconds as a WAV of 16 kHz, one
 channel and 16-bit PCM, shows its own level meter and timer, and sends each recording. Every recording passes
@@ -57,6 +57,15 @@ SPEECH_MINIMUM = 2.0  # seconds of speech that stand out of the room's noise (H5
 CLIPPED_MAXIMUM = 0.001  # the share of samples at the 16-bit limits (H54)
 CAPTURE_AGE = timedelta(minutes=30)  # an enrolment's recordings were made in the last half hour
 CLOCK_SKEW = timedelta(minutes=1)
+# H27, H57: a recording file, for 1:1 and 1:N only. Its kind comes from its first bytes; then the engine reads its
+# header with libsndfile, and only a file within these limits is decoded (the engine keeps the same limits).
+FILE_BYTES = 10 << 20
+SOURCES = ("device", "file")
+FILE_FORMATS = {"WAV": None, "WAVEX": None, "OGG": {"VORBIS", "OPUS"}, "MP3": {"MPEG_LAYER_III"}}  # None: any encoding
+KINDS = {"WAV": {"WAV", "WAVEX"}, "OGG": {"OGG"}, "MP3": {"MP3"}}  # the formats each kind of first bytes may hold
+FILE_RATES = (16000, 192000)  # at least the model's rate: resampling cannot add a band a file lacks
+FILE_CHANNELS = (1, 2)
+FILE_SECONDS_MAXIMUM = 120.0  # a file is compared whole up to two minutes; ECAPA's memory grows with the length
 
 
 class VoiceError(Exception):
@@ -138,14 +147,18 @@ def _check(name: str, passed: bool, detail: str, **extra) -> dict:
     return {"name": name, "passed": passed, "detail": detail, **extra}
 
 
-def checks_for(found: dict[str, float]) -> list[dict]:
-    """The checks of one recording (H54), each with its measured value."""
+def _length(duration: float, maximum: float = DURATION_MAXIMUM) -> dict:
+    return _check("length", DURATION_MINIMUM <= duration <= maximum,
+                  f"{duration:.1f} seconds long, {DURATION_MINIMUM:g} to {maximum:g} needed",
+                  seconds=round(duration, 2), minimum=DURATION_MINIMUM, maximum=maximum)
+
+
+def checks_for(found: dict[str, float], maximum: float = DURATION_MAXIMUM) -> list[dict]:
+    """The checks of one recording (H54), each with its measured value; a file may last longer (H57)."""
     duration, speech, clipped = found["duration"], found["speech"], found["clipped"]
     above = {"above_noise": round(found["speech_level"] - found["noise_level"], 1)} if speech > 0 else {}
     return [
-        _check("length", DURATION_MINIMUM <= duration <= DURATION_MAXIMUM,
-               f"{duration:.1f} seconds long, {DURATION_MINIMUM:g} to {DURATION_MAXIMUM:g} needed",
-               seconds=round(duration, 2), minimum=DURATION_MINIMUM, maximum=DURATION_MAXIMUM),
+        _length(duration, maximum),
         _check("speech", speech >= SPEECH_MINIMUM,
                f"{speech:.1f} seconds of speech above the room's noise, at least {SPEECH_MINIMUM:g} needed",
                seconds=round(speech, 2), minimum=SPEECH_MINIMUM, **above),
@@ -161,6 +174,7 @@ class Extracted:
     checks: list[dict]
     wav: bytes | None = None  # the recording again, made by the engine from its samples alone
     embedding: list[float] | None = None
+    file: dict | None = None  # H57: what the engine read from a file's header
 
     @property
     def passed(self) -> bool:
@@ -171,10 +185,63 @@ class Extracted:
         return round(1000 * self.measured["duration"])
 
 
-def _extract(service: VoiceService, recording: bytes) -> Extracted:
-    reply, parts = service.engine.request({"op": "extract"}, [recording])
+def file_kind(data: bytes) -> str | None:
+    """H57: a file's kind from its first bytes alone, before the engine reads it: a WAV (RIFF and WAVE), an OGG
+    (its page marker) or an MP3 (an ID3 tag, or an MPEG audio frame of Layer III); anything else is None."""
+    if data[:4] == b"RIFF" and data[8:12] == b"WAVE":
+        return "WAV"
+    if data[:4] == b"OggS":
+        return "OGG"
+    if data[:3] == b"ID3" or (len(data) >= 2 and data[0] == 0xFF and data[1] & 0xE0 == 0xE0 and (data[1] >> 1) & 3 == 1):
+        return "MP3"
+    return None
+
+
+def _file_facts(reply: dict) -> dict:
+    facts = reply.get("file")
+    if not isinstance(facts, dict) or not all(isinstance(facts.get(key), str) for key in ("format", "subtype")) \
+            or not all(type(facts.get(key)) is int and facts[key] >= 0 for key in ("sample_rate", "channels")) \
+            or type(facts.get("seconds")) not in (int, float) or not math.isfinite(facts["seconds"]) \
+            or facts["seconds"] < 0 or type(reply.get("decoded")) is not bool:
+        raise EngineError("invalid voice reply")
+    return {key: facts[key] for key in ("format", "subtype", "sample_rate", "channels", "seconds")}
+
+
+def file_checks(kind: str, facts: dict) -> list[dict]:
+    """H57: the checks of a file's header, as the engine read it: its kind and format, its rate and channels."""
+    fmt, encoding, rate, channels = facts["format"], facts["subtype"], facts["sample_rate"], facts["channels"]
+    encodings = FILE_FORMATS.get(fmt, set())
+    known = fmt in KINDS[kind] and (encodings is None or encoding in encodings)
+    return [
+        _check("file_type", known, f"{fmt} ({encoding}): a WAV, an MP3 or an OGG of Vorbis or Opus is needed",
+               format=fmt, encoding=encoding),
+        _check("sample_rate", FILE_RATES[0] <= rate <= FILE_RATES[1],
+               f"{rate} Hz, {FILE_RATES[0]} to {FILE_RATES[1]} needed", rate=rate, minimum=FILE_RATES[0],
+               maximum=FILE_RATES[1]),
+        _check("channels", FILE_CHANNELS[0] <= channels <= FILE_CHANNELS[1],
+               f"{channels} channels, {FILE_CHANNELS[0]} or {FILE_CHANNELS[1]} needed", channels=channels,
+               maximum=FILE_CHANNELS[1]),
+    ]
+
+
+def _extract(service: VoiceService, recording: bytes, kind: str | None = None) -> Extracted:
+    """A recording's measurements, checks and embedding; with `kind`, a file (H57), whose header's checks come first:
+    a file outside them is not decoded, and only its header's length joins its checks."""
+    reply, parts = service.engine.request({"op": "extract", **({"file": True} if kind else {})}, [recording])
+    facts, checks = None, []
+    if kind is not None:
+        if "invalid" in reply:
+            raise VoiceError("invalid_recording")
+        facts = _file_facts(reply)
+        checks = file_checks(kind, facts)
+        if not reply["decoded"]:
+            checks.append(_length(facts["seconds"], FILE_SECONDS_MAXIMUM))
+            if all(check["passed"] for check in checks):
+                raise EngineError("invalid voice reply")  # the engine refused a file that these checks allow
+            return Extracted({}, checks, file=facts)
     measured = _measurements(reply)
-    found = Extracted(measured, checks_for(measured))
+    found = Extracted(measured, checks + checks_for(measured, FILE_SECONDS_MAXIMUM if kind else DURATION_MAXIMUM),
+                      file=facts)
     if not found.passed:
         return found
     if reply.get("embedding_length") != EMBEDDING_LENGTH or len(parts) != 2 or len(parts[1]) != 4 * EMBEDDING_LENGTH:
@@ -325,6 +392,32 @@ def _b64(data: bytes) -> str:
     return base64.b64encode(data).decode("ascii")
 
 
+def _take(service: VoiceService, recording: bytes, source: str) -> Extracted:
+    """The new recording of a verification or an identification: from the microphone, or from a file (H27, H57),
+    whose kind from its first bytes comes first and keeps any other file from the engine."""
+    if source not in SOURCES:
+        raise VoiceError("invalid_request")
+    if source == "device":
+        return _extract(service, recording)
+    kind = file_kind(recording)
+    if kind is None:
+        return Extracted({}, [_check("file_type", False, "a WAV, an MP3 or an OGG of Vorbis or Opus is needed")])
+    return _extract(service, recording, kind)
+
+
+def _rejected(probe: Extracted, source: str) -> dict:
+    return {"status": "rejected", "source": source, "checks": probe.checks,
+            **({"file": probe.file} if probe.file is not None else {})}
+
+
+def _origin(probe: Extracted, source: str) -> dict:
+    """The answer's source; for a file (H57), what was read from its header and the recording compared, the caller's
+    own, so the page can show it."""
+    if source != "file":
+        return {"source": source}
+    return {"source": source, "file": probe.file, "probe": _b64(probe.wav)}
+
+
 def _repeat_view(service: VoiceService, keys: Keys, databases: Databases, subject: uuid.UUID, sample_id: uuid.UUID,
                  stored: list[float]) -> bytes:
     """The caller's own winning recording, for the result screen: the sealed recording is opened for its owner only
@@ -339,7 +432,8 @@ def _repeat_view(service: VoiceService, keys: Keys, databases: Databases, subjec
     return wav
 
 
-def verify(service: VoiceService, databases: Databases, keys: Keys, subject: uuid.UUID, recording: bytes) -> dict:
+def verify(service: VoiceService, databases: Databases, keys: Keys, subject: uuid.UUID, recording: bytes,
+           source: str = "device") -> dict:
     at = datetime.now(timezone.utc)
     started = time.perf_counter()
     with _db(databases.biometric) as db:
@@ -351,9 +445,9 @@ def verify(service: VoiceService, databases: Databases, keys: Keys, subject: uui
         raise VoiceError("not_enrolled", 409)  # H15: the client offers the enrolment
     if service.engine.start().get("ecapa_sha256") != version:
         raise VoiceError("method_version_differs", 503)
-    probe = _extract(service, recording)
+    probe = _take(service, recording, source)
     if not probe.passed:
-        return {"status": "rejected", "source": "device", "checks": probe.checks}
+        return _rejected(probe, source)
     with _db(databases.biometric) as db:
         rows = db.execute(text(COMPARISONS), {"probe": vector_text(probe.embedding), "enrolment": enrolment.id}).all()
     if len(rows) != RECORDINGS:
@@ -368,7 +462,7 @@ def verify(service: VoiceService, databases: Databases, keys: Keys, subject: uui
     reference = _repeat_view(service, keys, databases, subject, best.sample_id, vector_values(best.embedding))
     attempt = Attempt(id=uuid.uuid4(), at=at, subject_id=subject, modality=VOICE, mode="verify", algorithm=ECAPA,
                       enrolment_id=enrolment.id, score=score, threshold=threshold, accepted=score > threshold,
-                      duration_ms=duration_ms, source="device")
+                      duration_ms=duration_ms, source=source)
     attempt.probe = keyring.seal(keys, keyring.PROBE, attempt.id.bytes + subject.bytes, probe.wav)
     with _db(databases.biometric) as db, db.begin():
         # A deletion or a new enrolment since the comparison invalidates it (H35); a later deletion cascades.
@@ -379,7 +473,7 @@ def verify(service: VoiceService, databases: Databases, keys: Keys, subject: uui
         db.add(attempt)
     return {"status": "verified", "attempt_id": str(attempt.id), "at": at.isoformat(), "score": score,
             "threshold": threshold, "threshold_origin": origin, "threshold_provisional": provisional,
-            "accepted": attempt.accepted, "duration_ms": duration_ms, "comparisons": comparisons, "source": "device",
+            "accepted": attempt.accepted, "duration_ms": duration_ms, "comparisons": comparisons, **_origin(probe, source),
             "view": {"placement": best.placement, "reference": _b64(reference)}}
 
 
@@ -393,7 +487,8 @@ def verify(service: VoiceService, databases: Databases, keys: Keys, subject: uui
 SEARCH = Search(VOICE, ECAPA, RECORDINGS, VoiceError)
 
 
-def identify(service: VoiceService, databases: Databases, keys: Keys, subject: uuid.UUID, recording: bytes) -> dict:
+def identify(service: VoiceService, databases: Databases, keys: Keys, subject: uuid.UUID, recording: bytes,
+             source: str = "device") -> dict:
     at = datetime.now(timezone.utc)
     started = time.perf_counter()
     with _db(databases.biometric) as db:
@@ -403,9 +498,9 @@ def identify(service: VoiceService, databases: Databases, keys: Keys, subject: u
     gallery = SEARCH.gallery(databases, keys, subject, version)
     if service.engine.start().get("ecapa_sha256") != version:
         raise VoiceError("method_version_differs", 503)
-    probe = _extract(service, recording)
+    probe = _take(service, recording, source)
     if not probe.passed:
-        return {"status": "rejected", "source": "device", "checks": probe.checks}
+        return _rejected(probe, source)
     ranked = SEARCH.rank(databases, gallery, probe.embedding)
     duration_ms = round((time.perf_counter() - started) * 1000)  # receipt through every comparison (H41)
     own = ranked.own(subject)
@@ -416,12 +511,12 @@ def identify(service: VoiceService, databases: Databases, keys: Keys, subject: u
         view = {"rank": rank, "placement": row.placement, "reference": _b64(reference)}
     attempt = Attempt(id=uuid.uuid4(), at=at, subject_id=subject, modality=VOICE, mode="identify", algorithm=ECAPA,
                       top_enrolment_id=ranked.leader.enrolment_id, gallery_size=len(gallery.rows), score=ranked.score,
-                      threshold=threshold, accepted=ranked.score > threshold, duration_ms=duration_ms, source="device")
+                      threshold=threshold, accepted=ranked.score > threshold, duration_ms=duration_ms, source=source)
     attempt.probe = keyring.seal(keys, keyring.PROBE, attempt.id.bytes + subject.bytes, probe.wav)
     SEARCH.save(databases, gallery, attempt)
     return {"status": "identified", "attempt_id": str(attempt.id), "at": at.isoformat(), "score": ranked.score,
             "threshold": threshold, "threshold_origin": origin, "threshold_provisional": provisional,
             "accepted": attempt.accepted, "duration_ms": duration_ms, "gallery_size": len(gallery.rows),
-            "enrolments": len(ranked.rows), "tied_leaders": ranked.tied_leaders(), "source": "device",
+            "enrolments": len(ranked.rows), "tied_leaders": ranked.tied_leaders(), **_origin(probe, source),
             "candidates": ranked.candidates(subject, threshold),
             **({"view": view} if view is not None else {})}

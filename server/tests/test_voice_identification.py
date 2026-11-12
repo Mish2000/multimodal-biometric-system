@@ -111,7 +111,7 @@ def test_identification_needs_a_signed_in_user_with_an_enrolled_voice_and_the_en
     assert error(voice_client.post(ROUTE, json=body, headers=auth(admin))) == (403, "forbidden")
     token = user(voice_client)  # both applications share the database, so the session holds for both
     assert error(client.post(ROUTE, json=body, headers=auth(token))) == (503, "voice_unavailable")
-    assert voice_client.post(ROUTE, json={**body, "source": "file"}, headers=auth(token)).status_code == 422  # step 4 (H27)
+    assert voice_client.post(ROUTE, json={**body, "source": "upload"}, headers=auth(token)).status_code == 422  # device or file (H57)
     other(voice_client, "dana", 1, "b")
     assert error(identify(voice_client, token, person="b")) == (409, "not_enrolled")  # H15, before any comparison
     assert attempts(databases) == []

@@ -8,6 +8,10 @@ recordings of one person match and recordings of two people do not.
 
 --broken gives an embedding with a value that is not a number; --bad-rate answers for another sample rate;
 --drift changes the embedding slightly on every extraction, so a repeated extraction differs (H55).
+
+A fake recording file (H57) is real first bytes followed by the fake recording, whose JSON may hold "file": the
+header that libsndfile would read ("format", "subtype", "sample_rate", "channels", "seconds"); the engine's limits
+decide, as the real engine's do, whether it is decoded. "unreadable": true answers that it is not a recording.
 """
 
 import json
@@ -29,12 +33,23 @@ def option(name: str, default=None):
     return sys.argv[sys.argv.index(name) + 1] if name in sys.argv else default
 
 
-def read(data: bytes) -> dict | None:
+FILE = {"format": "WAV", "subtype": "PCM_16", "sample_rate": 44100, "channels": 2, "seconds": 5.0}
+FILE_FORMATS = {"WAV": None, "WAVEX": None, "OGG": {"VORBIS", "OPUS"}, "MP3": {"MPEG_LAYER_III"}}  # as engines/voice.py
+
+
+def read(data: bytes, file: bool = False) -> dict | None:
     while data.startswith(b"RIFFWAV:"):  # a recording this engine made again from its samples (a stored one, H55)
         data = data[len(b"RIFFWAV:"):]
-    if not data.startswith(b"FAKEVOICE"):
+    at = data.find(b"FAKEVOICE") if file else (0 if data.startswith(b"FAKEVOICE") else -1)  # a file's own header first
+    if at < 0:
         return None
-    return json.loads(data[len(b"FAKEVOICE"):])
+    return json.loads(data[at + len(b"FAKEVOICE"):])
+
+
+def readable(facts: dict) -> bool:
+    encodings = FILE_FORMATS.get(facts["format"], set())
+    return (facts["format"] in FILE_FORMATS and (encodings is None or facts["subtype"] in encodings)
+            and 16000 <= facts["sample_rate"] <= 192000 and 1 <= facts["channels"] <= 2 and 3 <= facts["seconds"] <= 120)
 
 
 def embedding(person: str, variant: int) -> list[float]:
@@ -43,11 +58,15 @@ def embedding(person: str, variant: int) -> list[float]:
     return [base.gauss(0, 1) + 0.15 * change.gauss(0, 1) for _ in range(LENGTH)]
 
 
-def extract(_header, parts):
-    spec = read(parts[0])
-    if spec is None:
+def extract(header, parts):
+    spec = read(parts[0], bool(header.get("file")))
+    if spec is None or spec.get("unreadable"):
         return {"invalid": "the data is not a recording"}, b""
-    reply = {"sample_rate": 8000 if "--bad-rate" in sys.argv else 16000,
+    facts = {**FILE, **spec.get("file", {})} if header.get("file") else None
+    if facts is not None and not readable(facts):
+        return {"file": facts, "decoded": False}, b""
+    reply = {**({"file": facts, "decoded": True} if facts is not None else {}),
+             "sample_rate": 8000 if "--bad-rate" in sys.argv else 16000,
              **{name: spec.get(name, value) for name, value in PASSING.items()}, "embedding_length": LENGTH}
     if reply["duration"] < 1:
         return reply, b""

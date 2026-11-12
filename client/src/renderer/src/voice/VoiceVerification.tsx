@@ -1,16 +1,17 @@
 // H55: voice verification (1:1), as H49 does for the face. H53's choice: ECAPA-TDNN's card offers the live
-// recording (an existing recording joins it in step 4), and the microphone opens only on that choice (H40). A
+// recording, and since H57 an existing recording from a file; the microphone opens only on that choice (H40). A
 // recording that fails its checks makes no attempt and ends on its own outcome screen. The server compares a passing
 // recording with the three enrolled ones, saves the attempt with its sealed recording, and only then answers; the
 // result shows the new recording beside the closest enrolled one, and "Verify again" returns to the choice.
 import { useState, type ComponentType, type ReactNode } from 'react'
 import { useNavigate } from 'react-router'
-import type { VoiceCheck, VoiceMethod, VoiceVerificationAnswer, VoiceVerificationResult } from '../../../shared/bridge'
+import type { VoiceCheck, VoiceMethod, VoiceSource, VoiceVerificationAnswer, VoiceVerificationResult } from '../../../shared/bridge'
 import { errorText } from '../texts'
 import { useSession } from '../session'
 import { MicrophonePanel, type PanelProps, type Recorded } from './MicrophonePanel'
 import { RecordingRow } from './Recording'
 import { VoiceChecks } from './VoiceEnrolment'
+import { VoiceFile, VoiceSourceLine } from './VoiceFile'
 import { pcmOfWav } from './wav'
 
 // H15: before a voice enrolment, verification and identification (H56) offer the enrolment or the home screen.
@@ -50,7 +51,7 @@ export function VoiceVerificationView({ result, probe, rate, onAgain, onLeave }:
       <meter className="face-score" min={0} max={1} value={Math.max(0, result.score)} aria-label={v.scoreLabel} />
       <p className={result.accepted ? 'ok' : 'error'}>{v.score(result.score, result.threshold)}</p>
       <p className="aside">{v.time(result.duration_ms)} {v.saved}</p>
-      <p className="aside">{v.fromMicrophone}</p>
+      <VoiceSourceLine source={result.source} file={result.file} />
       <h2>{v.comparisonsTitle}</h2>
       <ul className="checks">
         {result.comparisons.map((comparison) => (
@@ -73,6 +74,7 @@ export function VoiceVerificationView({ result, probe, rate, onAgain, onLeave }:
 type Stage =
   | { kind: 'choice' }
   | { kind: 'live'; busy: boolean }
+  | { kind: 'file'; busy: boolean } // H57
   | { kind: 'rejected'; checks: VoiceCheck[] }
   | { kind: 'failed'; text: string }
   | { kind: 'verified'; result: VoiceVerificationResult; probe: Int16Array }
@@ -92,12 +94,13 @@ export function VoiceVerification({ method, enrolled, onEnrol, onLeave, Panel = 
 
   if (!enrolled) return <VoiceNotEnrolled title={v.title} text={v.notEnrolled} onEnrol={onEnrol} />
 
-  async function verify(recorded: Recorded) {
-    setStage({ kind: 'live', busy: true })
-    const answer = await call<VoiceVerificationAnswer>('verifyVoice', { recording: recorded.recording })
+  // The page's own samples of a recording from the microphone; for a file, the recording the server compared (H57).
+  async function verify(recording: string, source: VoiceSource, pcm?: Int16Array) {
+    setStage({ kind: source === 'file' ? 'file' : 'live', busy: true })
+    const answer = await call<VoiceVerificationAnswer>('verifyVoice', source === 'file' ? { recording, source } : { recording })
     if (!answer.ok) setStage({ kind: 'failed', text: t.voice.errors[answer.error] ?? errorText(answer, t) })
     else if (answer.data.status === 'rejected') setStage({ kind: 'rejected', checks: answer.data.checks })
-    else setStage({ kind: 'verified', result: answer.data, probe: recorded.pcm })
+    else setStage({ kind: 'verified', result: answer.data, probe: pcm ?? pcmOfWav(answer.data.probe ?? '') })
   }
 
   const again = () => setStage({ kind: 'choice' })
@@ -116,14 +119,24 @@ export function VoiceVerification({ method, enrolled, onEnrol, onLeave, Panel = 
           </div>
           <div className="actions">
             <button type="button" onClick={() => setStage({ kind: 'live', busy: false })}>{v.live}</button>
+            <button type="button" className="secondary" onClick={() => setStage({ kind: 'file', busy: false })}>{t.voice.files.upload}</button>
             <button type="button" className="secondary" onClick={onLeave}>{v.back}</button>
           </div>
+          <p className="aside">{t.voice.files.uploadNote}</p>
         </>
       )}
       {stage.kind === 'live' && (
         <>
           <Panel busy={stage.busy} seconds={method.recording_seconds} rate={method.sample_rate}
-            sentence={t.voice.sentences[t.voice.sentences.length - 1]!} onRecorded={(recorded) => void verify(recorded)} />
+            sentence={t.voice.sentences[t.voice.sentences.length - 1]!}
+            onRecorded={(recorded: Recorded) => void verify(recorded.recording, 'device', recorded.pcm)} />
+          <p className="notice prompt" role="status" aria-live="polite">{stage.busy ? v.comparing : ''}</p>
+          <button type="button" className="secondary" disabled={stage.busy} onClick={again}>{t.voice.cancel}</button>
+        </>
+      )}
+      {stage.kind === 'file' && (
+        <>
+          <VoiceFile busy={stage.busy} onFile={(recording) => void verify(recording, 'file')} />
           <p className="notice prompt" role="status" aria-live="polite">{stage.busy ? v.comparing : ''}</p>
           <button type="button" className="secondary" disabled={stage.busy} onClick={again}>{t.voice.cancel}</button>
         </>

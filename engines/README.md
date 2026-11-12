@@ -17,7 +17,7 @@ They add no package. The face engine runs in its own environment,
 | `pore_sift.py` | `extract` a native PNG to the research's NPZ template; `compare` two templates by its basic matcher, with the research's detector, NMS and descriptor functions | H10, H38 |
 | `learned_pore.py` | `extract` a native PNG and shared pore coordinates to the second model's native float16 NPY template; `compare` by the research's batched matcher | H6, H10, H39 |
 | `face.py` | `detect` the faces of an image: boxes, five landmarks and YuNet's scores; `extract` for exactly one face: the image again as a PNG of its pixels, the aligned 112 x 112 face and SFace's 128 float32 values; images above 1920 pixels are scaled down first | H48, H51 |
-| `voice.py` | `extract` a WAV of 16 kHz, one channel and 16-bit PCM: its length, seconds of speech, levels and clipped share; for a second or more, the recording again as a WAV of its samples and ECAPA-TDNN's 192 float32 values | H54 |
+| `voice.py` | `extract` a WAV of 16 kHz, one channel and 16-bit PCM: its length, seconds of speech, levels and clipped share; for a second or more, the recording again as a WAV of its samples and ECAPA-TDNN's 192 float32 values. With `"file": true`, a WAV, OGG (Vorbis, Opus) or MP3 file: its header first (format, rate, channels, seconds), and only within 16 to 192 kHz, one or two channels and 3 seconds to two minutes is it decoded and converted to 16 kHz mono as SpeechBrain's `load_audio` converts it | H54, H57 |
 
 Pore SIFT starts on demand. Its short configuration check runs in the research
 project Python, which can read the research TOML files and verify the pin.
@@ -197,5 +197,7 @@ environment beside the research one (or `MBS_FACE_PYTHON`) with the models of `l
 `MBS_FACE_MODELS`); faces themselves are tried on the camera by hand. The voice tests (`test_voice.py`) use
 synthetic recordings, tones in bursts over noise and silence: they test the measurements in any environment
 and start the engine in the `multimodal-voice` environment (or `MBS_VOICE_PYTHON`) with the model of
-`local/models/voice` (or `MBS_VOICE_MODELS`); voices themselves are tried on the microphones by hand. Tests
-whose requirements are missing are skipped.
+`local/models/voice` (or `MBS_VOICE_MODELS`); voices themselves are tried on the microphones by hand. Their
+recording files (H57) are written from the same synthetic signals by the voice environment's own libsndfile, as
+floats and in blocks: its MP3 encoder garbles 16-bit stereo samples, and its Vorbis encoder overflows the stack
+on long writes, faults of writing only. Tests whose requirements are missing are skipped.

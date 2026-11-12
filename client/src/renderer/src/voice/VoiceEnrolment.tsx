@@ -23,6 +23,10 @@ export function checkLine(check: VoiceCheck, t: Texts): string {
   if (check.name === 'length') return `${name}: ${v.lengthDetail(check.seconds ?? 0, check.minimum ?? 0, check.maximum ?? 0)}`
   if (check.name === 'speech') return `${name}: ${v.speechDetail(check.seconds ?? 0, check.minimum ?? 0, check.above_noise)}`
   if (check.name === 'clipping') return `${name}: ${v.clippingDetail(check.share ?? 0, check.maximum ?? 0)}`
+  // H57: a file's header
+  if (check.name === 'file_type') return `${name}: ${check.format ? `${check.format} (${check.encoding})` : v.files.typeDetail}`
+  if (check.name === 'sample_rate') return `${name}: ${v.files.rateDetail(check.rate ?? 0, check.minimum ?? 0, check.maximum ?? 0)}`
+  if (check.name === 'channels') return `${name}: ${v.files.channelsDetail(check.channels ?? 0)}`
   return name
 }
 

@@ -337,6 +337,10 @@ export interface VoiceCheck extends Check {
   maximum?: number
   above_noise?: number
   share?: number
+  format?: string // H57: a file's header (file_type, sample_rate, channels)
+  encoding?: string
+  rate?: number
+  channels?: number
 }
 
 export interface VoiceCheckResult {
@@ -381,9 +385,29 @@ export type VoiceEnrolmentAnswer =
   | { status: 'another'; pairs: VoicePair[]; threshold: number; kept: number }
   | { status: 'failed'; error: string; pairs: VoicePair[]; threshold: number; kept: number }
 
+// H57: a new recording comes from the microphone or from a file. For a file, `file` is what was read from its header,
+// and the answer's `probe` is the recording compared (16 kHz, one channel, a WAV in base64), the caller's own.
+export type VoiceSource = 'device' | 'file'
+
+export interface VoiceFile {
+  format: string // libsndfile's names: WAV, WAVEX, OGG or MP3
+  subtype: string
+  sample_rate: number
+  channels: number
+  seconds: number
+}
+
+interface VoiceOrigin {
+  source: VoiceSource
+  file?: VoiceFile
+  probe?: string
+}
+
+export type VoiceRejected = { status: 'rejected'; source: VoiceSource; checks: VoiceCheck[]; file?: VoiceFile }
+
 // H55: a voice verification's answer. A refused recording made no attempt; a verified one was saved first. `view`
 // is the caller's own closest enrolled recording, a WAV in base64.
-export interface VoiceVerificationResult {
+export interface VoiceVerificationResult extends VoiceOrigin {
   status: 'verified'
   attempt_id: string
   at: string
@@ -394,16 +418,15 @@ export interface VoiceVerificationResult {
   accepted: boolean
   duration_ms: number
   comparisons: Array<{ placement: number; score: number; accepted: boolean }>
-  source: 'device'
   view: { placement: number; reference: string }
 }
 
-export type VoiceVerificationAnswer = VoiceVerificationResult | { status: 'rejected'; source: 'device'; checks: VoiceCheck[] }
+export type VoiceVerificationAnswer = VoiceVerificationResult | VoiceRejected
 
 // H56: a voice identification's answer, saved first. Other candidates have only a rank for this attempt and no
 // recording (H18); `view` is the caller's own closest enrolled recording, a WAV in base64, when it is among the
 // candidates shown.
-export interface VoiceIdentificationResult {
+export interface VoiceIdentificationResult extends VoiceOrigin {
   status: 'identified'
   attempt_id: string
   at: string
@@ -417,11 +440,10 @@ export interface VoiceIdentificationResult {
   enrolments: number
   tied_leaders: number
   candidates: Array<{ rank: number; own: boolean; score: number; accepted: boolean }>
-  source: 'device'
   view?: { rank: number; placement: number; reference: string }
 }
 
-export type VoiceIdentificationAnswer = VoiceIdentificationResult | { status: 'rejected'; source: 'device'; checks: VoiceCheck[] }
+export type VoiceIdentificationAnswer = VoiceIdentificationResult | VoiceRejected
 
 // H48: whether the laptop's own screen is in use. With the lid closed and external monitors on, Windows turns
 // it off, and the built-in camera sees only the inside of the lid.

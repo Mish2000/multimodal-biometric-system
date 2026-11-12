@@ -33,8 +33,8 @@ def test_the_route_is_only_for_signed_in_users_and_needs_the_engine(voice_client
     assert error(voice_client.post("/api/voice/verifications", json=body, headers=auth(admin))) == (403, "forbidden")
     token = user(voice_client)  # both applications share the database, so the session holds for both
     assert error(client.post("/api/voice/verifications", json=body, headers=auth(token))) == (503, "voice_unavailable")
-    assert voice_client.post("/api/voice/verifications", json={**body, "source": "file"},
-                             headers=auth(token)).status_code == 422  # files come with step 4 (H27)
+    assert voice_client.post("/api/voice/verifications", json={**body, "source": "upload"},
+                             headers=auth(token)).status_code == 422  # a device or a file only (H57)
 
 
 def test_verification_before_an_enrolment_offers_the_enrolment(voice_client):

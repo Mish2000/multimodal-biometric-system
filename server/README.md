@@ -6,7 +6,7 @@ administration (H3, H11, H12, H14, H19, H29 to H32), fingerprint enrolment (H33)
 and 1:1 verification with OpenCV SIFT, Pore SIFT and Pore CNN
 (H35, H38, H39) and 1:N identification (H41, H42) with all three methods, and face enrolment (H48),
 1:1 verification (H49) and 1:N identification (H50), also from image files (H51), and voice enrolment
-(H54), 1:1 verification (H55) and 1:N identification (H56). It runs with the `multimodal-server` environment and
+(H54), 1:1 verification (H55) and 1:N identification (H56), also from recording files (H57). It runs with the `multimodal-server` environment and
 starts PostgreSQL from the `multimodal-postgres` environment (`environments/`); the face engine runs in
 `multimodal-face` and the voice engine in `multimodal-voice`.
 
@@ -124,8 +124,8 @@ to their defaults when `local/server.toml` does not name them; without them the 
 | `GET /api/voice/method` | user | ECAPA-TDNN's threshold, its origin, whether the voice engine is set up, and the rules of an enrolment and its recordings (H54) |
 | `POST /api/voice/checks` | user | one recording (`{"recording": base64}`, a WAV of 16 kHz, one channel and 16-bit PCM, at most 1 MB): its checks; nothing is kept |
 | `POST /api/voice/enrolments` | user | three to six recordings with their times, in order: 201 `saved` when three match each other, otherwise 200 `another`, or `failed` after six |
-| `POST /api/voice/verifications` | user | verify the voice with one recording (H55): `rejected` with its checks and no attempt, or `verified` with the three scores, the decision and the closest enrolled recording (a WAV, the caller's own), sent after the attempt is saved; 409 `not_enrolled` before an enrolment |
-| `POST /api/voice/identifications` | user | identify the voice with one recording (H56): `rejected` with its checks and no attempt, or `identified` with the five leading enrolments (the caller's own marked, others anonymous), the tie count, the gallery's size and, when the caller's enrolment is among the five, its closest enrolled recording (a WAV), sent after the attempt is saved; 409 `not_enrolled` before an enrolment, 409 `gallery_changed` when the gallery changed during the search |
+| `POST /api/voice/verifications` | user | verify the voice with one recording from the microphone or a file (H55, H57): `rejected` with its checks and no attempt, or `verified` with the three scores, the decision and the closest enrolled recording (a WAV, the caller's own), sent after the attempt is saved; 409 `not_enrolled` before an enrolment |
+| `POST /api/voice/identifications` | user | identify the voice with one recording from the microphone or a file (H56, H57): `rejected` with its checks and no attempt, or `identified` with the five leading enrolments (the caller's own marked, others anonymous), the tie count, the gallery's size and, when the caller's enrolment is among the five, its closest enrolled recording (a WAV), sent after the attempt is saved; 409 `not_enrolled` before an enrolment, 409 `gallery_changed` when the gallery changed during the search |
 | `DELETE /api/voice/enrolment` | user | delete the voice's current and replaced enrolments with their recordings, embeddings and verification attempts; identification attempts stay, without the link; 404 when it is not enrolled |
 | `GET /api/admin/accounts`, `POST /api/admin/accounts/{id}/status` | administrator | accounts; disable or enable |
 | `POST /api/admin/administrators`, `GET /api/admin/audit` | administrator | a new administrator; the audit log |
@@ -256,6 +256,15 @@ pixels); a file that fails is answered `rejected` with these checks and makes no
 a photo upright by its EXIF orientation, finds faces from 112 pixels wide to the whole frame and compares them on the image's own pixels (H52), and stores an image above 1920 pixels as its copy of 1920; the answer gives
 `source` and `size` (`decoded`, `stored`), and the attempt records the source. Enrolment and the live checks
 take no files.
+
+Both voice routes take `{"recording": base64, "source": "device" | "file"}` (H57): the page's recording up to 1 MB, a
+file up to 10 MB. The server takes a file's kind from its first bytes (a WAV, an OGG, or an MP3 by its ID3 tag or an
+MPEG frame of Layer III); any other file is answered `rejected` with `file_type` and makes no attempt. The engine
+reads the header with libsndfile before decoding (a WAV of any encoding it reads, an OGG of Vorbis or Opus, an MP3;
+16 to 192 kHz; one or two channels; 3 seconds to two minutes, compared whole) and decodes only a file within those limits, converting it as
+SpeechBrain's `load_audio` does to 16 kHz, one channel and 16-bit PCM; the header's checks come before H54's in the
+answer. The answer gives `source`, and for a file `file` (its format, encoding, rate, channels and seconds) and
+`probe`, the converted recording, which is also the sealed probe of the attempt.
 
 Cancellation closes the acquisition worker's standard input (H36). The worker
 finishes its current native call, switches off the illumination (H37),

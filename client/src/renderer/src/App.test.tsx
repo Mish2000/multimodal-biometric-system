@@ -69,6 +69,7 @@ class FakeServer implements MbsBridge {
   voiceVerifications = 0
   voiceIdentifications = 0 // H56
   voiceIdentifyErrors: string[] = [] // the errors the next identifications answer with
+  voiceSent: Array<{ recording: string; source: string }> = [] // H57
 
   displays = async (): Promise<DisplayState> => ({ internalDisplay: false })
 
@@ -284,6 +285,8 @@ class FakeServer implements MbsBridge {
       }
       case 'verifyVoice':
         this.voiceVerifications++
+        this.voiceSent.push({ recording: body.recording ?? '', source: body.source ?? 'device' })
+        if (body.source === 'file') return ok(voiceFileAnswer(body.recording ?? '', VOICE_VERIFIED))
         if (body.recording === 'quiet')
           return ok({ status: 'rejected', source: 'device', checks: [
             { name: 'length', passed: true, detail: '', seconds: 5, minimum: 3, maximum: 30 },
@@ -293,6 +296,7 @@ class FakeServer implements MbsBridge {
         return ok(VOICE_VERIFIED)
       case 'identifyVoice': {
         this.voiceIdentifications++
+        this.voiceSent.push({ recording: body.recording ?? '', source: body.source ?? 'device' })
         const failure = this.voiceIdentifyErrors.shift()
         if (failure) return no(409, failure)
         if (body.recording === 'quiet')
@@ -301,7 +305,7 @@ class FakeServer implements MbsBridge {
             { name: 'speech', passed: false, detail: '', seconds: 0.6, minimum: 2 },
             { name: 'clipping', passed: true, detail: '', share: 0, maximum: 0.001 },
           ] })
-        return ok(VOICE_IDENTIFIED)
+        return ok(body.source === 'file' ? voiceFileAnswer(body.recording ?? '', VOICE_IDENTIFIED) : VOICE_IDENTIFIED)
       }
       case 'deleteVoice':
         if (!this.voice.enrolled) return no(404, 'not_enrolled')
@@ -399,6 +403,21 @@ const VOICE_IDENTIFIED: VoiceIdentificationResult = {
   candidates: [{ rank: 1, own: true, score: 0.749, accepted: true }, { rank: 2, own: false, score: 0.188, accepted: false },
     { rank: 3, own: false, score: 0.041, accepted: false }],
   source: 'device', view: { rank: 1, placement: 3, reference: base64Of(wavBytes(new Int16Array([0, 800, -800, 400]), 16000)) },
+}
+
+// H57: a file's answer: a FLAC (its first bytes, "fLaC", are "ZkxhQw" in base64) is refused by its kind; any other
+// file is compared as an MP3 of 44.1 kHz and two channels, and the answer carries the recording compared.
+const VOICE_FILE = { format: 'MP3', subtype: 'MPEG_LAYER_III', sample_rate: 44100, channels: 2, seconds: 12 }
+function voiceFileAnswer<T extends object>(recording: string, result: T) {
+  if (recording.startsWith('ZkxhQw'))
+    return { status: 'rejected', source: 'file', checks: [{ name: 'file_type', passed: false, detail: '' }] }
+  if (recording.startsWith('UklGR')) // "RIFF": a WAV of 8 kHz, refused by its header
+    return { status: 'rejected', source: 'file', file: { ...VOICE_FILE, format: 'WAV', subtype: 'PCM_16', sample_rate: 8000, channels: 1 },
+      checks: [{ name: 'file_type', passed: true, detail: '', format: 'WAV', encoding: 'PCM_16' },
+        { name: 'sample_rate', passed: false, detail: '', rate: 8000, minimum: 16000, maximum: 192000 },
+        { name: 'channels', passed: true, detail: '', channels: 1, maximum: 2 },
+        { name: 'length', passed: true, detail: '', seconds: 12, minimum: 3, maximum: 30 }] }
+  return { ...result, source: 'file', file: VOICE_FILE, probe: base64Of(wavBytes(new Int16Array([0, 600, -600, 300]), 16000)) }
 }
 
 // H49: a face verification's answer, as the server sends it after saving the attempt.
@@ -1804,7 +1823,7 @@ describe('the voice (H54)', () => {
     expect(screen.getByRole('heading', { name: 'ECAPA-TDNN' })).toBeTruthy()
     expect(screen.getByText(/Accepts above 0.25, SpeechBrain’s own verification threshold/)).toBeTruthy()
     expect(screen.getByText(/equal error rate of 0.80%/)).toBeTruthy()
-    expect(screen.getByText(/Recordings from a file, for verification and identification, come in the next build step/)).toBeTruthy()
+    expect(screen.getByText('The face has its own page, from the home screen.')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Delete the voice enrolment' })).toBeNull()
   })
 
@@ -1987,7 +2006,7 @@ describe('voice verification (H55)', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Verify my voice (1:1)' }))
     expect(screen.getByRole('heading', { name: 'Verify your voice' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Live verification' })).toBeTruthy()
-    expect(screen.queryByText(/Upload/)).toBeNull()
+    expect(screen.getByRole('button', { name: 'Upload an existing recording' })).toBeTruthy() // H57
     expect(screen.queryByRole('meter')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Back' }))
     expect(await screen.findByRole('button', { name: 'Enrol my voice again' })).toBeTruthy()
@@ -2096,7 +2115,7 @@ describe('voice identification (H56)', () => {
     expect(screen.getByText(/Other users appear anonymously, without a recording or a name/)).toBeTruthy()
     expect(screen.getByText(/the search itself is one database query/)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Live identification' })).toBeTruthy()
-    expect(screen.queryByText(/Upload/)).toBeNull()
+    expect(screen.getByRole('button', { name: 'Upload an existing recording' })).toBeTruthy() // H57
     expect(screen.queryByRole('meter')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Back' }))
     expect(await screen.findByRole('button', { name: 'Enrol my voice again' })).toBeTruthy()
@@ -2194,5 +2213,91 @@ describe('voice identification (H56)', () => {
     expect(screen.getByRole('heading', { name: 'זיהוי קול (1:N)' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'זיהוי חי' })).toBeTruthy()
     expect(document.documentElement.dir).toBe('rtl')
+  })
+})
+
+describe('voice recordings from files (H57)', () => {
+  const MP3 = new Uint8Array([0x49, 0x44, 0x33, 4, 0, 0, 0, 0, 0, 0, 1, 2, 3]) // "ID3", the start of an MP3's tag
+  const FLAC = new Uint8Array([0x66, 0x4c, 0x61, 0x43, 0, 0, 0, 0x22]) // "fLaC"
+  const WAV = new Uint8Array([0x52, 0x49, 0x46, 0x46, 0x24, 0, 0, 0, 0x57, 0x41, 0x56, 0x45]) // "RIFF" and "WAVE"
+  const choose = (files: File[]) => fireEvent.change(screen.getByTestId('voice-file'), { target: { files } })
+  const drag = (type: 'dragEnter' | 'dragLeave' | 'drop', files: File[] = []) =>
+    fireEvent[type](window, { dataTransfer: { types: ['Files'], files } })
+
+  async function openVoiceAs(language: Language = 'en') {
+    server.voice = { enrolled: true, enrolled_at: '2026-11-11T12:00:00+00:00' }
+    server.add('dana', 'user', { language })
+    open('/sign-in')
+    await signIn('dana', 'dana password 1')
+    fireEvent.click(await cardLink(language === 'he' ? 'קול' : 'Voice'))
+  }
+
+  it('offers an existing recording beside the live choice in 1:1 and 1:N, and enrolment offers none', async () => {
+    await openVoiceAs()
+    fireEvent.click(await screen.findByRole('button', { name: 'Verify my voice (1:1)' }))
+    expect(screen.getByRole('button', { name: 'Upload an existing recording' })).toBeTruthy()
+    expect(screen.getByText(/WAV, MP3 or OGG, up to 10 MB, 3 seconds to 2 minutes long, at 16 kHz or more/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Identify (1:N)' }))
+    expect(screen.getByRole('button', { name: 'Upload an existing recording' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Enrol my voice again' }))
+    expect(await screen.findByRole('heading', { name: 'Enrolling your voice' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Upload an existing recording' })).toBeNull()
+    expect(screen.queryByTestId('voice-file')).toBeNull()
+  })
+
+  it('sends a chosen file’s content alone; the result shows the recording compared and its source, and Verify again returns to the choice', async () => {
+    await openVoiceAs()
+    fireEvent.click(await screen.findByRole('button', { name: 'Verify my voice (1:1)' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Upload an existing recording' }))
+    expect(screen.getByText('Drag a recording here, or choose a file.')).toBeTruthy()
+    expect(screen.queryByText('No microphone is connected.')).toBeNull() // the file screen opens no microphone
+    choose([new File([MP3], 'my voice note.mp3', { type: 'audio/mpeg' })])
+    expect(await screen.findByRole('heading', { name: 'Your voice matches' })).toBeTruthy()
+    expect(server.voiceSent).toEqual([{ recording: btoa(String.fromCharCode(...MP3)), source: 'file' }])
+    expect(JSON.stringify(server.voiceSent)).not.toContain('note')
+    expect(screen.getByText('Source: a recording file, MP3, 44.1 kHz, 2 channels, 12.0 seconds; compared at 16 kHz, one channel.')).toBeTruthy()
+    expect(screen.getAllByRole('img').map((item) => item.getAttribute('aria-label'))).toEqual(['New recording', 'Enrolled recording 2'])
+    fireEvent.click(screen.getByRole('button', { name: 'Verify again' }))
+    expect(screen.getByRole('button', { name: 'Upload an existing recording' })).toBeTruthy()
+  })
+
+  it('takes one dropped file of up to 10 MB in identification, and ends a refused one on its outcome screen with its checks', async () => {
+    await openVoiceAs()
+    fireEvent.click(await screen.findByRole('button', { name: 'Identify (1:N)' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Upload an existing recording' }))
+    drag('dragEnter')
+    expect(screen.getByText('Drop the recording to use it')).toBeTruthy()
+    drag('dragLeave')
+    expect(screen.queryByText('Drop the recording to use it')).toBeNull()
+    drag('drop', [new File([MP3], 'a.mp3'), new File([MP3], 'b.mp3')])
+    expect(await screen.findByText('Use one recording at a time.')).toBeTruthy()
+    choose([new File([new Uint8Array(10 * 1024 * 1024 + 1)], 'long.wav')])
+    expect(await screen.findByText('The file is larger than 10 MB.')).toBeTruthy()
+    expect(server.voiceIdentifications).toBe(0)
+    drag('drop', [new File([FLAC], 'voice.flac')])
+    expect(await screen.findByRole('heading', { name: 'The recording did not pass its checks' })).toBeTruthy()
+    expect(screen.getByText(/A WAV, MP3 or OGG recording: only WAV, MP3 and OGG recordings can be used/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Identify again' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Upload an existing recording' }))
+    drag('drop', [new File([WAV], 'phone.wav')])
+    expect(await screen.findByText(/Sample rate: 8 kHz; 16 to 192 kHz needed/)).toBeTruthy()
+    expect(screen.getByText(/A WAV, MP3 or OGG recording: WAV \(PCM_16\)/)).toBeTruthy()
+    expect(screen.getByText(/Channels: 1 channels; one or two needed/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Identify again' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Upload an existing recording' }))
+    drag('drop', [new File([MP3], 'me.mp3')])
+    expect(await screen.findByRole('heading', { name: 'A matching voice was found' })).toBeTruthy()
+    expect(screen.getByText(/^Source: a recording file, MP3, 44.1 kHz/)).toBeTruthy()
+    expect(server.voiceSent.map((sent) => sent.source)).toEqual(['file', 'file', 'file'])
+  })
+
+  it('speaks Hebrew', async () => {
+    await openVoiceAs('he')
+    fireEvent.click(await screen.findByRole('button', { name: 'אימות הקול שלי (1:1)' }))
+    fireEvent.click(screen.getByRole('button', { name: 'העלאת הקלטה קיימת' }))
+    expect(screen.getByText('אפשר לגרור לכאן הקלטה, או לבחור קובץ.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'בחירת קובץ הקלטה' })).toBeTruthy()
   })
 })

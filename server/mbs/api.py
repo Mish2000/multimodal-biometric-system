@@ -187,6 +187,17 @@ class VoiceRecording(BaseModel):
     recording: str = Field(max_length=_base64_length(voice.RECORDING_BYTES))
 
 
+class VoiceProbe(BaseModel):
+    """The new recording of a verification or identification (H55, H56): a WAV the page recorded, or the content of
+    a WAV, MP3 or OGG file (H27, H57), in base64. Enrolment and the checks take no files."""
+    model_config = {"extra": "forbid"}
+    recording: str = Field(max_length=_base64_length(voice.FILE_BYTES))
+    source: Literal["device", "file"] = "device"
+
+    def data(self) -> bytes:
+        return voice.decode_recording(self.recording, voice.FILE_BYTES if self.source == "file" else voice.RECORDING_BYTES)
+
+
 class VoiceMade(VoiceRecording):
     captured_at: datetime
 
@@ -450,22 +461,22 @@ def create_app(databases: Databases, keys: Keys, outbox: Outbox, fingerprints: F
     # sealed recording before the answer, a refused recording is not.
     @app.post("/api/voice/verifications")
     @allow(USER)
-    def verify_voice(body: VoiceRecording, account: SignedIn = Depends(signed_in)) -> dict:
+    def verify_voice(body: VoiceProbe, account: SignedIn = Depends(signed_in)) -> dict:
         service = voice_service()
-        recording = voice.decode_recording(body.recording, voice.RECORDING_BYTES)
+        recording = body.data()
         subject = accounts.subject_of(databases, keys, account.id)
-        return voice_work(lambda: voice.verify(service, databases, keys, subject, recording))
+        return voice_work(lambda: voice.verify(service, databases, keys, subject, recording, body.source))
 
     # H56: one recording against every current voice enrolment of the active users, as H50 does for the face. A
     # completed search is saved with its sealed recording before the answer, a refused recording is not; other users
     # stay anonymous (H18).
     @app.post("/api/voice/identifications")
     @allow(USER)
-    def identify_voice(body: VoiceRecording, account: SignedIn = Depends(signed_in)) -> dict:
+    def identify_voice(body: VoiceProbe, account: SignedIn = Depends(signed_in)) -> dict:
         service = voice_service()
-        recording = voice.decode_recording(body.recording, voice.RECORDING_BYTES)
+        recording = body.data()
         subject = accounts.subject_of(databases, keys, account.id)
-        return voice_work(lambda: voice.identify(service, databases, keys, subject, recording))
+        return voice_work(lambda: voice.identify(service, databases, keys, subject, recording, body.source))
 
     # As H34 for a finger and H48 for the face: the voice's enrolment is erased with its recordings and embeddings,
     # and (H55) with its verification attempts and their sealed recordings; identification attempts stay, without

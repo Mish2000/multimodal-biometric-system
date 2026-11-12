@@ -49,11 +49,11 @@ def wav_of(samples: np.ndarray, rate: int = RATE, channels: int = 1, width: int 
 
 
 def bursts(seconds: float = 5.0, on: tuple[tuple[float, float], ...] = ((0.5, 4.5),), level_db: float = -20.0,
-           noise_db: float = -60.0, seed: int = 1) -> np.ndarray:
+           noise_db: float = -60.0, seed: int = 1, rate: int = RATE) -> np.ndarray:
     """A synthetic recording: harmonics of a gliding pitch, sounding only inside the `on` spans, over steady noise."""
     rng = np.random.default_rng(seed)
-    t = np.arange(int(seconds * RATE)) / RATE
-    pitch = 2 * np.pi * np.cumsum(140 + 25 * np.sin(2 * np.pi * 0.8 * t)) / RATE
+    t = np.arange(int(seconds * rate)) / rate
+    pitch = 2 * np.pi * np.cumsum(140 + 25 * np.sin(2 * np.pi * 0.8 * t)) / rate
     tone = sum(np.sin(k * pitch) / k for k in range(1, 10))
     tone *= 10 ** (level_db / 20) / np.sqrt(np.mean(tone ** 2))
     gate = np.zeros_like(t)
@@ -178,3 +178,87 @@ def test_data_that_is_not_such_a_recording_is_refused_and_the_engine_keeps_servi
     reply, parts = ask(engine, {"op": "extract"}, wav_of(bursts(seconds=0.5)))
     assert reply["ok"] and reply["duration"] == 0.5 and parts == [b""]  # too short to describe
     assert ask(engine, {"op": "extract"}, wav_of(bursts()))[0]["embedding_length"] == 192
+
+
+# H57: recording files. They are written here by the voice environment's own libsndfile, from the synthetic signal,
+# as floats and in blocks: its MP3 encoder garbled 16-bit stereo samples, and its Vorbis encoder overflowed the stack
+# when given twelve seconds in one call. Both are writing faults; the system only reads files.
+ENCODE = """
+import io, sys, numpy as np, soundfile as sf
+rate, channels, fmt, subtype = int(sys.argv[1]), int(sys.argv[2]), sys.argv[3], sys.argv[4]
+samples = np.frombuffer(sys.stdin.buffer.read(), "<i2").reshape(-1, channels).astype(np.float32) / 32768
+out = io.BytesIO()
+with sf.SoundFile(out, "w", rate, channels, subtype, format=fmt) as file:
+    for start in range(0, len(samples), 4096):
+        file.write(samples[start:start + 4096])
+sys.stdout.buffer.write(out.getvalue())
+"""
+# SpeechBrain's own load_audio of a file on disk (its audio_io.load and AudioNormalizer), then 16-bit PCM.
+LOAD_AUDIO = """
+import sys, numpy as np, torch
+torch.set_num_threads(8)
+from speechbrain.dataio import audio_io
+from speechbrain.dataio.preprocess import AudioNormalizer
+signal, rate = audio_io.load(sys.argv[1], channels_first=False)
+mono = AudioNormalizer(sample_rate=16000)(signal, rate).numpy()
+sys.stdout.buffer.write(np.clip(np.round(mono.astype(np.float64) * 32768), -32768, 32767).astype("<i2").tobytes())
+"""
+
+
+def in_voice_environment(script: str, *args: str, data: bytes = b"") -> bytes:
+    return subprocess.run([str(VOICE_PYTHON), "-I", "-c", script, *args], input=data, capture_output=True, check=True,
+                          env=research_link.environment(VOICE_PYTHON)).stdout
+
+
+def encoded(samples: np.ndarray, rate: int, fmt: str, subtype: str, channels: int = 1) -> bytes:
+    """A synthetic recording file in one of libsndfile's formats; stereo repeats the signal in both channels."""
+    frames = np.repeat(samples, channels) if channels > 1 else samples
+    return in_voice_environment(ENCODE, str(rate), str(channels), fmt, subtype, data=frames.astype("<i2").tobytes())
+
+
+def samples_of(wav_data: bytes) -> np.ndarray:
+    with wave.open(io.BytesIO(wav_data)) as reader:
+        assert (reader.getframerate(), reader.getnchannels(), reader.getsampwidth()) == (RATE, 1, 2)
+        return np.frombuffer(reader.readframes(reader.getnframes()), "<i2")
+
+
+@needs_voice
+def test_recording_files_are_converted_as_speechbrains_load_audio_converts_them(engine, tmp_path):
+    protocol.read_message(engine.stdout)
+    files = [
+        ("WAV", "PCM_16", 44100, 2, encoded(bursts(12, seed=4, rate=44100), 44100, "WAV", "PCM_16", 2)),
+        ("WAVEX", "PCM_24", 48000, 1, encoded(bursts(12, seed=5, rate=48000), 48000, "WAVEX", "PCM_24")),
+        ("OGG", "VORBIS", 48000, 2, encoded(bursts(12, seed=6, rate=48000), 48000, "OGG", "VORBIS", 2)),
+        ("OGG", "OPUS", 48000, 1, encoded(bursts(12, seed=7, rate=48000), 48000, "OGG", "OPUS")),
+        ("MP3", "MPEG_LAYER_III", 44100, 2, encoded(bursts(12, seed=8, rate=44100), 44100, "MP3", "MPEG_LAYER_III", 2)),
+    ]
+    for fmt, subtype, rate, channels, data in files:
+        reply, parts = ask(engine, {"op": "extract", "file": True}, data)
+        assert reply["ok"] and reply["decoded"] is True, (fmt, reply)
+        assert reply["file"] == {"format": fmt, "subtype": subtype, "sample_rate": rate, "channels": channels,
+                                 "seconds": 12.0}
+        assert reply["sample_rate"] == RATE and reply["duration"] == 12.0 and reply["speech"] > 2.0
+        converted = samples_of(parts[0])
+        path = tmp_path / f"file.{fmt.lower()}"
+        path.write_bytes(data)
+        assert np.array_equal(converted, np.frombuffer(in_voice_environment(LOAD_AUDIO, str(path)), "<i2")), fmt
+        # The stored WAV is the recording compared: read again as a recording, it gives the same 192 values.
+        assert ask(engine, {"op": "extract"}, parts[0])[1][1] == parts[1], fmt
+
+
+@needs_voice
+def test_a_file_outside_the_limits_is_not_decoded_and_one_that_is_not_a_recording_is_refused(engine):
+    protocol.read_message(engine.stdout)
+    for data, expected in ((encoded(bursts(12), RATE, "FLAC", "PCM_16"), {"format": "FLAC"}),
+                           (wav_of(bursts(12, rate=8000), rate=8000), {"sample_rate": 8000}),
+                           (wav_of(np.repeat(bursts(12), 3), channels=3), {"channels": 3}),
+                           (wav_of(bursts(121, on=((0.5, 120.0),))), {"seconds": 121.0}),
+                           (wav_of(bursts(2.5, on=((0.2, 2.3),))), {"seconds": 2.5})):
+        reply, parts = ask(engine, {"op": "extract", "file": True}, data)
+        assert reply["ok"] and reply["decoded"] is False and parts == [b""], reply
+        assert {key: reply["file"][key] for key in expected} == expected
+        assert "duration" not in reply and "embedding_length" not in reply
+    reply, parts = ask(engine, {"op": "extract", "file": True}, b"OggS" + bytes(range(256)) * 8)
+    assert reply["ok"] and "not a recording" in reply["invalid"] and parts == [b""]
+    reply = ask(engine, {"op": "extract", "file": True}, wav_of(bursts(90, on=((0.5, 89.5),))))[0]
+    assert reply["decoded"] is True and reply["duration"] == 90.0  # a file is compared whole up to two minutes

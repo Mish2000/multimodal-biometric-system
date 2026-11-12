@@ -1,18 +1,19 @@
 // H56: voice identification (1:N), as H50 does for the face and H55 for the voice's 1:1. ECAPA-TDNN's card offers the
-// live identification (an existing recording joins it in step 4, H27), and the microphone opens only on that choice
-// (H40). A recording that fails its checks makes no attempt and ends on its own outcome screen. The server ranks every
+// live identification and, since H57, an existing recording from a file (H27); the microphone opens only on that
+// choice (H40). A recording that fails its checks makes no attempt and ends on its own outcome screen. The server ranks every
 // current voice enrolment of the active users by its highest similarity, saves the attempt with its sealed recording,
 // and only then answers. Other users stay anonymous, without a recording or a name, and only the caller's own enrolled
 // recording is sent and can be played (H18). The search itself is one database query of a few milliseconds, so the
 // pass over the gallery plays once when the answer arrives (GalleryPass.tsx); "Identify again" returns to the choice.
 import { useState, type ComponentType } from 'react'
-import type { VoiceCheck, VoiceIdentificationAnswer, VoiceIdentificationResult, VoiceMethod } from '../../../shared/bridge'
+import type { VoiceCheck, VoiceIdentificationAnswer, VoiceIdentificationResult, VoiceMethod, VoiceSource } from '../../../shared/bridge'
 import { GalleryPass, usePass } from '../GalleryPass'
 import { errorText } from '../texts'
 import { useSession } from '../session'
 import { MicrophonePanel, type PanelProps, type Recorded } from './MicrophonePanel'
 import { RecordingRow } from './Recording'
 import { VoiceChecks } from './VoiceEnrolment'
+import { VoiceFile, VoiceSourceLine } from './VoiceFile'
 import { VoiceNotEnrolled } from './VoiceVerification'
 import { pcmOfWav } from './wav'
 
@@ -80,7 +81,7 @@ export function VoiceIdentificationView({ result, probe, rate, onAgain, onLeave 
       {gallery}
       <p className="aside">{n.privacy}</p>
       <p className="aside">{v.verify.time(result.duration_ms)} {v.verify.saved}</p>
-      <p className="aside">{v.verify.fromMicrophone}</p>
+      <VoiceSourceLine source={result.source} file={result.file} />
       <div className="actions">
         <button type="button" onClick={onAgain}>{n.again}</button>
         <button type="button" className="secondary" onClick={onLeave}>{v.back}</button>
@@ -92,6 +93,7 @@ export function VoiceIdentificationView({ result, probe, rate, onAgain, onLeave 
 type Stage =
   | { kind: 'choice' }
   | { kind: 'live'; busy: boolean }
+  | { kind: 'file'; busy: boolean } // H57
   | { kind: 'rejected'; checks: VoiceCheck[] }
   | { kind: 'failed'; text: string }
   | { kind: 'identified'; result: VoiceIdentificationResult; probe: Int16Array }
@@ -112,12 +114,13 @@ export function VoiceIdentification({ method, enrolled, onEnrol, onLeave, Panel 
 
   if (!enrolled) return <VoiceNotEnrolled title={<Title />} text={n.notEnrolled} onEnrol={onEnrol} />
 
-  async function identify(recorded: Recorded) {
-    setStage({ kind: 'live', busy: true })
-    const answer = await call<VoiceIdentificationAnswer>('identifyVoice', { recording: recorded.recording })
+  // The page's own samples of a recording from the microphone; for a file, the recording the server compared (H57).
+  async function identify(recording: string, source: VoiceSource, pcm?: Int16Array) {
+    setStage({ kind: source === 'file' ? 'file' : 'live', busy: true })
+    const answer = await call<VoiceIdentificationAnswer>('identifyVoice', source === 'file' ? { recording, source } : { recording })
     if (!answer.ok) setStage({ kind: 'failed', text: n.errors[answer.error] ?? v.errors[answer.error] ?? errorText(answer, t) })
     else if (answer.data.status === 'rejected') setStage({ kind: 'rejected', checks: answer.data.checks })
-    else setStage({ kind: 'identified', result: answer.data, probe: recorded.pcm })
+    else setStage({ kind: 'identified', result: answer.data, probe: pcm ?? pcmOfWav(answer.data.probe ?? '') })
   }
 
   const again = () => setStage({ kind: 'choice' })
@@ -138,14 +141,24 @@ export function VoiceIdentification({ method, enrolled, onEnrol, onLeave, Panel 
           </div>
           <div className="actions">
             <button type="button" onClick={() => setStage({ kind: 'live', busy: false })}>{n.live}</button>
+            <button type="button" className="secondary" onClick={() => setStage({ kind: 'file', busy: false })}>{v.files.upload}</button>
             <button type="button" className="secondary" onClick={onLeave}>{v.back}</button>
           </div>
+          <p className="aside">{v.files.uploadNote}</p>
         </>
       )}
       {stage.kind === 'live' && (
         <>
           <Panel busy={stage.busy} seconds={method.recording_seconds} rate={method.sample_rate}
-            sentence={v.sentences[v.sentences.length - 1]!} onRecorded={(recorded) => void identify(recorded)} />
+            sentence={v.sentences[v.sentences.length - 1]!}
+            onRecorded={(recorded: Recorded) => void identify(recorded.recording, 'device', recorded.pcm)} />
+          <p className="notice prompt" role="status" aria-live="polite">{stage.busy ? n.comparing : ''}</p>
+          <button type="button" className="secondary" disabled={stage.busy} onClick={again}>{v.cancel}</button>
+        </>
+      )}
+      {stage.kind === 'file' && (
+        <>
+          <VoiceFile busy={stage.busy} onFile={(recording) => void identify(recording, 'file')} />
           <p className="notice prompt" role="status" aria-live="polite">{stage.busy ? n.comparing : ''}</p>
           <button type="button" className="secondary" disabled={stage.busy} onClick={again}>{v.cancel}</button>
         </>

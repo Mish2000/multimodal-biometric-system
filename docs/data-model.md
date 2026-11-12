@@ -383,6 +383,11 @@ the engine's WAV of the recording. The search is the face's, over the current
 ECAPA-TDNN templates of the active user accounts. Deleting a voice keeps the
 identification attempts that it led, with their link emptied.
 
+A voice verification or identification may take its new recording from a file
+(H57): its row has `source = file`, and its probe is the engine's WAV of the
+recording as converted to 16 kHz, one channel and 16-bit PCM, the recording
+compared. The file, its name and its metadata are not kept.
+
 Identification uses `mode = identify`, `enrolment_id = null` and the number
 of compared templates in `gallery_size` (H41). The selected method is
 `opencv-sift`, `pore-sift` or `learned-pore` (H42). It stores the
