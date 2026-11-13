@@ -2,7 +2,7 @@
   "name": "multimodal-biometric-client",
   "private": true,
   "version": "0.1.0",
-  "description": "The Hebrew desktop client of the multimodal biometric system (H4, H20)",
+  "description": "The desktop client of the multimodal biometric system, in English or Hebrew (H4, H20, H31)",
   "license": "UNLICENSED",
   "type": "module",
   "main": "./out/main/index.js",

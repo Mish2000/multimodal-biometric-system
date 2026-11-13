@@ -73,8 +73,8 @@ Every print, face, account and score in them is synthetic.
 <td width="33%" valign="top">
 
 **🔬 Fingerprint methods from the research**<br>
-Keypoints and sweat pores at a native 1000 ppi, matched by three methods from the research and
-their fusion.
+Keypoints and sweat pores at a native 1000 ppi, matched by three methods from the research.
+Their fusion follows in increment 6.
 
 </td>
 <td width="33%" valign="top">
@@ -120,7 +120,7 @@ have tests of their own.
 
 | | Capture | Method | Template | Decision |
 | --- | --- | --- | --- | --- |
-| 👆 **Fingerprint** | Biometrika HiScan PRO, native 1000 ppi | OpenCV SIFT · Pore SIFT · Pore CNN · fusion | local descriptors, sealed | score above the method's threshold |
+| 👆 **Fingerprint** | Biometrika HiScan PRO, native 1000 ppi | OpenCV SIFT · Pore SIFT · Pore CNN (fusion follows in increment 6) | local descriptors, sealed | score above the method's threshold |
 | 🙂 **Face** | the built-in camera or a USB camera, chosen by the client | YuNet detection + SFace | 128-value embedding in pgvector | cosine similarity above 0.363 |
 | 🎙️ **Voice** | the PC's microphones, chosen by the client, or a WAV, MP3 or OGG file for 1:1 and 1:N, 16 kHz mono | SpeechBrain ECAPA-TDNN | 192-value embedding in pgvector | cosine similarity above 0.25 |
 
@@ -176,7 +176,7 @@ flowchart LR
 client/        Electron + React + TypeScript client
 server/        FastAPI server, accounts, keys and the local PostgreSQL cluster
 scanner/       ScannerCapture: native 1000 ppi capture (C#, .NET Framework 4.8, x86)
-engines/       engine processes: the three research fingerprint methods and NIST's NFIQ 2 quality score
+engines/       engine processes: the three research fingerprint methods, NIST's NFIQ 2 quality score, face (YuNet and SFace) and voice (ECAPA-TDNN)
 methods/       pinned link to the research methods and their evaluation on the scanner
 docs/          specification, data model, decision record and validations
 environments/  locked conda environments of the server, the database and the face and voice engines

@@ -67,10 +67,11 @@ FastAPI server: Python 3.12, its own environment
               voice: SpeechBrain ECAPA-TDNN (H54, its own environment)
 ```
 
-- The client starts the local server when it opens and stops it when it
-  closes. The server starts PostgreSQL under the user's own account when it
-  is not running, so it needs no Windows service and no administrator rights
-  (H19).
+- The client is to start the local server when it opens and stop it when it
+  closes; until that step of increment 6 the server is started on its own
+  with `python -m mbs serve` (H26). The server starts PostgreSQL under the
+  user's own account when it is not running, so it needs no Windows service
+  and no administrator rights (H19).
 - The client's main process is its only network client and keeps the
   session token; the page, sandboxed and without Node.js, reaches it only
   through a preload bridge that offers a fixed list of routes (H26).
@@ -532,8 +533,9 @@ themes during that work.
 1. Foundation: environments, PostgreSQL with pgvector, the server, the
    accounts database, registration with the national ID, login, the roles
    with the first administrator's command and the accounts part of the
-   administration area, keys, and the Hebrew client shell with its home
-   screen and its settings in both themes (H24).
+   administration area, keys, and the client shell (in Hebrew at first, in
+   English or Hebrew since H31) with its home screen and its settings in
+   both themes (H24).
 2. Fingerprint enrolment and 1:1 with OpenCV SIFT: the scanner's acquisition
    mode, the engine, encrypted storage and the attempt history.
 3. All fingerprint algorithms, the algorithm choice, 1:N and the match

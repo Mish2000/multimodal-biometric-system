@@ -1572,3 +1572,20 @@ H57 replaced, at 0.283 in 491 ms; the fourth identified that second recording, l
 files' formats are not kept, and a refused file makes no attempt, so the database does not show which formats or which
 refused files were tried. Increment 5 is complete: the voice from the PC's microphones and from files, in enrolment,
 1:1 and 1:N (H20).
+
+## 2026-11-13: corrections of the documents before increment 6
+
+Approved on 2026-11-13, from a reading of the documents against the code before increment 6; no decision changed (H20,
+H26, H31).
+
+- `README.md` listed fusion among the fingerprint methods, in its highlights and in its table of modalities. Fusion
+  belongs to increment 6 and is not built, so both now say that it follows in increment 6. Its list of folders named
+  only the fingerprint engines under `engines/`; it now names the face and voice engines too (H48, H54).
+- `client/package.json` described "The Hebrew desktop client"; the client is in English or Hebrew (H31).
+- Section 3 of the specification said in the present tense that the client starts and stops the server. H26 left that
+  to a later step, and the server is still started on its own; the section now says so.
+- Section 9 of the specification named "the Hebrew client shell" in increment 1; it now names both languages (H31).
+
+The README's screenshots are still the design prototypes of October, among them one that shows Pore CNN under its
+earlier name beside a fusion card; screenshots of the real client replace them when the final design is built (H35).
+No code changed.
