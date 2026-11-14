@@ -55,6 +55,14 @@ def voice_recordings(folder: Path) -> Path:
     return folder / "voice-synthetic.wav"
 
 
+def electron_program() -> str:
+    """Electron's own program, as its package finds it: since Electron 44 the package downloads it, checked against
+    its checksums, the first time it is needed rather than when npm installs the package."""
+    found = subprocess.run(["node", "-e", "process.stdout.write('ELECTRON=' + require('electron'))"],
+                           cwd=ROOT / "client", capture_output=True, text=True, check=True, creationflags=NO_WINDOW)
+    return found.stdout.rsplit("ELECTRON=", 1)[1].strip()  # after what a first download prints
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("name")
@@ -90,8 +98,7 @@ def main() -> int:
             return 1
         time.sleep(0.5)
 
-    electron = ROOT / "client" / "node_modules" / "electron" / "dist" / "electron.exe"
-    command = [str(electron), str(HERE / "check.mjs"), str(ROOT / "client"), str(run), str(shots)]
+    command = [electron_program(), str(HERE / "check.mjs"), str(ROOT / "client"), str(run), str(shots)]
     try:
         with open(check_log, "w", encoding="utf-8") as log:
             status = subprocess.run(command + ([args.page] if args.page else []), env=env, stdout=log,

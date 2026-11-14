@@ -1850,3 +1850,8 @@ decision changed (H23, H26).
 From its new place the check passed 37 of 37 without engines, 68 of 68 with the fingerprint engines and the stored
 captures of the second set, and 78 of 78 with the face and voice engines. All 351 server tests passed with the
 change to `postgres.initialize`, including the four local checks with stored captures.
+
+The first run of the four jobs on GitHub (run 43638940686) passed the client's, the server's and the scanner's jobs,
+while the offscreen one found no Electron program: since Electron 44 its package downloads the program, checked
+against its checksums, the first time it is needed rather than when npm installs the package, and `run.py` looked
+for the file directly. `run.py` now asks the package for its program, which downloads it on a new machine.
