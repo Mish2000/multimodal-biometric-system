@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 import type { Account } from '../../../shared/bridge'
 import { Field } from '../Field'
@@ -15,14 +15,14 @@ export function SignIn() {
   const [busy, setBusy] = useState(false)
   const [server, setServer] = useState<'checking' | 'up' | 'down'>('checking')
 
-  async function checkServer() {
+  const checkServer = useCallback(async () => {
     setServer('checking')
     setServer((await call('health')).ok ? 'up' : 'down')
-  }
+  }, [call])
 
   useEffect(() => {
     void checkServer()
-  }, [])
+  }, [checkServer])
 
   async function submit(event: FormEvent) {
     event.preventDefault()

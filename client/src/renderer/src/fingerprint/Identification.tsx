@@ -41,9 +41,12 @@ export function Identification({ enrolled, methods, methodError, onReloadMethods
   const control = useRef<string | null>(null)
   const heading = useRef<HTMLHeadingElement>(null)
 
+  const identified = run.phase === 'identified'
+  const failed = run.phase === 'failed'
+  const cancelled = run.phase === 'cancelled'
   useEffect(() => {
     heading.current?.focus()
-  }, [run.phase === 'identified', run.phase === 'failed', run.phase === 'cancelled'])
+  }, [identified, failed, cancelled])
 
   useEffect(() => {
     if (!enrolled || attempt === 0) return

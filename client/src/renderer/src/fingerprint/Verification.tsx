@@ -37,9 +37,12 @@ export function Verification({ finger, enrolled, algorithm, onLeave, onEnrol, on
   const control = useRef<string | null>(null)
   const heading = useRef<HTMLHeadingElement>(null)
 
+  const verified = run.phase === 'verified'
+  const failed = run.phase === 'failed'
+  const cancelled = run.phase === 'cancelled'
   useEffect(() => {
     heading.current?.focus()
-  }, [run.phase === 'verified', run.phase === 'failed', run.phase === 'cancelled'])
+  }, [verified, failed, cancelled])
 
   useEffect(() => {
     if (!enrolled) return

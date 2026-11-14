@@ -1749,3 +1749,30 @@ All 351 server tests passed, including the four local checks with stored capture
 the research link's 7 tests, and the built client passed its offscreen checks against the new server unchanged: 68
 with the fingerprint engines and 78 with the face and voice engines. The server's environment was built again from its
 lock in a temporary folder without the network and listed exactly the lock. It passed a manual check on 2026-11-14.
+
+## 2026-11-14: a lint for the client
+
+Approved on 2026-11-14, from a reading of the code before increment 6; no decision changed (H23).
+
+- The client had no linter, while four of its files carried `eslint-disable` comments for one. ESLint itself would
+  do, but typescript-eslint, which gives it a TypeScript parser, supports TypeScript only up to 6.0 in its newest
+  release (8.72.2), and the client is on TypeScript 7.0.2. The client therefore uses oxlint 1.90.0 (MIT), the newest
+  version published at least 14 days earlier (H23). It has no dependencies; its package and its Windows program
+  weigh 379,152 and 5,880,580 bytes. The lock gained oxlint and its 19 programs for other platforms, of which npm
+  installs only this PC's, and nothing else changed.
+- `npm run lint` checks the client's 75 source files as `client/.oxlintrc.json` sets it: every correctness rule of
+  oxlint's default plugins and of its React plugin, with React's two hook rules, and warnings fail too. oxlint reads
+  the four existing comments under the rule name they already give, so they stay as they are.
+- React Compiler's two newer rules, on reading a ref while rendering and on setting state inside an effect, are
+  turned off for now. Twelve places in ten files, among them the camera, microphone, fingerprint and sign-in
+  screens, use these patterns and work as written; changing them changes when those screens render, so they belong
+  to the client's dependency refresh, which checks these screens again.
+- The first run reported nine findings of the dependency rule; none is left. Two effects that move the focus to a
+  result's heading named three conditions inline in their dependency list and now name them as constants first; the
+  sign-in screen's server check is a stable callback, so the effect that runs it once can list it; and the camera's
+  cleanup releases the video element it started with, as the rule asks, instead of whatever the ref holds by then.
+  The camera's stream is stopped as before.
+
+The 198 client tests, the type checks and the build passed, and the built client passed its offscreen checks: 68 with
+the fingerprint engines and 78 with the face and voice engines, among them a camera stopped by cancelling. The server
+is unchanged. It passed a manual check on 2026-11-14.

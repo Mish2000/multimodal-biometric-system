@@ -46,6 +46,7 @@ export function CameraView({ camera, busy, minimumWidth, onTaken, onCovered, onE
   useEffect(() => {
     let active = true
     let stream: MediaStream | null = null
+    const shown = video.current // the element the stream is shown in, released again in the cleanup
     setStarted(false)
     setFaces([])
     setLive(null)
@@ -73,7 +74,7 @@ export function CameraView({ camera, busy, minimumWidth, onTaken, onCovered, onE
     return () => {
       active = false
       stream?.getTracks().forEach((track) => track.stop())
-      if (video.current) video.current.srcObject = null
+      if (shown) shown.srcObject = null
     }
   }, [camera.deviceId])
 

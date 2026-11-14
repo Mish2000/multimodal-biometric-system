@@ -206,6 +206,7 @@ cd ../client
 npm ci
 npm run dev                # the app, with the server running
 npm test                   # 198 tests
+npm run lint               # oxlint (.oxlintrc.json)
 ```
 
 Details: [server](server/README.md) · [scanner](scanner/README.md) · [research methods](methods/README.md)
