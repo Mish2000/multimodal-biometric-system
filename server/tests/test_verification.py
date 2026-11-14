@@ -285,7 +285,7 @@ def test_upgrade_preserves_existing_enrolments_and_their_placement_numbers(fp_cl
 
 
 def test_disconnect_while_sending_progress_closes_the_flow(fp_client, script, databases, keys, service):
-    from mbs.api import FingerprintResponse
+    from mbs.routes.fingerprints import FingerprintResponse
 
     token = enrolled(fp_client, script)
     subject = subject_of(fp_client, databases, keys, token)

@@ -100,6 +100,10 @@ to their defaults when `local/server.toml` does not name them; without them the 
 
 ## API
 
+`mbs/api.py` assembles the routes of each area in `mbs/routes/` (`account`, `fingerprints`, `faces`,
+`voices`, `administration`), each with its request models; who may call a route is declared on it and
+checked on every request by `mbs/routes/policy.py`, the application's own dependency (H12).
+
 | Route | Who | Purpose |
 | --- | --- | --- |
 | `GET /api/health` | anyone | the server answers |
@@ -134,7 +138,8 @@ Errors answer `{"error": "<code>"}`; the client turns codes into English or Hebr
 Before any route (H58, `mbs/guard.py`), a request addressed to a host other than 127.0.0.1 or
 localhost is answered 400 `invalid_host`, and a body larger than its route takes 413
 `body_too_large`: 64 KiB for every route, except the face and voice routes above that take images
-or recordings, which take what their models allow (`BODY_LIMITS` in `mbs/api.py`).
+or recordings, which take what their models allow (`BODY_LIMITS` in `mbs/routes/faces.py` and
+`mbs/routes/voices.py`).
 
 Verification uses the existing capture and engine settings. On startup, `serve`
 applies the biometric migrations through `biometric_0006` (H54), preserving enrolled

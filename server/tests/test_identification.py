@@ -345,7 +345,7 @@ def test_maximum_quality_retries_and_shared_scanner_are_enforced(fp_client, scri
 
 
 def test_disconnect_while_sending_progress_releases_the_flow(fp_client, script, service, databases, keys):
-    from mbs.api import FingerprintResponse
+    from mbs.routes.fingerprints import FingerprintResponse
     token = enrolled(fp_client, script)
     subject = subject_of(fp_client, databases, keys, token)
     async def fail_send(message):

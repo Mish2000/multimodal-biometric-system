@@ -12,7 +12,7 @@ import psycopg
 import pytest
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
-from fastapi.routing import APIRoute
+from fastapi.routing import APIRoute, iter_route_contexts
 from sqlalchemy import text
 
 from mbs import accounts, postgres
@@ -135,7 +135,8 @@ def test_repeated_failed_sign_ins_are_slowed_down(client):
 
 
 def test_every_route_declares_who_may_call_it(client):
-    routes = [r for r in client.app.routes if isinstance(r, APIRoute)]
+    # The routes of the included routers too, which FastAPI keeps out of `app.routes` until a request needs them.
+    routes = [r for r in iter_route_contexts(client.app.routes) if isinstance(r.original_route, APIRoute)]
     assert routes
     assert all(getattr(r.endpoint, "mbs_allow", None) for r in routes), [r.path for r in routes]
 

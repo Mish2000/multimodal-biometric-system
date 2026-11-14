@@ -1676,3 +1676,23 @@ model refused before, is now refused before its route, while a frame a little lo
 refused by the model. The client and the engines are unchanged, and the built client passed its offscreen checks
 against the guarded server without a refusal: 68 with the fingerprint engines and 78 with the face and voice engines,
 images and recordings from files included. It passed a manual check on 2026-11-14.
+
+## 2026-11-14: the API's routes by area
+
+Approved on 2026-11-14, from a reading of the code before increment 6; no decision changed (H12, H58).
+
+- `server/mbs/api.py` held all 33 routes inside one function of about 300 lines, with their request models and the
+  policy, in a file of 532 lines, and increment 6 adds more. The routes now live by area in `server/mbs/routes/` (one's own account, fingerprints,
+  faces, voices and the administration), each module with its request models, and read the databases, the keys and
+  the services from the application's state. `api.py` only assembles them, with the guard (H58), the answers to
+  refused requests and the health route. Who may call a route is still declared on it and checked on every request
+  by one policy, the application's own dependency (H12).
+- Behaviour is unchanged. A new test pins every route's path, method, name, status, roles and request model, the
+  last by a short SHA-256 of its JSON schema; it passed against the previous code and passes now, and it checks that
+  the policy is every route's first dependency. FastAPI 0.142.2 keeps the routes of included routers out of the
+  application's route list until a request needs them, so the tests that list routes, among them the check that
+  every route declares who may call it, now read them through FastAPI's own `iter_route_contexts`.
+
+All 351 server tests passed, one of them new, including the four local checks with stored captures, and the built
+client passed its offscreen checks against the new server unchanged: 68 with the fingerprint engines and 78 with the
+face and voice engines. The client and the engines are unchanged. It passed a manual check on 2026-11-14.
