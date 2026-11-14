@@ -26,8 +26,8 @@ import uuid
 from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
-from typing import Any
+from datetime import UTC, datetime, timedelta
+from typing import Any, cast
 
 from sqlalchemy import CursorResult, Row, bindparam, delete, select, text, update
 from sqlalchemy.exc import IntegrityError
@@ -39,7 +39,7 @@ from .engines import Engine, EngineError
 from .fingerprint import best_three
 from .identification import SHOWN_CANDIDATES, Owner, active_owners, owners_unchanged
 from .keys import Keys
-from .models import Algorithm, Attempt, Enrolment, Sample, Template, vector_text, vector_values
+from .models import Algorithm, Attempt, Enrolment, Sample, Template, threshold_of, vector_text, vector_values
 
 CAPTURE_AGE = timedelta(minutes=30)  # an enrolment's images or recordings were taken in the last half hour
 CLOCK_SKEW = timedelta(minutes=1)
@@ -132,14 +132,14 @@ def similarity(db: DbSession, a: list[float], b: list[float]) -> float:
 def card(databases: Databases, algorithm: str, service: EngineService | None) -> dict:
     """A method's card: its threshold, where the threshold comes from, and whether its engine is set up."""
     with _db(databases.biometric) as db:
-        row = db.get(Algorithm, algorithm)
+        row = db.get_one(Algorithm, algorithm)
     return {"code": algorithm, "threshold": row.threshold, "threshold_provisional": row.threshold_provisional,
             "threshold_origin": row.threshold_origin, "available": service is not None}
 
 
 def _algorithm(databases: Databases, code: str) -> Algorithm:
     with _db(databases.biometric) as db:
-        return db.get(Algorithm, code)
+        return db.get_one(Algorithm, code)
 
 
 def current_enrolment(databases: Databases, subject: uuid.UUID, modality: str) -> Enrolment | None:
@@ -156,13 +156,13 @@ def enrol(modality: Modality, service: EngineService, databases: Databases, keys
           findings: list[tuple[bytes, datetime]]) -> dict:
     if not modality.per_enrolment <= len(findings) <= modality.most_kept:
         raise modality.refusal("invalid_request")
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     times = [taken for _, taken in findings]
     if any(taken.tzinfo is None or not now - CAPTURE_AGE <= taken <= now + CLOCK_SKEW for taken in times) \
             or times != sorted(times):
         raise modality.refusal("invalid_request")
     algorithm = _algorithm(databases, modality.algorithm)
-    version, threshold = algorithm.version, algorithm.threshold
+    version, threshold = algorithm.version, threshold_of(algorithm)
     if service.engine.start().get(modality.version_key) != version:
         raise modality.refusal("method_version_differs", 503)
     found = []
@@ -188,7 +188,7 @@ def enrol(modality: Modality, service: EngineService, databases: Databases, keys
         "status": "saved",
         "enrolment": {"id": str(enrolment.id), "created_at": enrolment.created_at.isoformat(),
                       "replaced_previous": replaced},
-        "samples": [modality.sample_json(sample, extracted) for sample, (_, extracted, _) in zip(samples, chosen)],
+        "samples": [modality.sample_json(sample, extracted) for sample, (_, extracted, _) in zip(samples, chosen, strict=True)],
         "templates": [{"id": str(template.id), "sample_id": str(template.sample_id), "algorithm": modality.algorithm,
                        "version": version, "embedding_length": modality.embedding_length} for template in templates],
         "pairs": [pair for pair in pairs if pair["reference"] - 1 in trio and pair["probe"] - 1 in trio],
@@ -201,12 +201,12 @@ def save(modality: Modality, databases: Databases, keys: Keys, subject: uuid.UUI
          version: str) -> tuple[Enrolment, bool, list[Sample], list[Template]]:
     """The chosen findings as a new enrolment that replaces the current one: each finding sealed, bound to its row and
     its subject (H25), and its embedding as a pgvector value (H14)."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     try:
         with _db(databases.biometric) as db, db.begin():
-            result: CursorResult = db.execute(update(Enrolment).where(
+            result = cast(CursorResult, db.execute(update(Enrolment).where(
                 Enrolment.subject_id == subject, Enrolment.modality == modality.name, Enrolment.replaced_at.is_(None)
-            ).values(replaced_at=now))
+            ).values(replaced_at=now)))
             enrolment = Enrolment(id=uuid.uuid4(), subject_id=subject, modality=modality.name, finger=None,
                                   created_at=now)
             db.add(enrolment)
@@ -252,7 +252,7 @@ def repeat_view(modality: Modality, service: EngineService, keys: Keys, database
     """The caller's own winning finding, for the result screen (H49, H55): the sealed finding is opened for its owner
     only and described again, and the repeated embedding must equal the stored one."""
     with _db(databases.biometric) as db:
-        sample = db.get(Sample, sample_id)
+        sample = db.get_one(Sample, sample_id)
     data = keyring.open_sealed(keys, keyring.SAMPLE, sample.id.bytes + subject.bytes, sample.data)
     again = modality.extract(service, data)
     if not again.passed or again.embedding is None or vector_values(vector_text(again.embedding)) != stored:
@@ -276,10 +276,10 @@ ORDER BY s.placement
 
 def verify(modality: Modality, service: EngineService, databases: Databases, keys: Keys, subject: uuid.UUID,
            data: bytes, source: str = "device") -> dict:
-    at = datetime.now(timezone.utc)
+    at = datetime.now(UTC)
     started = time.perf_counter()
     algorithm = _algorithm(databases, modality.algorithm)
-    version, threshold = algorithm.version, algorithm.threshold
+    version, threshold = algorithm.version, threshold_of(algorithm)
     origin, provisional = algorithm.threshold_origin, algorithm.threshold_provisional
     enrolment = current_enrolment(databases, subject, modality.name)
     if enrolment is None:
@@ -326,10 +326,10 @@ def verify(modality: Modality, service: EngineService, databases: Databases, key
 
 def identify(modality: Modality, service: EngineService, databases: Databases, keys: Keys, subject: uuid.UUID,
              data: bytes, source: str = "device") -> dict:
-    at = datetime.now(timezone.utc)
+    at = datetime.now(UTC)
     started = time.perf_counter()
     algorithm = _algorithm(databases, modality.algorithm)
-    version, threshold = algorithm.version, algorithm.threshold
+    version, threshold = algorithm.version, threshold_of(algorithm)
     origin, provisional = algorithm.threshold_origin, algorithm.threshold_provisional
     search = modality.search
     gallery = search.gallery(databases, keys, subject, version)
@@ -432,7 +432,8 @@ class Search:
         caller's own enrolment, the message of H15."""
         owners = active_owners(databases, keys)
         with _db(databases.biometric) as db:
-            enrolments = [tuple(row) for row in db.execute(select(Enrolment.id, Enrolment.subject_id).where(
+            enrolments = [(enrolment, owner) for enrolment, owner in db.execute(
+                select(Enrolment.id, Enrolment.subject_id).where(
                 Enrolment.modality == self.modality, Enrolment.replaced_at.is_(None),
                 Enrolment.subject_id.in_([owner.subject_id for owner in owners])).order_by(Enrolment.id))]
             if not any(owner == subject for _, owner in enrolments):

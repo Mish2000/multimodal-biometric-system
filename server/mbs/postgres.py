@@ -10,6 +10,7 @@ from __future__ import annotations
 import subprocess
 import tempfile
 from pathlib import Path
+from typing import Any
 
 import psycopg
 from psycopg import sql
@@ -26,7 +27,8 @@ NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 # libpq's attempt at GSSAPI encryption crashes the process on this Windows build (seen on 2026-10-20 with
 # libpq 18.6 from conda-forge); the cluster takes only SCRAM passwords on localhost, so it is switched off.
-CONNECTION_OPTIONS = {"gssencmode": "disable"}
+# Typed loosely: psycopg.connect also has keyword parameters that are not strings.
+CONNECTION_OPTIONS: dict[str, Any] = {"gssencmode": "disable"}
 
 
 class PostgresError(RuntimeError):

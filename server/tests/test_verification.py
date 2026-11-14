@@ -4,6 +4,7 @@ import json
 import struct
 import time
 import uuid
+from datetime import UTC
 
 import anyio
 import pytest
@@ -13,10 +14,8 @@ from sqlalchemy.orm import Session
 from mbs import fingerprint, verification
 from mbs import keys as keyring
 from mbs.models import Algorithm, Attempt, Enrolment, Template
-
 from test_api import administrator, auth, error, register, sign_in
-from test_fingerprint import (LIFT, enrol, finger, fp_client, plan, placements, script, service,
-                              subject_of, user)  # noqa: F401 (shared fixtures)
+from test_fingerprint import LIFT, enrol, finger, fp_client, placements, plan, script, service, subject_of, user
 
 
 def verify(client, token, position=7, algorithm=None):
@@ -130,6 +129,7 @@ def test_version_and_encryption_failures_are_reported_before_capture(fp_client, 
     token = enrolled(fp_client, script)
     with Session(databases.biometric) as db, db.begin():
         template = db.scalars(select(Template)).first()
+        assert template is not None
         old = template.version
         template.version = "older"
     assert verify(fp_client, token)[-1]["error"] == "template_version_mismatch"
@@ -153,9 +153,9 @@ def test_enrolment_changed_during_capture_prevents_saving(fp_client, script, ser
                 if change == "delete":
                     fingerprint.delete_finger(databases, subject, 7)
                 else:
-                    from datetime import datetime, timezone
+                    from datetime import datetime
                     with Session(databases.biometric) as db, db.begin():
-                        db.scalars(select(Enrolment)).one().replaced_at = datetime.now(timezone.utc)
+                        db.scalars(select(Enrolment)).one().replaced_at = datetime.now(UTC)
         return events
 
     assert anyio.run(run)[-1] == {"type": "failed", "error": "enrolment_changed"}
@@ -174,7 +174,7 @@ def test_threshold_is_snapshotted_for_the_attempt(fp_client, script, service, da
             events.append(event)
             if event["type"] == "started":
                 with Session(databases.biometric) as db, db.begin():
-                    db.get(Algorithm, "opencv-sift").threshold = 100
+                    db.get_one(Algorithm, "opencv-sift").threshold = 100
         return events
 
     result = anyio.run(run)[-1]
@@ -191,7 +191,7 @@ def test_deletion_erases_old_and_current_attempts_only_of_that_finger(fp_client,
     assert fp_client.delete("/api/fingerprint/fingers/7", headers=auth(token)).status_code == 204
     with Session(databases.biometric) as db:
         remaining = db.scalars(select(Attempt)).one()
-        assert db.get(Enrolment, remaining.enrolment_id).finger == 2
+        assert db.get_one(Enrolment, remaining.enrolment_id).finger == 2
 
 
 def test_cancelled_scanner_wait_stops_immediately_and_releases_the_lock(fp_client, script, databases, keys, service):
@@ -266,6 +266,7 @@ def test_rejected_captures_are_bounded_and_enrolment_shares_the_scanner(fp_clien
 def test_upgrade_preserves_existing_enrolments_and_their_placement_numbers(fp_client, script, databases):
     from alembic import command
     from alembic.config import Config
+
     from mbs.db import MIGRATIONS, migrate
 
     migration = Config()

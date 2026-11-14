@@ -12,7 +12,9 @@ from __future__ import annotations
 import argparse
 import sys
 
-from . import accounts, config as settings, keys as keyring, logs, postgres
+from . import accounts, logs, postgres
+from . import config as settings
+from . import keys as keyring
 from .db import migrate, open_databases
 
 

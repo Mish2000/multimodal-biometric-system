@@ -305,7 +305,9 @@ def sent(outbox):
     found = []
     for path in pages:
         page = path.read_text(encoding="utf-8")
-        token, language = LINK.search(page).groups()
+        link = LINK.search(page)
+        assert link is not None
+        token, language = link.groups()
         found.append((page, token, language))
     return found
 

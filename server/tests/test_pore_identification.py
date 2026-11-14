@@ -5,7 +5,7 @@ import struct
 import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from threading import Event
 
 import anyio
@@ -17,9 +17,8 @@ from mbs import fingerprint, identification
 from mbs import keys as keyring
 from mbs.engines import EngineError
 from mbs.models import Attempt, Enrolment, Sample, Template
-
 from test_api import auth
-from test_fingerprint import finger, fp_client, plan, script, service, subject_of  # noqa: F401
+from test_fingerprint import finger, fp_client, plan, script, service, subject_of
 from test_identification import identify, other_enrolled
 from test_learned_verification import add_learned
 from test_pore_verification import add_pore
@@ -148,7 +147,7 @@ def test_enrolment_change_during_preparation_invalidates_it(fp_client, script, s
                     fingerprint.delete_finger(databases, subject, 7)
                 else:
                     with Session(databases.biometric) as db, db.begin():
-                        db.scalars(select(Enrolment)).one().replaced_at = datetime.now(timezone.utc)
+                        db.scalars(select(Enrolment)).one().replaced_at = datetime.now(UTC)
         return events
     assert anyio.run(run)[-1] == {"type": "failed", "error": "gallery_changed"}
     assert method_rows(databases, algorithm) == [] and not service.scanner_lock.locked()

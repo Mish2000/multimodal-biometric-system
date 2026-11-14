@@ -14,9 +14,10 @@ import logging
 import threading
 import time
 import uuid
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncGenerator, Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from functools import partial
 
 import anyio
 from sqlalchemy import func, select
@@ -28,7 +29,7 @@ from . import keys as keyring
 from .db import Databases
 from .engines import MAX_DATA, Engine, EngineError, ScannerError, ScannerRun
 from .keys import Keys
-from .models import ACTIVE, USER, Account, Algorithm, Attempt, Enrolment, IdentityLink, Sample, Template
+from .models import ACTIVE, USER, Account, Algorithm, Attempt, Enrolment, IdentityLink, Sample, Template, threshold_of
 
 logger = logging.getLogger("mbs.identification")
 SHOWN_CANDIDATES = 5  # the leading enrolments an answer shows, for every modality (H41, H50, H56)
@@ -49,7 +50,7 @@ class Owner:
 class Candidate:
     id: uuid.UUID
     subject_id: uuid.UUID
-    finger: int
+    finger: int | None  # set for every fingerprint enrolment
 
 
 @dataclass(frozen=True)
@@ -116,7 +117,7 @@ def _load_gallery(databases: Databases, keys: Keys, subject: uuid.UUID, code: st
             Enrolment.subject_id.in_([owner.subject_id for owner in owners])).order_by(Enrolment.id))]
         if not any(candidate.subject_id == subject for candidate in candidates):
             raise IdentificationError("not_enrolled")
-        algorithm = db.get(Algorithm, code)
+        algorithm = db.get_one(Algorithm, code)
         references = _reference_rows(db, [candidate.id for candidate in candidates], code)
         counts = dict.fromkeys((candidate.id for candidate in candidates), 0)
         for reference in references:
@@ -130,7 +131,8 @@ def _load_gallery(databases: Databases, keys: Keys, subject: uuid.UUID, code: st
             raise IdentificationError("gallery_templates_unavailable")
         participating = {candidate.subject_id for candidate in candidates}
         return Gallery([owner for owner in owners if owner.subject_id in participating], candidates, references,
-                       algorithm.threshold, algorithm.threshold_origin, algorithm.threshold_provisional, algorithm.version, code)
+                       threshold_of(algorithm), algorithm.threshold_origin, algorithm.threshold_provisional,
+                       algorithm.version, code)
 
 
 def _open_reference(databases: Databases, keys: Keys, candidate: Candidate, reference: Reference,
@@ -144,6 +146,7 @@ def _open_reference(databases: Databases, keys: Keys, candidate: Candidate, refe
             raise IdentificationError("gallery_changed")
         if row.version != reference.version or len(row.data) != reference.size:
             raise IdentificationError("gallery_changed")
+    assert reference.template_id is not None  # only references with a stored template are opened
     return keyring.open_sealed(keys, keyring.TEMPLATE,
         reference.template_id.bytes + candidate.subject_id.bytes + algorithm.encode("ascii"), row.data)
 
@@ -183,13 +186,13 @@ def _store_prepared(databases: Databases, keys: Keys, candidate: Candidate, gall
         current = _reference_rows(db, [candidate.id], gallery.algorithm)
         if [(r.sample_id, r.placement) for r in current] != [(r.sample_id, r.placement) for r in references]:
             raise IdentificationError("gallery_changed")
-        for expected, actual in zip(references, current):
+        for expected, actual in zip(references, current, strict=True):
             if expected.template_id is not None:
                 if actual != expected:
                     raise IdentificationError("gallery_changed")
             elif actual.template_id is None:
                 stored = Template(id=uuid.uuid4(), sample_id=actual.sample_id, algorithm=gallery.algorithm,
-                                  version=gallery.version, created_at=datetime.now(timezone.utc))
+                                  version=gallery.version, created_at=datetime.now(UTC))
                 stored.data = keyring.seal(keys, keyring.TEMPLATE,
                     stored.id.bytes + candidate.subject_id.bytes + gallery.algorithm.encode("ascii"), generated[actual.sample_id])
                 db.add(stored)
@@ -240,12 +243,16 @@ async def _compare_batch(engines: list[Engine], databases: Databases, keys: Keys
             results[index] = error
 
     async with anyio.create_task_group() as group:
-        for index, (engine, reference) in enumerate(zip(engines, references)):
+        # The last batch of a search can hold fewer references than there are engines.
+        for index, (engine, reference) in enumerate(zip(engines, references, strict=False)):
             group.start_soon(compare, index, engine, reference)
+    scores: list[int] = []
     for result in results:
         if isinstance(result, Exception):
             raise result
-    return results
+        assert result is not None  # every reference of the batch was compared
+        scores.append(result)
+    return scores
 
 
 def _save(databases: Databases, keys: Keys, subject: uuid.UUID, gallery: Gallery,
@@ -272,7 +279,7 @@ def _save(databases: Databases, keys: Keys, subject: uuid.UUID, gallery: Gallery
 
 
 async def identify(service: fp.FingerprintService, databases: Databases, keys: Keys,
-                   subject: uuid.UUID, algorithm: str = fp.OPENCV_SIFT) -> AsyncIterator[dict]:
+                   subject: uuid.UUID, algorithm: str = fp.OPENCV_SIFT) -> AsyncGenerator[dict, None]:
     if not service.scanner_lock.acquire(blocking=False):
         yield {"type": "failed", "error": "scanner_busy"}
         return
@@ -298,8 +305,11 @@ async def identify(service: fp.FingerprintService, databases: Databases, keys: K
 
 async def _extract(service: fp.FingerprintService, algorithm: str, png: bytes, pores: bytes | None = None) -> bytes:
     engine = fp.engine_for(service, algorithm)
+    assert engine is not None  # the search checks its method's engine before it starts
     if algorithm == fp.LEARNED_PORE and pores is None:
-        _, detected = await _engine_call(service.pore, lambda: service.pore.request({"op": "detect"}, [png]))
+        pore = service.pore
+        assert pore is not None  # engine_for finds Pore CNN only with the shared detector
+        _, detected = await _engine_call(pore, lambda: pore.request({"op": "detect"}, [png]))
         if not detected or not detected[0]:
             raise EngineError("missing pore coordinates")
         pores = detected[0]
@@ -307,7 +317,9 @@ async def _extract(service: fp.FingerprintService, algorithm: str, png: bytes, p
 
 
 async def _detect(service: fp.FingerprintService, png: bytes) -> bytes:
-    return await _engine_call(service.pore, lambda: fp.detect_pores(service, png))
+    pore = service.pore
+    assert pore is not None  # only Pore CNN detects pores here, and it needs the shared detector
+    return await _engine_call(pore, lambda: fp.detect_pores(service, png))
 
 
 async def _match_view(service, engine: Engine, databases, keys, gallery: Gallery, candidate: Candidate,
@@ -322,6 +334,7 @@ async def _match_view(service, engine: Engine, databases, keys, gallery: Gallery
         reference_pores = described_from.get(reference.sample_id) or stored_pores
         if reference_pores is None:
             reference_pores = await _detect(service, png)
+        assert probe_pores is not None  # detected for Pore CNN before the search
         parts += [probe_pores, reference_pores]
     result, data = await _engine_call(engine, lambda: engine.request({"op": "compare", "view": True}, parts))
     if fp.comparison_score(result) != score:
@@ -332,12 +345,12 @@ async def _match_view(service, engine: Engine, databases, keys, gallery: Gallery
 
 
 async def _prepare_gallery(service, databases, keys, gallery: Gallery, subject: uuid.UUID | None = None,
-                           described_from: dict[uuid.UUID, bytes] | None = None) -> AsyncIterator[dict]:
+                           described_from: dict[uuid.UUID, bytes] | None = None) -> AsyncGenerator[dict, None]:
     missing = sum(reference.template_id is None for reference in gallery.references)
     if not missing:
         return
     yield {"type": "preparing_templates", "algorithm": gallery.algorithm, "completed": 0, "total": missing}
-    by_enrolment = {candidate.id: [] for candidate in gallery.candidates}
+    by_enrolment: dict[uuid.UUID, list[Reference]] = {candidate.id: [] for candidate in gallery.candidates}
     for reference in gallery.references:
         by_enrolment[reference.enrolment_id].append(reference)
     completed = 0
@@ -361,7 +374,7 @@ async def _prepare_gallery(service, databases, keys, gallery: Gallery, subject: 
     gallery.references = [reference for candidate in gallery.candidates for reference in by_enrolment[candidate.id]]
 
 
-async def _identify(service, databases, keys, subject, run, algorithm) -> AsyncIterator[dict]:
+async def _identify(service, databases, keys, subject, run, algorithm) -> AsyncGenerator[dict, None]:
     if algorithm not in (fp.OPENCV_SIFT, fp.PORE_SIFT, fp.LEARNED_PORE):
         raise IdentificationError("unknown_method")
     if fp.engine_for(service, algorithm) is None:
@@ -382,10 +395,10 @@ async def _identify(service, databases, keys, subject, run, algorithm) -> AsyncI
         yield event
     for capture in range(1, fp.MOST_CAPTURES + 1):
         yield {"type": "place", "capture": capture, "maximum": fp.MOST_CAPTURES}
-        header, png = await fp.acquire(service, "finger", run)
-        at, started = datetime.now(timezone.utc), time.perf_counter()
+        header, png = await fp.acquire_finger(service, run)
+        at, started = datetime.now(UTC), time.perf_counter()
         yield {"type": "checking"}
-        score, checks = await _engine_call(service.quality, lambda: fp.capture_quality(service, header, png))
+        score, checks = await _engine_call(service.quality, partial(fp.capture_quality, service, header, png))
         image = fp.base64_text(png)
         if checks[-1]["passed"]:
             break
@@ -406,7 +419,7 @@ async def _identify(service, databases, keys, subject, run, algorithm) -> AsyncI
     for offset in range(0, total, len(engines)):
         batch = gallery.references[offset:offset + len(engines)]
         results = await _compare_batch(engines, databases, keys, candidates, batch, probe, algorithm)
-        for reference, value in zip(batch, results):
+        for reference, value in zip(batch, results, strict=True):
             if reference.enrolment_id not in winners or value > scores[reference.enrolment_id]:
                 winners[reference.enrolment_id] = reference
             scores[reference.enrolment_id] = max(scores[reference.enrolment_id], value)

@@ -8,6 +8,7 @@ import sys
 import threading
 import time
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -20,8 +21,7 @@ from mbs import keys as keyring
 from mbs.api import create_app
 from mbs.engines import Engine, Scanner, ScannerError, ScannerRun
 from mbs.fingerprint import FingerprintService, Kept, best_three
-from mbs.models import Algorithm, Enrolment, Sample, Template
-
+from mbs.models import Algorithm, Enrolment, Sample, Template, sealed_data
 from test_api import administrator, auth, error, register, sign_in
 
 FAKES = Path(__file__).resolve().parent / "fakes"
@@ -89,7 +89,7 @@ def user(client) -> str:
 
 def subject_of(client, databases, keys, token) -> uuid.UUID:
     account_id = uuid.UUID(client.get("/api/me", headers=auth(token)).json()["account"]["id"])
-    return accounts.subject_of(databases, keys, account_id)
+    return accounts.user_subject(databases, keys, account_id)
 
 
 def kinds(events: list[dict]) -> list[str]:
@@ -116,6 +116,7 @@ def test_three_matching_placements_are_sealed_and_kept(fp_client, script, databa
         templates = db.scalars(select(Template)).all()
     assert (enrolment.subject_id, enrolment.modality, enrolment.finger, enrolment.replaced_at) == (subject, "fingerprint", 7, None)
     assert [s.placement for s in samples] == [1, 2, 3] and len(templates) == 3
+    assert samples[0].checks is not None
     assert [c["name"] for c in samples[0].checks] == ["size", "resolution", "ridge texture", "fine detail", "quality"]
     assert samples[0].checks[-1]["score"] == 64
     for sample in samples:
@@ -126,9 +127,9 @@ def test_three_matching_placements_are_sealed_and_kept(fp_client, script, databa
     template = templates[0]
     assert template.algorithm == "opencv-sift" and template.version == "606c8d33a7a27570b5bb55cca8248259b9b6ba8a"
     row = template.id.bytes + subject.bytes + b"opencv-sift"
-    assert keyring.open_sealed(keys, keyring.TEMPLATE, row, template.data).startswith(b"TEMPLATE:A")
+    assert keyring.open_sealed(keys, keyring.TEMPLATE, row, sealed_data(template)).startswith(b"TEMPLATE:A")
     with pytest.raises(keyring.KeysError):  # and to its row
-        keyring.open_sealed(keys, keyring.TEMPLATE, uuid.uuid4().bytes + subject.bytes + b"opencv-sift", template.data)
+        keyring.open_sealed(keys, keyring.TEMPLATE, uuid.uuid4().bytes + subject.bytes + b"opencv-sift", sealed_data(template))
     me = fp_client.get("/api/me", headers=auth(token)).json()
     assert me["modalities"]["fingerprint"] == {"enrolled": True, "fingers": [7]}
 
@@ -198,7 +199,7 @@ def test_deleting_a_finger_erases_its_enrolments_and_nothing_else(fp_client, scr
     assert fp_client.get("/api/me", headers=auth(token)).json()["modalities"]["fingerprint"] == {"enrolled": True, "fingers": [2]}
     assert fp_client.get("/api/me", headers=auth(other)).json()["modalities"]["fingerprint"]["fingers"] == [7]
     with Session(databases.biometric) as db:
-        assert sorted(e.finger for e in db.scalars(select(Enrolment))) == [2, 7]  # the user's 2 and dana's 7
+        assert [e.finger for e in db.scalars(select(Enrolment).order_by(Enrolment.finger))] == [2, 7]  # the user's 2 and dana's 7
         assert len(db.scalars(select(Sample)).all()) == 6 and len(db.scalars(select(Template)).all()) == 6
     assert error(fp_client.delete("/api/fingerprint/fingers/7", headers=auth(token))) == (404, "not_enrolled")
     assert fp_client.delete("/api/fingerprint/fingers/11", headers=auth(token)).status_code == 422
@@ -354,7 +355,7 @@ def test_the_algorithms_hold_h16s_thresholds(databases):
 
 
 def test_three_are_chosen_by_their_lowest_pair_score():
-    kept = [Kept(i + 1, None, b"", [], 60, b"", 3, b"", b"") for i in range(4)]
+    kept = [Kept(i + 1, datetime.now(UTC), b"", [], 60, b"", 3, b"", b"") for i in range(4)]
     scores = {(0, 1): 80, (0, 2): 58, (1, 2): 70, (0, 3): 90, (1, 3): 88, (2, 3): 10}
     assert best_three(kept, scores, 57) == (0, 1, 3)
     assert best_three(kept[:3], {(0, 1): 80, (0, 2): 57, (1, 2): 70}, 57) is None  # "above" the threshold (H16)

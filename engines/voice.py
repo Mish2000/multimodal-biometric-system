@@ -103,7 +103,7 @@ def speech_windows(window_levels: np.ndarray) -> tuple[np.ndarray, float]:
     loud = window_levels >= floor + SPEECH_MARGIN
     speech = loud.copy()
     where = np.flatnonzero(loud)
-    for start, end in zip(where[:-1], where[1:]):
+    for start, end in zip(where[:-1], where[1:], strict=True):
         if end - start - 1 <= PAUSE_FRAMES:
             speech[start:end] = True
     return speech, floor

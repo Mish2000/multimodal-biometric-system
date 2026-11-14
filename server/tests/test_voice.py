@@ -11,7 +11,7 @@ import random
 import struct
 import sys
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -25,7 +25,6 @@ from mbs.api import create_app
 from mbs.engines import Engine
 from mbs.models import Algorithm, Enrolment, Sample, Template
 from mbs.voice import VoiceService
-
 from test_api import administrator, auth, error, register, sign_in
 
 FAKES = Path(__file__).resolve().parent / "fakes"
@@ -60,7 +59,7 @@ def recording(*args, **kwargs) -> str:
 
 
 def made(*recordings: str, start: datetime | None = None, step_s: int = 15) -> dict:
-    start = start or datetime.now(timezone.utc) - timedelta(minutes=2)
+    start = start or datetime.now(UTC) - timedelta(minutes=2)
     return {"recordings": [{"recording": item, "captured_at": (start + timedelta(seconds=step_s * i)).isoformat()}
                            for i, item in enumerate(recordings)]}
 
@@ -78,7 +77,7 @@ def fake_embedding(person: str, variant: int) -> list[float]:
 
 
 def cosine(a: list[float], b: list[float]) -> float:
-    dot = sum(x * y for x, y in zip(a, b))
+    dot = sum(x * y for x, y in zip(a, b, strict=True))
     return dot / math.sqrt(sum(x * x for x in a) * sum(y * y for y in b))
 
 
@@ -89,7 +88,7 @@ def subject_of(client, databases, keys, token):
 
 def test_the_voice_joins_the_algorithm_table_with_its_pinned_model(databases):
     with Session(databases.biometric) as db:
-        row = db.get(Algorithm, "ecapa-voxceleb")
+        row = db.get_one(Algorithm, "ecapa-voxceleb")
         assert (row.modality, row.version, row.threshold, row.threshold_provisional, row.threshold_origin) == (
             "voice", ECAPA_SHA256, 0.25, False, "SpeechBrain's verification threshold")
 
@@ -184,8 +183,9 @@ def test_three_matching_recordings_enrol_the_voice(voice_client, databases, keys
         samples = db.scalars(select(Sample).order_by(Sample.placement)).all()
         assert [(s.media_type, s.width, s.height, s.ppi, s.duration_ms) for s in samples] == [
             ("audio/wav", None, None, None, 5000)] * 3
+        assert samples[0].checks is not None
         assert [c["name"] for c in samples[0].checks] == CHECKS
-        for sample, original in zip(samples, recordings):  # the engine's WAV, sealed to its row and subject
+        for sample, original in zip(samples, recordings, strict=True):  # the engine's WAV, sealed to its row and subject
             assert keyring.open_sealed(keys, keyring.SAMPLE, sample.id.bytes + subject.bytes, sample.data) == b"RIFFWAV:" + original
         templates = db.scalars(select(Template)).all()
         assert {(t.algorithm, t.version, t.data) for t in templates} == {("ecapa-voxceleb", ECAPA_SHA256, None)}
@@ -252,7 +252,7 @@ def test_enrolling_again_replaces_the_voice_and_deleting_erases_every_enrolment(
 def test_an_enrolment_needs_three_to_six_recordings_made_in_order_in_the_last_half_hour(voice_client):
     token = user(voice_client)
     three = [recording(variant=v) for v in range(3)]
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     for body in (made(*three[:2]), made(*(three * 3)[:7]), made(*three, start=now + timedelta(minutes=5)),
                  made(*three, start=now - timedelta(hours=2)), made(*three, step_s=-10)):
         assert voice_client.post("/api/voice/enrolments", json=body, headers=auth(token)).status_code == 422

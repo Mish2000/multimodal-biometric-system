@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import base64
 import json
-import struct
 import os
+import struct
 from pathlib import Path
 
 import pytest
@@ -20,8 +20,7 @@ from mbs import config as settings
 from mbs.api import create_app
 from mbs.engines import Engine, Scanner, conda_environment
 from mbs.fingerprint import FingerprintService
-
-from test_fingerprint import FAKES, LIFT, PYTHON, enrol, plan, script, user  # noqa: F401 (script is a fixture)
+from test_fingerprint import FAKES, LIFT, PYTHON, enrol, plan, script, user
 from test_verification import verify
 
 LIVE = Path(os.environ["MBS_LIVE_CAPTURES"]) if os.environ.get("MBS_LIVE_CAPTURES") else None
@@ -31,6 +30,7 @@ LIVE = Path(os.environ["MBS_LIVE_CAPTURES"]) if os.environ.get("MBS_LIVE_CAPTURE
 @pytest.mark.parametrize("pore_at_enrolment", [False, True])
 def test_the_real_engines_enrol_a_finger_of_the_second_set(databases, keys, outbox, script, pore_at_enrolment):
     config, python = settings.load(), settings.research_python()
+    assert LIVE is not None and python is not None  # the local check runs only where both are set
     engines, env = settings.REPOSITORY / "engines", conda_environment(python)
     service = FingerprintService(
         scanner=Scanner([PYTHON, str(FAKES / "fake_scanner.py"), "--script", str(script)]),
@@ -38,9 +38,11 @@ def test_the_real_engines_enrol_a_finger_of_the_second_set(databases, keys, outb
         sift=Engine("opencv-sift", [str(python), "-I", str(engines / "opencv_sift.py")], env),
     )
     pore_python = settings.pore_python()
+    assert pore_python is not None
     pore = Engine("pore-sift", [str(pore_python), "-I", "-B", str(engines / "pore_sift.py"), str(python)],
                   conda_environment(pore_python))
     learned_python = settings.learned_python()
+    assert learned_python is not None
     learned = Engine("learned-pore", [str(learned_python), "-I", "-B", str(engines / "learned_pore.py")],
                      conda_environment(learned_python))
     if pore_at_enrolment:

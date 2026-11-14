@@ -16,12 +16,22 @@ from mbs import keys as keyring
 from mbs import voice
 from mbs.api import create_app
 from mbs.models import Account, Algorithm, Attempt, Enrolment, Sample, Template
-
 from test_api import administrator, auth, error, register, sign_in
-from test_face import image, service_with as face_service_with, taken
+from test_face import image, taken
+from test_face import service_with as face_service_with
 from test_face_identification import national_id
-from test_voice import (cosine, fake_embedding, made, raw, recording, service_with, subject_of, user,  # noqa: F401
-                        voice_client, voices)
+from test_voice import (
+    cosine,
+    fake_embedding,
+    made,
+    raw,
+    recording,
+    service_with,
+    subject_of,
+    user,
+    voice_client,
+    voices,
+)
 
 ROUTE = "/api/voice/identifications"
 
@@ -50,7 +60,7 @@ def identify(client, token, **kwargs):
 
 def attempts(databases) -> list[Attempt]:
     with Session(databases.biometric) as db:
-        return db.scalars(select(Attempt).order_by(Attempt.at)).all()
+        return list(db.scalars(select(Attempt).order_by(Attempt.at)).all())
 
 
 def highest(probe: str, person: str, variants=(0, 1, 2)) -> tuple[float, int]:
@@ -67,14 +77,14 @@ def test_identification_ranks_the_enrolments_and_keeps_other_people_anonymous(vo
     assert answer.status_code == 200, answer.text
     result = answer.json()
     expected = {person: highest(probe, person)[0] for person in "abc"}
-    order = sorted(expected, key=expected.get, reverse=True)
+    order = sorted(expected, key=lambda person: expected[person], reverse=True)
     assert result["status"] == "identified" and result["accepted"] is found is (expected[order[0]] > 0.25)
     assert (result["gallery_size"], result["enrolments"], result["tied_leaders"], result["threshold"]) == (9, 3, 1, 0.25)
     assert (result["threshold_origin"], result["threshold_provisional"], result["source"]) == (
         "SpeechBrain's verification threshold", False, "device")
     assert [c["rank"] for c in result["candidates"]] == [1, 2, 3]
     assert [c["own"] for c in result["candidates"]] == [person == "a" for person in order]
-    for candidate, person in zip(result["candidates"], order):  # pgvector's cosine similarity, as at enrolment
+    for candidate, person in zip(result["candidates"], order, strict=True):  # pgvector's cosine similarity, as at enrolment
         assert candidate["score"] == pytest.approx(expected[person], abs=1e-6)
         assert candidate["accepted"] is (candidate["score"] > 0.25)
         assert set(candidate) == {"rank", "own", "score", "accepted"}
@@ -87,7 +97,7 @@ def test_identification_ranks_the_enrolments_and_keeps_other_people_anonymous(vo
     subject = subject_of(voice_client, databases, keys, tokens["a"])
     leader = subject_of(voice_client, databases, keys, tokens[order[0]])
     with Session(databases.biometric) as db:
-        assert db.get(Enrolment, attempt.top_enrolment_id).subject_id == leader
+        assert db.get_one(Enrolment, attempt.top_enrolment_id).subject_id == leader
         hidden = [*db.scalars(select(Enrolment.id)), *db.scalars(select(Enrolment.subject_id)),
                   *db.scalars(select(Sample.id)), *db.scalars(select(Template.id))]
     assert (attempt.subject_id, attempt.modality, attempt.mode, attempt.algorithm, attempt.enrolment_id) == \
@@ -135,7 +145,7 @@ def test_the_gallery_has_only_the_current_voice_enrolments_of_active_user_accoun
             assert again.status_code == 201  # the first enrolment is replaced and stays stored
             other(client, "dana", 1, "b")
             with Session(databases.accounts) as db, db.begin():
-                db.scalar(select(Account).where(Account.username == "dana")).status = "disabled"
+                db.scalars(select(Account).where(Account.username == "dana")).one().status = "disabled"
             assert register(client, username="noa", email="noa@example.org", national_id=national_id(2),
                             phone="0521234002").status_code == 201
             noa = sign_in(client, "noa")  # a face enrolment only, never in a voice gallery
@@ -193,11 +203,12 @@ def test_a_change_to_the_gallery_before_the_save_ends_the_search_unsaved(voice_c
                               headers=auth(other_token))
         elif change == "disable":
             with Session(databases.accounts) as db, db.begin():
-                db.scalar(select(Account).where(Account.username == "dana")).status = "disabled"
+                db.scalars(select(Account).where(Account.username == "dana")).one().status = "disabled"
         else:
             with Session(databases.biometric) as db, db.begin():
-                db.scalars(select(Template).join(Sample).join(Enrolment).where(Enrolment.subject_id == dana)).first() \
-                    .version = "0" * 64
+                template = db.scalars(select(Template).join(Sample).join(Enrolment).where(Enrolment.subject_id == dana)).first()
+                assert template is not None
+                template.version = "0" * 64
         return original(*args)
 
     monkeypatch.setattr(voice, "_repeat_view", changed_meanwhile)
@@ -208,7 +219,7 @@ def test_a_change_to_the_gallery_before_the_save_ends_the_search_unsaved(voice_c
 def test_a_new_enrolment_or_threshold_after_the_start_does_not_change_the_search(voice_client, databases, monkeypatch):
     token = enrolled(voice_client)
     original = voice._extract
-    changed = []
+    changed: list[bool] = []
 
     def meanwhile(service, data):
         if not changed:  # the new recording's extraction comes after the gallery and the threshold are fixed
@@ -232,7 +243,7 @@ def test_deleting_the_leading_enrolment_keeps_the_attempt_and_its_recording(voic
     result = identify(voice_client, token, person="b", variant=3).json()
     assert result["accepted"] is True and result["candidates"][0]["own"] is False
     with Session(databases.biometric) as db:
-        before = db.get(Attempt, uuid.UUID(result["attempt_id"])).probe
+        before = db.get_one(Attempt, uuid.UUID(result["attempt_id"])).probe
     assert voice_client.delete("/api/voice/enrolment", headers=auth(other_token)).status_code == 204
     with Session(databases.biometric) as db:
         attempt = db.get(Attempt, uuid.UUID(result["attempt_id"]))
@@ -254,6 +265,7 @@ def test_a_gallery_with_another_model_version_or_a_missing_embedding_is_refused(
     dana = subject_of(voice_client, databases, keys, other(voice_client, "dana", 1, "b"))
     with Session(databases.biometric) as db, db.begin():
         template = db.scalars(select(Template).join(Sample).join(Enrolment).where(Enrolment.subject_id == dana)).first()
+        assert template is not None
         if fault == "version":
             template.version = "0" * 64
         else:
@@ -270,7 +282,7 @@ def test_five_leading_candidates_are_shown_and_the_own_recording_only_among_them
 
     def ranking(probe: str) -> list[str]:
         best = {person: highest(probe, person)[0] for person in ["a", *people]}
-        return sorted(best, key=best.get, reverse=True)
+        return sorted(best, key=lambda person: best[person], reverse=True)
 
     # The stand-in's directions are fixed, so this finds the same probe every time: six others rank above the caller.
     probe = next(name for name in (f"q{n}" for n in range(500)) if ranking(name).index("a") == 6)

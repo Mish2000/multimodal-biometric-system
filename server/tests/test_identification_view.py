@@ -9,8 +9,7 @@ from sqlalchemy.orm import Session
 
 from mbs import identification
 from mbs.models import Attempt
-
-from test_fingerprint import finger, fp_client, plan, script, service  # noqa: F401
+from test_fingerprint import finger, fp_client, plan, script, service
 from test_identification import identify, other_enrolled
 from test_learned_verification import add_learned
 from test_pore_verification import add_pore

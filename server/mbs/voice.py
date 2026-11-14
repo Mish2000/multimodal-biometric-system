@@ -77,6 +77,7 @@ def from_config(config: Config) -> tuple[VoiceService | None, str]:
     ) if not ok]
     if missing:
         return None, "missing: " + ", ".join(missing)
+    assert python is not None  # checked above
     command = [str(python), "-I", str(REPOSITORY / "engines" / "voice.py"), str(models)]
     return VoiceService(Engine(VOICE, command, conda_environment(python))), ""
 
@@ -99,7 +100,8 @@ def _measurements(reply: dict) -> dict[str, float]:
     values = {}
     for name, low, high in MEASUREMENTS:
         value = reply.get(name)
-        if type(value) not in (int, float) or not math.isfinite(value) or not low <= value <= high:
+        if (isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value)
+                or not low <= value <= high):
             raise EngineError("invalid voice reply")
         values[name] = float(value)
     if values["speech"] > values["duration"] + 0.05:
@@ -274,6 +276,7 @@ def _origin(probe: Extracted, source: str) -> dict:
     own, so the page can show it."""
     if source != "file":
         return {"source": source}
+    assert probe.wav is not None  # the engine's recording of a file that passed its checks
     return {"source": source, "file": probe.file, "probe": base64_text(probe.wav)}
 
 

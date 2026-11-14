@@ -69,6 +69,7 @@ def from_config(config: Config) -> tuple[FaceService | None, str]:
     ) if not ok]
     if missing:
         return None, "missing: " + ", ".join(missing)
+    assert python is not None  # checked above
     command = [str(python), "-I", str(REPOSITORY / "engines" / "face.py"), str(models)]
     return FaceService(Engine(FACE, command, conda_environment(python))), ""
 
@@ -211,7 +212,8 @@ def check(service: FaceService, image: bytes) -> dict:
     """One taken image's checks and its aligned face, for the page to show at once; nothing is kept."""
     found = _extract(service, image)
     return {"width": found.width, "height": found.height, "faces": found.faces, "checks": found.checks,
-            "passed": found.passed, "aligned": base64_text(found.aligned) if found.passed else None}
+            "passed": found.passed,
+            "aligned": base64_text(found.aligned) if found.passed and found.aligned is not None else None}
 
 
 def method(databases: Databases, service: FaceService | None) -> dict:
@@ -286,6 +288,7 @@ def identify(service: FaceService, databases: Databases, keys: Keys, subject: uu
 
 
 def _sample_json(sample: Sample, found: Extracted) -> dict:
+    assert found.aligned is not None  # every saved image passed its checks
     return {"id": str(sample.id), "placement": sample.placement, "captured_at": sample.captured_at.isoformat(),
             "width": sample.width, "height": sample.height, "sealed_length": len(sample.data),
             "aligned": base64_text(found.aligned)}

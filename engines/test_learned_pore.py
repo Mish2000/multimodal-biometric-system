@@ -6,8 +6,8 @@ import subprocess
 import numpy as np
 import pytest
 
-from test_engines import ENGINES, ask, png, research_available, research_link, ridges
 import protocol
+from test_engines import ENGINES, ask, png, research_available, research_link, ridges
 
 
 @pytest.mark.skipif(not research_available(), reason="the pinned research checkout is unavailable")

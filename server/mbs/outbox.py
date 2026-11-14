@@ -10,8 +10,9 @@ from __future__ import annotations
 
 import html
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import TypedDict
 from urllib.parse import urlencode
 
 from .config import REPOSITORY
@@ -20,7 +21,17 @@ from .models import SMS
 OUTBOX = REPOSITORY / "local" / "outbox"
 RESET_LINK = "mbs://reset-password"  # the client's own link type (H32)
 
-TEXTS = {
+
+class Texts(TypedDict):
+    sms: tuple[str, str]  # before and after the link
+    subject: str
+    email: tuple[str, str, str]  # the greeting and the text before the link, then the text after it
+    to: str
+    sms_kind: str
+    email_kind: str
+
+
+TEXTS: dict[str, Texts] = {
     "en": {
         "sms": ("Identification System: to choose a new password, open this link within {minutes} minutes. "
                 "It works once.", "If you did not ask for this, ignore this message."),
@@ -83,7 +94,7 @@ class Outbox:
 
     def send(self, message: Message) -> Path:
         self.folder.mkdir(parents=True, exist_ok=True)
-        moment = datetime.now(timezone.utc)
+        moment = datetime.now(UTC)
         path = self.folder / f"{moment:%Y%m%d-%H%M%S-%f}-{message.channel}.html"
         path.write_text(_page(message, moment), encoding="utf-8", newline="\n")
         print(f"outbox: a new {'SMS' if message.channel == SMS else 'email'} message is in {path}", flush=True)

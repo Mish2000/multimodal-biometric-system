@@ -10,8 +10,7 @@ from sqlalchemy.orm import Session
 from mbs import verification
 from mbs.engines import EngineError
 from mbs.models import Attempt, Enrolment, Sample
-
-from test_fingerprint import finger, fp_client, plan, script, service, subject_of  # noqa: F401
+from test_fingerprint import finger, fp_client, plan, script, service, subject_of
 from test_identification import other_enrolled
 from test_verification import enrolled, verify
 
@@ -49,6 +48,7 @@ def test_reference_image_cannot_be_opened_for_another_subject(fp_client, script,
     other_subject = subject_of(fp_client, databases, keys, other)
     with Session(databases.biometric) as db:
         other_enrolment = db.scalar(select(Enrolment.id).where(Enrolment.subject_id == other_subject))
+    assert other_enrolment is not None
     with pytest.raises(verification.VerificationError, match="enrolment_changed"):
         verification._reference_image(databases, keys, subject, other_enrolment, 1)
 
@@ -56,7 +56,7 @@ def test_reference_image_cannot_be_opened_for_another_subject(fp_client, script,
 def test_a_damaged_winning_capture_prevents_sending_an_illustration_or_saved_result(fp_client, script, databases):
     token = enrolled(fp_client, script)
     with Session(databases.biometric) as db, db.begin():
-        db.scalar(select(Sample).where(Sample.placement == 1)).data = b"damaged"
+        db.scalars(select(Sample).where(Sample.placement == 1)).one().data = b"damaged"
     plan(script, finger("q60:A4"))
     result = verify(fp_client, token)[-1]
     assert result == {"type": "failed", "error": "stored_template_unreadable"}

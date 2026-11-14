@@ -11,8 +11,24 @@ import struct
 import uuid
 from datetime import datetime
 
-from sqlalchemy import (BigInteger, Boolean, CheckConstraint, DateTime, Double, ForeignKey, Identity, Index, Integer,
-                        LargeBinary, SmallInteger, String, UniqueConstraint, Uuid, cast, text)
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    Double,
+    ForeignKey,
+    Identity,
+    Index,
+    Integer,
+    LargeBinary,
+    SmallInteger,
+    String,
+    UniqueConstraint,
+    Uuid,
+    cast,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql.base import ischema_names
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -168,6 +184,13 @@ class Algorithm(BiometricBase):
     threshold_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+def threshold_of(algorithm: Algorithm) -> float:
+    """The threshold a method decides by: every method has one, fusion excepted (algorithm_threshold, H16)."""
+    if algorithm.threshold is None:
+        raise ValueError(f"{algorithm.code} has no threshold")
+    return algorithm.threshold
+
+
 class Enrolment(BiometricBase):
     """One finger, the face or the voice of one subject (H6, H15). A new enrolment of the same finger replaces
     the old one, which stays with its findings (replaced_at)."""
@@ -230,6 +253,13 @@ class Template(BiometricBase):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     data: Mapped[bytes | None] = mapped_column(LargeBinary)
     embedding: Mapped[object | None] = mapped_column(Vector)
+
+
+def sealed_data(template: Template) -> bytes:
+    """A fingerprint template's sealed value; face and voice templates hold an embedding instead (template_one_value)."""
+    if template.data is None:
+        raise ValueError(f"template {template.id} holds no sealed value")
+    return template.data
 
 
 class Attempt(BiometricBase):

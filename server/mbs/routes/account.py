@@ -3,14 +3,14 @@ recovery while signed out (H32), and the signed-in account with its password, th
 
 from __future__ import annotations
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Request
+from fastapi import APIRouter, BackgroundTasks, Request
 from pydantic import BaseModel, Field
 
 from .. import accounts
 from ..accounts import SignedIn
 from ..models import ADMIN, USER
 from .common import DatabasesDep, KeysDep, OutboxDep, ThrottleDep
-from .policy import PUBLIC, allow, signed_in
+from .policy import PUBLIC, SignedInDep, allow
 
 router = APIRouter()
 
@@ -109,24 +109,24 @@ def logout(request: Request, databases: DatabasesDep) -> None:
 
 @router.get("/api/me")
 @allow(USER, ADMIN, during_password_change=True)
-def me(databases: DatabasesDep, keys: KeysDep, account: SignedIn = Depends(signed_in)) -> dict:
+def me(databases: DatabasesDep, keys: KeysDep, account: SignedInDep) -> dict:
     return {"account": account_json(account), "modalities": accounts.modalities(databases, keys, account)}
 
 
 @router.post("/api/me/password", status_code=204)
 @allow(USER, ADMIN, during_password_change=True)
 def change_password(body: PasswordChange, request: Request, databases: DatabasesDep,
-                    account: SignedIn = Depends(signed_in)) -> None:
+                    account: SignedInDep) -> None:
     accounts.change_password(databases, account.id, request.state.token, body.current, body.new)
 
 
 @router.post("/api/me/theme", status_code=204)
 @allow(USER, ADMIN)
-def change_theme(body: ThemeChange, databases: DatabasesDep, account: SignedIn = Depends(signed_in)) -> None:
+def change_theme(body: ThemeChange, databases: DatabasesDep, account: SignedInDep) -> None:
     accounts.set_theme(databases, account.id, body.theme)
 
 
 @router.post("/api/me/language", status_code=204)
 @allow(USER, ADMIN)
-def change_language(body: LanguageChange, databases: DatabasesDep, account: SignedIn = Depends(signed_in)) -> None:
+def change_language(body: LanguageChange, databases: DatabasesDep, account: SignedInDep) -> None:
     accounts.set_language(databases, account.id, body.language)

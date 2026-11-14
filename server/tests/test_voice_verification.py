@@ -14,9 +14,19 @@ from mbs import keys as keyring
 from mbs import voice
 from mbs.api import create_app
 from mbs.models import Attempt, Enrolment, Sample
-
 from test_api import administrator, auth, error
-from test_voice import cosine, fake_embedding, made, raw, recording, service_with, subject_of, user, voice_client, voices  # noqa: F401
+from test_voice import (
+    cosine,
+    fake_embedding,
+    made,
+    raw,
+    recording,
+    service_with,
+    subject_of,
+    user,
+    voice_client,
+    voices,
+)
 
 
 def enrol(client, token, *recordings: str) -> dict:

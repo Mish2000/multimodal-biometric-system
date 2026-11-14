@@ -13,9 +13,8 @@ from sqlalchemy.orm import Session
 
 from mbs import keys as keyring
 from mbs.models import Attempt
-
 from test_api import auth, error
-from test_face import face_client, faces, image, raw, subject_of, taken, user  # noqa: F401
+from test_face import face_client, faces, image, raw, subject_of, taken, user
 from test_face_identification import other
 from test_face_verification import attempts, enrolled
 

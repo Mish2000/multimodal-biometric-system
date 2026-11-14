@@ -13,12 +13,12 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from .. import accounts, face
-from ..accounts import AccountError, SignedIn
+from ..accounts import AccountError
 from ..engines import EngineError
 from ..face import FaceError, FaceService
 from ..models import USER
 from .common import JSON_AROUND, DatabasesDep, KeysDep, base64_length
-from .policy import allow, signed_in
+from .policy import SignedInDep, allow
 
 router = APIRouter()
 
@@ -112,10 +112,10 @@ def check_face(body: FaceImage, faces: FacesDep) -> dict:
 @router.post("/api/face/enrolments")
 @allow(USER)
 def enrol_face(body: FaceEnrolment, databases: DatabasesDep, keys: KeysDep, faces: FacesDep,
-               account: SignedIn = Depends(signed_in)) -> JSONResponse:
+               account: SignedInDep) -> JSONResponse:
     service = available(faces)
     images = [(face.decode_image(taken.image, face.IMAGE_BYTES), taken.captured_at) for taken in body.images]
-    subject = accounts.subject_of(databases, keys, account.id)
+    subject = accounts.user_subject(databases, keys, account.id)
     result = engine_work(lambda: face.enrol(service, databases, keys, subject, images))
     return JSONResponse(result, status_code=201 if result["status"] == "saved" else 200)
 
@@ -125,10 +125,10 @@ def enrol_face(body: FaceEnrolment, databases: DatabasesDep, keys: KeysDep, face
 @router.post("/api/face/verifications")
 @allow(USER)
 def verify_face(body: FaceProbe, databases: DatabasesDep, keys: KeysDep, faces: FacesDep,
-                account: SignedIn = Depends(signed_in)) -> dict:
+                account: SignedInDep) -> dict:
     service = available(faces)
     image = body.data()
-    subject = accounts.subject_of(databases, keys, account.id)
+    subject = accounts.user_subject(databases, keys, account.id)
     return engine_work(lambda: face.verify(service, databases, keys, subject, image, body.source))
 
 
@@ -137,10 +137,10 @@ def verify_face(body: FaceProbe, databases: DatabasesDep, keys: KeysDep, faces: 
 @router.post("/api/face/identifications")
 @allow(USER)
 def identify_face(body: FaceProbe, databases: DatabasesDep, keys: KeysDep, faces: FacesDep,
-                  account: SignedIn = Depends(signed_in)) -> dict:
+                  account: SignedInDep) -> dict:
     service = available(faces)
     image = body.data()
-    subject = accounts.subject_of(databases, keys, account.id)
+    subject = accounts.user_subject(databases, keys, account.id)
     return engine_work(lambda: face.identify(service, databases, keys, subject, image, body.source))
 
 
@@ -148,7 +148,7 @@ def identify_face(body: FaceProbe, databases: DatabasesDep, keys: KeysDep, faces
 # verification attempts and their sealed images; identification attempts stay, without the link (H41, H50).
 @router.delete("/api/face/enrolment", status_code=204)
 @allow(USER)
-def delete_face(databases: DatabasesDep, keys: KeysDep, account: SignedIn = Depends(signed_in)) -> None:
-    subject = accounts.subject_of(databases, keys, account.id)
+def delete_face(databases: DatabasesDep, keys: KeysDep, account: SignedInDep) -> None:
+    subject = accounts.user_subject(databases, keys, account.id)
     if not face.delete_face(databases, subject):
         raise AccountError("not_enrolled", 404)

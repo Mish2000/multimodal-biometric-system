@@ -8,9 +8,9 @@ import base64
 import logging
 import time
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -21,7 +21,7 @@ from . import keys as keyring
 from .db import Databases
 from .engines import EngineError, ScannerError, ScannerRun
 from .keys import Keys
-from .models import Algorithm, Attempt, Enrolment, Sample, Template
+from .models import Algorithm, Attempt, Enrolment, Sample, Template, sealed_data, threshold_of
 
 logger = logging.getLogger("mbs.verification")
 
@@ -51,7 +51,7 @@ def _load(databases: Databases, keys: Keys, subject: uuid.UUID, finger: int,
             Enrolment.finger == finger, Enrolment.replaced_at.is_(None)))
         if enrolment is None:
             raise VerificationError("not_enrolled")
-        algorithm = db.get(Algorithm, code)
+        algorithm = db.get_one(Algorithm, code)
         rows = db.execute(select(Sample, Template).outerjoin(Template,
             (Template.sample_id == Sample.id) & (Template.algorithm == code)).where(
             Sample.enrolment_id == enrolment.id).order_by(Sample.placement)).all()
@@ -59,7 +59,7 @@ def _load(databases: Databases, keys: Keys, subject: uuid.UUID, finger: int,
             raise VerificationError("templates_unavailable")
         if any(template is not None and template.version != algorithm.version for _, template in rows):
             raise VerificationError("template_version_mismatch")
-        reference = Reference(enrolment.id, algorithm.threshold, algorithm.threshold_origin, algorithm.version, [],
+        reference = Reference(enrolment.id, threshold_of(algorithm), algorithm.threshold_origin, algorithm.version, [],
                               algorithm=code, provisional=algorithm.threshold_provisional)
         for sample, template in rows:
             if template is None:
@@ -77,7 +77,7 @@ def _load(databases: Databases, keys: Keys, subject: uuid.UUID, finger: int,
                             pores.id.bytes + subject.bytes + fp.PORE_SIFT.encode("ascii"), pores.data)
             else:
                 native = keyring.open_sealed(keys, keyring.TEMPLATE,
-                    template.id.bytes + subject.bytes + code.encode("ascii"), template.data)
+                    template.id.bytes + subject.bytes + code.encode("ascii"), sealed_data(template))
                 reference.templates.append((sample.placement, native))
         return reference
 
@@ -96,7 +96,7 @@ def _store_templates(databases: Databases, keys: Keys, subject: uuid.UUID, refer
                                                       Template.algorithm == reference.algorithm))
             if stored is None:
                 stored = Template(id=uuid.uuid4(), sample_id=sample_id, algorithm=reference.algorithm,
-                                  version=reference.version, created_at=datetime.now(timezone.utc))
+                                  version=reference.version, created_at=datetime.now(UTC))
                 stored.data = keyring.seal(keys, keyring.TEMPLATE,
                     stored.id.bytes + subject.bytes + reference.algorithm.encode("ascii"), native)
                 db.add(stored)
@@ -104,7 +104,7 @@ def _store_templates(databases: Databases, keys: Keys, subject: uuid.UUID, refer
                 if stored.version != reference.version:
                     raise VerificationError("template_version_mismatch")
                 native = keyring.open_sealed(keys, keyring.TEMPLATE,
-                    stored.id.bytes + subject.bytes + reference.algorithm.encode("ascii"), stored.data)
+                    stored.id.bytes + subject.bytes + reference.algorithm.encode("ascii"), sealed_data(stored))
             templates.append((placement, native))
     return sorted(templates)
 
@@ -154,7 +154,7 @@ def _reference_image(databases: Databases, keys: Keys, subject: uuid.UUID, enrol
 
 
 async def verify(service: fp.FingerprintService, databases: Databases, keys: Keys, subject: uuid.UUID,
-                 finger: int, algorithm: str = fp.OPENCV_SIFT) -> AsyncIterator[dict]:
+                 finger: int, algorithm: str = fp.OPENCV_SIFT) -> AsyncGenerator[dict, None]:
     if not service.scanner_lock.acquire(blocking=False):
         yield {"type": "failed", "error": "scanner_busy"}
         return
@@ -178,7 +178,7 @@ async def verify(service: fp.FingerprintService, databases: Databases, keys: Key
         service.scanner_lock.release()
 
 
-async def _verify(service, databases, keys, subject, finger, run, algorithm) -> AsyncIterator[dict]:
+async def _verify(service, databases, keys, subject, finger, run, algorithm) -> AsyncGenerator[dict, None]:
     if algorithm not in (fp.OPENCV_SIFT, fp.PORE_SIFT, fp.LEARNED_PORE):
         raise VerificationError("unknown_method")
     engine = fp.engine_for(service, algorithm)
@@ -211,8 +211,8 @@ async def _verify(service, databases, keys, subject, finger, run, algorithm) -> 
         reference.pore_sources.clear()
     for capture in range(1, fp.MOST_CAPTURES + 1):
         yield {"type": "place", "capture": capture, "maximum": fp.MOST_CAPTURES}
-        header, png = await fp.acquire(service, "finger", run)
-        at, started = datetime.now(timezone.utc), time.perf_counter()
+        header, png = await fp.acquire_finger(service, run)
+        at, started = datetime.now(UTC), time.perf_counter()
         yield {"type": "checking"}
         score, checks = await run_in_threadpool(fp.capture_quality, service, header, png)
         image = base64.b64encode(png).decode("ascii")
@@ -251,6 +251,7 @@ async def _verify(service, databases, keys, subject, finger, run, algorithm) -> 
     score = max(item["score"] for item in comparisons)
     duration_ms = round((time.perf_counter() - started) * 1000)
     pores_version = reference.version if algorithm == fp.LEARNED_PORE else None
+    assert best_placement is not None  # set by the first comparison: every score is at least zero
     stored_image, stored_pores = await run_in_threadpool(_reference_image, databases, keys, subject,
                                                          reference.enrolment_id, best_placement, pores_version)
     if algorithm == fp.LEARNED_PORE:
@@ -260,6 +261,7 @@ async def _verify(service, databases, keys, subject, finger, run, algorithm) -> 
         reference_pores = described_from.get(best_placement) or stored_pores
         if reference_pores is None:
             reference_pores = await run_in_threadpool(fp.detect_pores, service, stored_image)
+        assert probe_pores is not None  # detected for Pore CNN before the comparisons
         result, parts = await run_in_threadpool(engine.request, {"op": "compare", "view": True},
                                                 [native, best_template, probe_pores, reference_pores])
         if fp.comparison_score(result) != best_score:

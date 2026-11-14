@@ -6,12 +6,12 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from mbs import config as settings, fingerprint, identification
+from mbs import config as settings
+from mbs import fingerprint, identification
 from mbs.api import create_app
 from mbs.engines import Scanner
-
 from test_api import register, sign_in
-from test_fingerprint import FAKES, LIFT, PYTHON, enrol, plan, script, subject_of, user  # noqa: F401
+from test_fingerprint import FAKES, LIFT, PYTHON, enrol, plan, script, subject_of, user
 from test_identification import identify
 
 LIVE = Path(os.environ["MBS_LIVE_CAPTURES"]) if os.environ.get("MBS_LIVE_CAPTURES") else None
@@ -25,6 +25,7 @@ def test_real_search_equals_serial_comparisons_of_the_same_native_templates(data
     # Old enrolments with OpenCV SIFT templates remain searchable without a backfill.
     service.pore = service.learned = None
     def captures(position):
+        assert LIVE is not None
         return sorted(LIVE.glob(f"live002_f{position:02d}_p*.png"))
     def prepare(position):
         steps = []

@@ -1717,3 +1717,35 @@ offscreen checks against the new server unchanged: 78 with the face and voice en
 enrolled, verified and identified live and from an MP3 file, and deleted, through the real engine, and a synthetic
 face enrolment was saved through the face's own save, and 68 with the fingerprint engines. The client and the engines
 are unchanged. It passed a manual check on 2026-11-14.
+
+## 2026-11-14: lint and type checks of the Python
+
+Approved on 2026-11-14, from a reading of the code before increment 6; no decision changed (H23).
+
+- The system's Python had neither a linter nor a type checker. The server's environment now has ruff 0.17.3 and mypy
+  2.4.1 from conda-forge, each the newest version published at least 14 days earlier (H23): seven packages of
+  21,715,031 bytes in all, added to its lock with nothing else changed (ca-certificates and certifi stay at
+  2026.10.19).
+- ruff checks the system's 88 Python files (the server, the engines and the methods) as `ruff.toml` at the root sets
+  it: pycodestyle, Pyflakes, import order, flake8-bugbear and pyupgrade, for Python 3.12, and 3.10 for the Pore SIFT
+  engine and its protocol, which run in the research's Pore SIFT environment. Two rules are set aside: line length
+  (201 lines are longer than 120 characters, and wrapping them adds nothing a reader needs) and, in the server's tests,
+  redefinitions, since the tests share pytest fixtures by importing them and every test that takes one would be
+  reported. The seven imported fixtures are named in the configuration.
+- mypy checks the server and its tests (71 files) as `server/pyproject.toml` sets it, functions without annotations
+  included. The engines and the methods run in other environments (numpy, OpenCV, PyTorch) and are checked by ruff
+  only.
+- The first runs reported 362 findings of ruff and 225 errors of mypy; none is left. Most were mechanical: import
+  order, `datetime.UTC`, four unused imports, and values that the database or the flow guarantees while their types
+  allowed None, such as a row that must exist, a template's sealed value, a method's threshold or the image of a
+  capture. Such rows are now read with SQLAlchemy's `get_one`, three small helpers state a guarantee once
+  (`threshold_of`, `sealed_data`, `acquire_finger`), and the remaining cases are asserted where they hold. The routes
+  take the signed-in account through one annotated dependency, as they already took the databases and the keys, and
+  every `zip` whose sequences must be equally long now says so.
+- Behaviour is unchanged: what the types now exclude could not happen before either, and such a state would now end
+  with a clear error instead of a missing attribute. The server's README, which still counted 247 tests, counts 351.
+
+All 351 server tests passed, including the four local checks with stored captures, as did the 39 engine tests and
+the research link's 7 tests, and the built client passed its offscreen checks against the new server unchanged: 68
+with the fingerprint engines and 78 with the face and voice engines. The server's environment was built again from its
+lock in a temporary folder without the network and listed exactly the lock. It passed a manual check on 2026-11-14.

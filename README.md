@@ -198,6 +198,8 @@ cd server
 python -m mbs setup        # key file, local settings, cluster and databases
 python -m mbs serve        # the API on 127.0.0.1:55433
 python -m pytest           # 351 tests, including four local checks with MBS_LIVE_CAPTURES
+python -m mypy             # type checks of the server and its tests
+ruff check ..              # lint of all the system's Python (ruff.toml)
 
 # The client, from its lock file
 cd ../client

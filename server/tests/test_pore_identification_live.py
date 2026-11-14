@@ -8,12 +8,12 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from mbs import config as settings, fingerprint, identification
+from mbs import config as settings
+from mbs import fingerprint, identification
 from mbs.api import create_app
 from mbs.engines import Scanner
-
 from test_api import register, sign_in
-from test_fingerprint import FAKES, LIFT, PYTHON, enrol, plan, script, subject_of, user  # noqa: F401
+from test_fingerprint import FAKES, LIFT, PYTHON, enrol, plan, script, subject_of, user
 from test_identification import identify
 
 LIVE = Path(os.environ["MBS_LIVE_CAPTURES"]) if os.environ.get("MBS_LIVE_CAPTURES") else None
@@ -28,6 +28,7 @@ def test_real_pore_gallery_templates_equal_h10_and_rank_like_serial_comparison(d
     service.pore = service.learned = None
 
     def captures(position):
+        assert LIVE is not None
         return sorted(LIVE.glob(f"live002_f{position:02d}_p*.png"))
 
     def prepare(position):
@@ -61,6 +62,7 @@ def test_real_pore_gallery_templates_equal_h10_and_rank_like_serial_comparison(d
                     candidate = candidates[reference.enrolment_id]
                     native = identification._open_reference(databases, keys, candidate, reference, algorithm)
                     image_id = f"live002_f{candidate.finger:02d}_p{reference.placement}"
+                    assert LIVE is not None
                     features = LIVE / "evaluation" / "features"
                     if algorithm == "pore-sift":
                         with zipfile.ZipFile(io.BytesIO(native)) as actual, zipfile.ZipFile(features / algorithm / f"{image_id}.npz") as expected:
@@ -70,6 +72,7 @@ def test_real_pore_gallery_templates_equal_h10_and_rank_like_serial_comparison(d
                         assert native == (features / "learned-pore-repeat" / f"{image_id}.npy").read_bytes()
                     templates[reference.sample_id] = native
                 engine = fingerprint.engine_for(service, algorithm)
+                assert engine is not None
                 for position, own in ((7, True), (2, False)):
                     probe = fingerprint.extract_native(service, algorithm, captures(position)[2].read_bytes())
                     expected_scores = dict.fromkeys(candidates, 0)

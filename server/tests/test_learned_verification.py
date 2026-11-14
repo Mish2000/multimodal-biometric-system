@@ -2,7 +2,7 @@
 
 import json
 import struct
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import anyio
 import pytest
@@ -13,10 +13,20 @@ from mbs import fingerprint, verification
 from mbs import keys as keyring
 from mbs.engines import Engine, EngineError
 from mbs.models import Attempt, Enrolment, Template
-
 from test_api import auth
-from test_fingerprint import (FAKES, PYTHON, enrol, finger, fp_client, plan, placements, script, service,
-                              subject_of, user)  # noqa: F401
+from test_fingerprint import (
+    FAKES,
+    PYTHON,
+    enrol,
+    finger,
+    fp_client,
+    placements,
+    plan,
+    script,
+    service,
+    subject_of,
+    user,
+)
 from test_pore_verification import add_pore, verify
 from test_verification import enrolled
 
@@ -117,7 +127,7 @@ def test_preparation_interruption_does_not_commit_partial_templates(fp_client, s
                     fingerprint.delete_finger(databases, subject, 7)
                 elif action == "replace":
                     with Session(databases.biometric) as db, db.begin():
-                        db.scalars(select(Enrolment)).one().replaced_at = datetime.now(timezone.utc)
+                        db.scalars(select(Enrolment)).one().replaced_at = datetime.now(UTC)
                 else:
                     await flow.aclose()
                     break
@@ -150,7 +160,8 @@ def test_failed_preparation_retries_without_partial_rows_or_a_new_scan(fp_client
 def test_learned_threshold_is_strict_and_uses_the_highest_of_three(fp_client, script, service, monkeypatch):
     add_learned(service)
     token = enrolled(fp_client, script)
-    engine, scores, seen = service.learned, iter([20, 21, 21, 20, 21, 22]), []
+    engine, scores = service.learned, iter([20, 21, 21, 20, 21, 22])
+    seen: list = []
     original = engine.request
     def boundary(header, parts):
         if header["op"] != "compare":

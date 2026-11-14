@@ -12,9 +12,8 @@ from sqlalchemy.orm import Session
 
 from mbs import keys as keyring
 from mbs.models import Attempt
-
 from test_api import auth, error
-from test_voice import raw, recording, subject_of, user, voice_client, voices  # noqa: F401
+from test_voice import raw, recording, subject_of, user, voice_client, voices
 from test_voice_verification import enrol
 
 MP3, OGG, WAV = b"ID3\x04\x00\x00\x00\x00\x00\x00", b"OggS\x00\x02", b"RIFF\x24\x00\x00\x00WAVEfmt "
@@ -33,7 +32,7 @@ def send(client, token, route: str, data: bytes, source: str = "file"):
 
 def attempts(databases) -> list[Attempt]:
     with Session(databases.biometric) as db:
-        return db.scalars(select(Attempt).order_by(Attempt.at)).all()
+        return list(db.scalars(select(Attempt).order_by(Attempt.at)).all())
 
 
 @pytest.fixture

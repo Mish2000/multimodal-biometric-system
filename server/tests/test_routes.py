@@ -6,8 +6,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+from typing import Any, cast
 
 from fastapi.routing import APIRoute, iter_route_contexts
+from pydantic import BaseModel
 
 from mbs.api import create_app
 from mbs.routes.policy import policy
@@ -74,7 +76,7 @@ SCHEMAS = {
 
 
 def test_the_routes_who_may_call_them_and_their_request_models():
-    app = create_app(None, None, None)  # nothing in the state is used until a request arrives
+    app = create_app(None, None, None)  # type: ignore[arg-type]  # the state is not used until a request arrives
     table, schemas = [], {}
     # The routes of the included routers too, which FastAPI keeps out of `app.routes` until a request needs them.
     for context in iter_route_contexts(app.routes):
@@ -82,12 +84,13 @@ def test_the_routes_who_may_call_them_and_their_request_models():
         if not isinstance(route, APIRoute):
             continue
         assert context.dependant.dependencies[0].call is policy, context.path
-        models = [param.field_info.annotation for param in route.dependant.body_params]
+        models = [cast(type[BaseModel], param.field_info.annotation) for param in route.dependant.body_params]
         for model in models:
             schema = json.dumps(model.model_json_schema(), sort_keys=True).encode("utf-8")
             schemas[model.__name__] = hashlib.sha256(schema).hexdigest()[:12]
-        for method in sorted(context.methods):
-            table.append((method, context.path, route.name, route.status_code, tuple(sorted(route.endpoint.mbs_allow)),
-                          route.endpoint.mbs_during_password_change, models[0].__name__ if models else None))
+        endpoint: Any = route.endpoint  # marked by `allow`
+        for method in sorted(context.methods or ()):
+            table.append((method, context.path, route.name, route.status_code, tuple(sorted(endpoint.mbs_allow)),
+                          endpoint.mbs_during_password_change, models[0].__name__ if models else None))
     assert sorted(table, key=lambda row: (row[1], row[0])) == ROUTES
     assert schemas == SCHEMAS

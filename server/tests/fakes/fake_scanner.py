@@ -10,11 +10,12 @@ import json
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
-args = dict(zip(sys.argv[1::2], sys.argv[2::2]))
+args = dict(zip(sys.argv[1::2], sys.argv[2::2], strict=True))
 script = Path(args["--script"])
 steps = json.loads(script.read_text(encoding="utf-8"))
-step = steps.pop(0) if steps else {"exit": 9, "stderr": "the fake scanner has no step left"}
+step: dict[str, Any] = steps.pop(0) if steps else {"exit": 9, "stderr": "the fake scanner has no step left"}
 script.write_text(json.dumps(steps), encoding="utf-8")
 log = script.with_suffix(".log")
 log.write_text(log.read_text(encoding="utf-8") + args["--wait"] + "\n" if log.exists() else args["--wait"] + "\n",

@@ -15,7 +15,7 @@ import time
 import unicodedata
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from email_validator import EmailNotValidError, validate_email
 from sqlalchemy import delete, func, select
@@ -26,11 +26,25 @@ from . import keys as keyring
 from . import national_id, outbox, passwords, phones
 from .db import Databases
 from .face import current_enrolment as current_face
-from .voice import current_enrolment as current_voice
 from .fingerprint import enrolled_fingers
 from .keys import Keys
-from .models import (ACTIVE, ADMIN, DISABLED, EMAIL, LANGUAGES, SMS, THEMES, USER, Account, AuditEntry,
-                     IdentityLink, PasswordReset, Session, Subject)
+from .models import (
+    ACTIVE,
+    ADMIN,
+    DISABLED,
+    EMAIL,
+    LANGUAGES,
+    SMS,
+    THEMES,
+    USER,
+    Account,
+    AuditEntry,
+    IdentityLink,
+    PasswordReset,
+    Session,
+    Subject,
+)
+from .voice import current_enrolment as current_voice
 
 SESSION_IDLE = timedelta(minutes=30)
 SESSION_LONGEST = timedelta(hours=12)
@@ -60,7 +74,7 @@ class SignedIn:
 
 
 def now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _db(engine) -> DbSession:
@@ -152,7 +166,7 @@ def register(databases: Databases, keys: Keys, username: str, email: str, phone:
     except IntegrityError:
         # Another registration took the name, email or ID meanwhile: the new subject is removed again.
         with _db(databases.biometric) as bio, bio.begin():
-            bio.execute(Subject.__table__.delete().where(Subject.id == subject))
+            bio.execute(delete(Subject).where(Subject.id == subject))
         raise AccountError("already_registered", 409) from None
     return _signed_in(account)
 
@@ -164,6 +178,14 @@ def subject_of(databases: Databases, keys: Keys, account_id: uuid.UUID) -> uuid.
     if link is None:
         return None
     return uuid.UUID(bytes=keyring.open_sealed(keys, keyring.IDENTITY_LINK, account_id.bytes, link.subject))
+
+
+def user_subject(databases: Databases, keys: Keys, account_id: uuid.UUID) -> uuid.UUID:
+    """The subject behind a user account, for the routes that admit only user accounts (H12)."""
+    subject = subject_of(databases, keys, account_id)
+    if subject is None:
+        raise AccountError("forbidden", 403)
+    return subject
 
 
 class Throttle:
@@ -234,7 +256,7 @@ def session_account(databases: Databases, token: str) -> SignedIn | None:
         session = db.get(Session, _token_hash(token))
         if session is None:
             return None
-        account = db.get(Account, session.account_id)
+        account = db.get_one(Account, session.account_id)
         if moment > session.expires_at or moment - session.last_seen_at > SESSION_IDLE or account.status != ACTIVE:
             db.delete(session)
             return None
@@ -244,22 +266,22 @@ def session_account(databases: Databases, token: str) -> SignedIn | None:
 
 def sign_out(databases: Databases, token: str) -> None:
     with _db(databases.accounts) as db, db.begin():
-        db.execute(Session.__table__.delete().where(Session.token_hash == _token_hash(token)))
+        db.execute(delete(Session).where(Session.token_hash == _token_hash(token)))
 
 
 def change_password(databases: Databases, account_id: uuid.UUID, token: str, current: str, new: str) -> None:
     """Also ends a one-time password (H12). The account's other sessions are signed out."""
     _password(new)
     with _db(databases.accounts) as db, db.begin():
-        account = db.get(Account, account_id)
+        account = db.get_one(Account, account_id)
         if not passwords.verify_password(current, account.password_hash):
             raise AccountError("wrong_password", 403)
         if passwords.verify_password(new, account.password_hash):
             raise AccountError("same_password")
         account.password_hash = passwords.hash_password(new)
         account.must_change_password = False
-        db.execute(Session.__table__.delete().where(Session.account_id == account_id,
-                                                    Session.token_hash != _token_hash(token)))
+        db.execute(delete(Session).where(Session.account_id == account_id,
+                                         Session.token_hash != _token_hash(token)))
 
 
 def set_theme(databases: Databases, account_id: uuid.UUID, theme: str) -> None:
@@ -267,14 +289,14 @@ def set_theme(databases: Databases, account_id: uuid.UUID, theme: str) -> None:
     if theme not in THEMES:
         raise AccountError("invalid_theme")
     with _db(databases.accounts) as db, db.begin():
-        db.get(Account, account_id).theme = theme
+        db.get_one(Account, account_id).theme = theme
 
 
 def set_language(databases: Databases, account_id: uuid.UUID, language: str) -> None:
     """The client's language for the account (H31): English or Hebrew."""
     _language(language)
     with _db(databases.accounts) as db, db.begin():
-        db.get(Account, account_id).language = language
+        db.get_one(Account, account_id).language = language
 
 
 # Password recovery while signed out (H32), as OWASP's Forgot Password Cheat Sheet advises: the same answer
@@ -306,6 +328,7 @@ def request_reset(databases: Databases, channel: str, destination: str, language
         db.add(PasswordReset(token_hash=_token_hash(token), account_id=account.id, channel=channel,
                              created_at=moment, expires_at=moment + RESET_VALID))
     to = account.phone if channel == SMS else account.email
+    assert to is not None  # the account was found by this phone or email
     return outbox.password_reset(channel, to, account.username, token, language, int(RESET_VALID.total_seconds() // 60))
 
 
@@ -346,23 +369,23 @@ def modalities(databases: Databases, keys: Keys, account: SignedIn) -> dict[str,
     the voice (H54) were enrolled; administrator accounts have none (H12)."""
     if account.role != USER:
         return None
-    subject = subject_of(databases, keys, account.id)
+    subject = user_subject(databases, keys, account.id)
     fingers = enrolled_fingers(databases, subject)
     states: dict[str, dict] = {modality: {"enrolled": False} for modality in MODALITIES}
     states["fingerprint"] = {"enrolled": bool(fingers), "fingers": fingers}
     face = current_face(databases, subject)
     if face is not None:
-        states["face"] = {"enrolled": True, "enrolled_at": face.created_at.astimezone(timezone.utc).isoformat()}
+        states["face"] = {"enrolled": True, "enrolled_at": face.created_at.astimezone(UTC).isoformat()}
     voice = current_voice(databases, subject)
     if voice is not None:
-        states["voice"] = {"enrolled": True, "enrolled_at": voice.created_at.astimezone(timezone.utc).isoformat()}
+        states["voice"] = {"enrolled": True, "enrolled_at": voice.created_at.astimezone(UTC).isoformat()}
     return states
 
 
 # Administration (H12): each change asks for the administrator's password again and is audited.
 
 def _reauthenticate(db: DbSession, administrator_id: uuid.UUID, password: str) -> Account:
-    administrator = db.get(Account, administrator_id)
+    administrator = db.get_one(Account, administrator_id)
     if not passwords.verify_password(password, administrator.password_hash):
         raise AccountError("wrong_password", 403)
     return administrator
@@ -416,7 +439,7 @@ def set_status(databases: Databases, administrator_id: uuid.UUID, password: str,
                 raise AccountError("last_administrator", 409)
         account.status = status
         if status == DISABLED:
-            db.execute(Session.__table__.delete().where(Session.account_id == account_id))
+            db.execute(delete(Session).where(Session.account_id == account_id))
         _audit(db, administrator_id, "disable_account" if status == DISABLED else "enable_account", account.username)
 
 

@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import json
 import sys
-from typing import BinaryIO, Callable
+from collections.abc import Callable
+from typing import BinaryIO
 
 MAX_LINE = 1 << 16
 MAX_DATA = 64 << 20

@@ -102,15 +102,19 @@ class Engine:
         self._lock = threading.Lock()
 
     def _start(self) -> None:
-        self._process = subprocess.Popen(self.command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=None,
-                                         env=self.env, cwd=REPOSITORY, creationflags=NO_WINDOW)
-        header, _ = self._guarded(lambda: read_message(self._process.stdout), self.start_timeout)
+        process = subprocess.Popen(self.command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=None,
+                                   env=self.env, cwd=REPOSITORY, creationflags=NO_WINDOW)
+        self._process = process
+        stdout = process.stdout
+        assert stdout is not None  # opened with a pipe
+        header, _ = self._guarded(lambda: read_message(stdout), self.start_timeout)
         if not header.get("ok"):
             raise EngineError(f"{self.name} did not start: {header}")
         self.ready = header
 
     def _guarded(self, work: Callable, seconds: float):
         process = self._process
+        assert process is not None  # started by the caller
         timer = threading.Timer(seconds, process.kill)
         timer.start()
         try:
@@ -125,6 +129,7 @@ class Engine:
         with self._lock:
             if self._process is None or self._process.poll() is not None:
                 self._start()
+            assert self.ready is not None  # set when the process started
             return self.ready
 
     def request(self, header: dict, parts: list[bytes]) -> tuple[dict, list[bytes]]:
@@ -132,9 +137,13 @@ class Engine:
             if self._process is None or self._process.poll() is not None:
                 self._start()
 
+            process = self._process
+            assert process is not None and process.stdin is not None and process.stdout is not None
+            stdin, stdout = process.stdin, process.stdout
+
             def exchange():
-                write_message(self._process.stdin, header, parts)
-                return read_message(self._process.stdout)
+                write_message(stdin, header, parts)
+                return read_message(stdout)
 
             reply, data = self._guarded(exchange, self.request_timeout)
             if not reply.get("ok"):
@@ -151,6 +160,7 @@ class Engine:
         with self._lock:
             process, self._process = self._process, None
             if process is not None and process.poll() is None:
+                assert process.stdin is not None  # opened with a pipe
                 process.stdin.close()
                 try:
                     process.wait(10)
@@ -246,21 +256,23 @@ class Scanner:
             process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                        cwd=REPOSITORY, creationflags=NO_WINDOW)
             run.process = process
+        stdin, stdout, stderr = process.stdin, process.stdout, process.stderr
+        assert stdin is not None and stdout is not None and stderr is not None  # all opened with pipes
         errors: list[bytes] = []
-        reader = threading.Thread(target=lambda: errors.append(process.stderr.read()), daemon=True)
+        reader = threading.Thread(target=lambda: errors.append(stderr.read()), daemon=True)
         reader.start()
         timer = threading.Timer(timeout_s + 15, process.kill)  # the watchdog of a hung native call (H8)
         timer.start()
-        result = None
+        result: tuple[dict, bytes | None] | None = None
         try:
             while True:
-                line = process.stdout.readline(MAX_LINE + 1)
+                line = stdout.readline(MAX_LINE + 1)
                 if not line:
                     break
                 header = json.loads(line)
                 event = header.get("event")
                 if event == "image":
-                    result = header, read_exactly(process.stdout, int(header["length"]))
+                    result = header, read_exactly(stdout, int(header["length"]))
                 elif event == "lifted":
                     result = header, None
                 elif event != "timeout":
@@ -272,5 +284,5 @@ class Scanner:
             timer.cancel()
             reader.join(5)
             run.finished()
-            process.stdin.close()
+            stdin.close()
         return code, result, b"".join(errors).decode("utf-8", "replace")

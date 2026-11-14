@@ -12,10 +12,20 @@ from mbs import fingerprint, verification
 from mbs import keys as keyring
 from mbs.engines import Engine, EngineError
 from mbs.models import Attempt, Enrolment, Template
-
 from test_api import administrator, auth
-from test_fingerprint import (FAKES, PYTHON, enrol, finger, fp_client, plan, placements, script, service,
-                              subject_of, user)  # noqa: F401 (fixtures)
+from test_fingerprint import (
+    FAKES,
+    PYTHON,
+    enrol,
+    finger,
+    fp_client,
+    placements,
+    plan,
+    script,
+    service,
+    subject_of,
+    user,
+)
 from test_verification import enrolled
 
 

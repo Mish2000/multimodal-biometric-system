@@ -11,7 +11,6 @@ from fastapi.routing import APIRoute, iter_route_contexts
 
 from mbs import api, face
 from mbs.guard import BODY_LIMIT, Guard, host_name
-
 from test_api import error
 
 JSON = {"content-type": "application/json"}
@@ -53,7 +52,7 @@ def test_the_largest_image_file_still_reaches_its_route(client):
 
 def test_every_larger_limit_names_a_route_of_the_api(client):
     posts = {route.path for route in iter_route_contexts(client.app.routes)
-             if isinstance(route.original_route, APIRoute) and "POST" in route.methods}
+             if isinstance(route.original_route, APIRoute) and "POST" in (route.methods or ())}
     assert set(api.BODY_LIMITS) <= posts
     assert all(limit > BODY_LIMIT for limit in api.BODY_LIMITS.values())
 

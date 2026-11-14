@@ -5,15 +5,14 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from .. import accounts
-from ..accounts import SignedIn
 from ..models import ADMIN
 from .account import account_json
 from .common import DatabasesDep
-from .policy import allow, signed_in
+from .policy import SignedInDep, allow
 
 router = APIRouter()
 
@@ -38,7 +37,7 @@ def admin_accounts(databases: DatabasesDep) -> dict:
 @router.post("/api/admin/administrators", status_code=201)
 @allow(ADMIN)
 def admin_new_administrator(body: NewAdministrator, databases: DatabasesDep,
-                            account: SignedIn = Depends(signed_in)) -> dict:
+                            account: SignedInDep) -> dict:
     created, one_time = accounts.create_administrator(databases, account.id, body.password, body.username, body.email)
     return {"account": account_json(created), "one_time_password": one_time}
 
@@ -46,7 +45,7 @@ def admin_new_administrator(body: NewAdministrator, databases: DatabasesDep,
 @router.post("/api/admin/accounts/{account_id}/status", status_code=204)
 @allow(ADMIN)
 def admin_status(account_id: uuid.UUID, body: StatusChange, databases: DatabasesDep,
-                 account: SignedIn = Depends(signed_in)) -> None:
+                 account: SignedInDep) -> None:
     accounts.set_status(databases, account.id, body.password, account_id, body.status)
 
 

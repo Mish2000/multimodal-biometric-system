@@ -1,0 +1,29 @@
+# Lint of the system's own Python: server/, engines/ and methods/ (ruff 0.17.3, pinned in environments/server.yml).
+# Run `ruff check` from the repository root with the multimodal-server environment active.
+target-version = "py312"
+line-length = 120
+src = ["server", "server/tests", "engines", "methods"]
+
+# The Pore SIFT engine runs in the research's Pore SIFT environment, on Python 3.10, with the protocol it imports.
+[per-file-target-version]
+"engines/pore_sift.py" = "py310"
+"engines/protocol.py" = "py310"
+
+[lint]
+# pycodestyle, Pyflakes, import order, likely bugs (flake8-bugbear) and current syntax (pyupgrade).
+select = ["E", "W", "F", "I", "B", "UP"]
+# E501: 201 existing lines are longer than 120 characters; wrapping them adds nothing a reader needs.
+ignore = ["E501"]
+
+[lint.per-file-ignores]
+# The tests share pytest fixtures by importing them from the module that defines them, so every test that takes such a
+# fixture as a parameter would be reported as a redefinition of the import.
+"server/tests/**" = ["F811"]
+
+[lint.pyflakes]
+# The shared fixtures themselves, imported for pytest to find rather than to be called.
+allowed-unused-imports = [
+    "test_face.face_client", "test_face.faces",
+    "test_fingerprint.fp_client", "test_fingerprint.script", "test_fingerprint.service",
+    "test_voice.voice_client", "test_voice.voices",
+]

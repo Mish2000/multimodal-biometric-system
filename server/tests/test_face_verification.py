@@ -7,17 +7,15 @@ import base64
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select, text, update
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from mbs import face
 from mbs import keys as keyring
 from mbs.api import create_app
 from mbs.models import Algorithm, Attempt, Enrolment, Template
-
 from test_api import administrator, auth, error
-from test_face import (cosine, face_client, faces, fake_embedding, image, raw, service_with, subject_of,  # noqa: F401
-                       taken, user)
+from test_face import cosine, face_client, faces, fake_embedding, image, raw, service_with, subject_of, taken, user
 
 
 def enrolled(client, *variants: int) -> str:
@@ -35,7 +33,7 @@ def verify(client, token, **kwargs):
 
 def attempts(databases) -> list[Attempt]:
     with Session(databases.biometric) as db:
-        return db.scalars(select(Attempt).order_by(Attempt.at)).all()
+        return list(db.scalars(select(Attempt).order_by(Attempt.at)).all())
 
 
 def test_the_same_person_matches_and_the_attempt_is_saved_with_its_sealed_image(face_client, databases, keys):
@@ -48,7 +46,7 @@ def test_the_same_person_matches_and_the_attempt_is_saved_with_its_sealed_image(
     assert [c["placement"] for c in result["comparisons"]] == [1, 2, 3]
     for comparison in result["comparisons"]:  # pgvector's cosine similarity, as at enrolment (H48)
         assert comparison["score"] == pytest.approx(expected[comparison["placement"]], abs=1e-6)
-    best = max(expected, key=expected.get)
+    best = max(expected, key=lambda person: expected[person])
     assert result["status"] == "verified" and result["accepted"] is True and result["threshold"] == 0.363
     assert result["score"] == pytest.approx(expected[best], abs=1e-6) and result["view"]["placement"] == best
     assert base64.b64decode(result["view"]["probe"]) == b"ALIGNED:a" == base64.b64decode(result["view"]["reference"])
@@ -126,7 +124,7 @@ def test_deleting_the_face_erases_its_verification_attempts_and_a_new_enrolment_
     face_client.post("/api/face/enrolments", json=taken(*(image(variant=v) for v in (4, 5, 6))), headers=auth(token))
     verify(face_client, token, variant=3)
     with Session(databases.biometric) as db:
-        linked = [db.get(Enrolment, a.enrolment_id).replaced_at is None for a in db.scalars(select(Attempt).order_by(Attempt.at))]
+        linked = [db.get_one(Enrolment, a.enrolment_id).replaced_at is None for a in db.scalars(select(Attempt).order_by(Attempt.at))]
     assert linked == [False, True]  # the earlier attempt stays with the enrolment it compared
     assert face_client.delete("/api/face/enrolment", headers=auth(token)).status_code == 204
     assert attempts(databases) == []

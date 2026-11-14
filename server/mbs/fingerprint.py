@@ -22,23 +22,23 @@ import math
 import struct
 import threading
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, Mapping, Sequence
 from contextlib import aclosing
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from pathlib import Path
+from datetime import UTC, datetime
+from typing import cast
 
 import anyio
-from sqlalchemy import delete, select, update
+from sqlalchemy import CursorResult, delete, select, update
 from sqlalchemy.orm import Session as DbSession
 from starlette.concurrency import run_in_threadpool
 
 from . import keys as keyring
-from .config import Config, REPOSITORY, research_python, pore_python, learned_python
+from .config import REPOSITORY, Config, learned_python, pore_python, research_python
 from .db import Databases
 from .engines import Engine, EngineError, Scanner, ScannerError, ScannerRun, conda_environment
 from .keys import Keys
-from .models import Algorithm, Enrolment, Sample, Template
+from .models import Algorithm, Enrolment, Sample, Template, sealed_data, threshold_of
 
 logger = logging.getLogger("mbs.fingerprint")
 FINGERPRINT = "fingerprint"
@@ -122,6 +122,7 @@ def from_config(config: Config) -> tuple[FingerprintService | None, str]:
     ) if not ok]
     if missing:
         return None, "missing: " + ", ".join(missing)
+    assert python is not None  # checked above
     env = conda_environment(python)
     engines = REPOSITORY / "engines"
     pore = pore_python()
@@ -145,7 +146,7 @@ def enrolled_fingers(databases: Databases, subject: uuid.UUID) -> list[int]:
     with _db(databases.biometric) as db:
         rows = db.scalars(select(Enrolment.finger).where(Enrolment.subject_id == subject, Enrolment.modality == FINGERPRINT,
                                                          Enrolment.replaced_at.is_(None)).order_by(Enrolment.finger))
-        return list(rows)
+        return [finger for finger in rows if finger is not None]  # always set for fingerprints
 
 
 def methods(databases: Databases, service: FingerprintService | None) -> list[dict]:
@@ -178,9 +179,11 @@ def detect_pores(service: FingerprintService, png: bytes) -> bytes:
     engine = engine_for(service, LEARNED_PORE)
     if engine is None:
         raise EngineError("method is unavailable")
-    if service.pore.start()["version"] != engine.start()["version"]:
+    pore = service.pore
+    assert pore is not None  # engine_for finds Pore CNN only with the shared detector
+    if pore.start()["version"] != engine.start()["version"]:
         raise EngineError("detector and descriptor versions differ")
-    _, detected = service.pore.request({"op": "detect"}, [png])
+    _, detected = pore.request({"op": "detect"}, [png])
     if not detected or not detected[0]:
         raise EngineError("missing pore coordinates")
     return detected[0]
@@ -217,7 +220,8 @@ def comparison_score(result: dict) -> int:
     if result.get("status") not in ("ok", "failure"):
         raise EngineError("invalid comparison status")
     value = 0 if result["status"] == "failure" else result.get("score")
-    if type(value) not in (int, float) or not math.isfinite(value) or value < 0 or int(value) != value:
+    if (isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0
+            or int(value) != value):
         raise EngineError("invalid comparison score")
     return int(value)
 
@@ -240,13 +244,14 @@ def delete_finger(databases: Databases, subject: uuid.UUID, finger: int) -> bool
     return True
 
 
-def best_three(kept: list[Kept], scores: dict[tuple[int, int], int | None], threshold: float) -> tuple[int, int, int] | None:
+def best_three(kept: Sequence[object], scores: Mapping[tuple[int, int], float], threshold: float) -> tuple[int, int, int] | None:
     """Three kept captures whose three pairs are all above the threshold (H15): of those, the three with the
     highest lowest score, and the earliest when equal. `scores` holds (earlier, later) indexes into `kept`."""
-    best, best_low = None, None
+    best: tuple[int, int, int] | None = None
+    best_low: float | None = None
     for trio in itertools.combinations(range(len(kept)), 3):
-        values = [scores.get(pair) for pair in itertools.combinations(trio, 2)]
-        if any(v is None or v <= threshold for v in values):
+        values = [scores[pair] for pair in itertools.combinations(trio, 2) if pair in scores]
+        if len(values) < 3 or any(v <= threshold for v in values):
             continue
         if best_low is None or min(values) > best_low:
             best, best_low = trio, min(values)
@@ -262,7 +267,7 @@ def _check(name: str, passed: bool, detail: str, **extra) -> dict:
 
 
 async def enrol(service: FingerprintService, databases: Databases, keys: Keys, subject: uuid.UUID,
-                finger: int) -> AsyncIterator[dict]:
+                finger: int) -> AsyncGenerator[dict, None]:
     """The enrolment as a series of events for the client; it ends with `saved` or `failed`."""
     if not service.scanner_lock.acquire(blocking=False):
         yield {"type": "failed", "error": "scanner_busy"}
@@ -306,19 +311,27 @@ async def acquire(service: FingerprintService, wait: str, run: ScannerRun) -> tu
                     await anyio.to_thread.run_sync(finished.wait)
 
 
+async def acquire_finger(service: FingerprintService, run: ScannerRun) -> tuple[dict, bytes]:
+    """The next capture of a finger: the capture tool sends an image with every finger it reports (H33)."""
+    header, png = await acquire(service, "finger", run)
+    if png is None:
+        raise ScannerError("scanner_failed")
+    return header, png
+
+
 def capture_quality(service: FingerprintService, header: dict, png: bytes) -> tuple[int | None, list[dict]]:
     """H33, H35: the same quality gate for every capture. Invalid NFIQ values never pass."""
     reply, _ = service.quality.request({"op": "quality"}, [png])
     score = reply.get("score")
-    valid = reply.get("valid") is True and type(score) is int and 0 <= score <= 100
-    score = score if valid else None
-    quality = _check("quality", valid and score >= service.quality_minimum,
+    if not (reply.get("valid") is True and type(score) is int and 0 <= score <= 100):
+        score = None
+    quality = _check("quality", score is not None and score >= service.quality_minimum,
                      f"NFIQ 2 score {score if score is not None else 'not computed'} "
                      f"(at least {service.quality_minimum})", score=score)
     return score, [*header.get("checks", []), quality]
 
 
-async def _enrol(service, databases, keys, subject, finger, run) -> AsyncIterator[dict]:
+async def _enrol(service, databases, keys, subject, finger, run) -> AsyncGenerator[dict, None]:
     threshold = await run_in_threadpool(_threshold, databases)
     catalog = {method["code"]: method for method in await run_in_threadpool(methods, databases, service)}
     yield {"type": "started", "finger": finger, "placements": PLACEMENTS, "quality_minimum": service.quality_minimum,
@@ -339,12 +352,12 @@ async def _enrol(service, databases, keys, subject, finger, run) -> AsyncIterato
             return
         yield {"type": "place", "placement": placement + 1, "kept": len(kept)}
         try:
-            header, png = await acquire(service, "finger", run)
+            header, png = await acquire_finger(service, run)
         except ScannerError as error:
             yield {"type": "failed", "error": error.code}
             return
         captures += 1
-        captured_at = datetime.now(timezone.utc)
+        captured_at = datetime.now(UTC)
         try:
             score, checks = await run_in_threadpool(capture_quality, service, header, png)
         except EngineError:
@@ -360,6 +373,7 @@ async def _enrol(service, databases, keys, subject, finger, run) -> AsyncIterato
             except EngineError:
                 yield {"type": "failed", "error": "engine_unavailable"}
                 return
+            assert score is not None  # the quality check passed
             new = Kept(placement, captured_at, png, checks, score, parts[0], reply["keypoints"], parts[1], parts[2])
             pairs = []
             for index, earlier in enumerate(kept):
@@ -429,7 +443,7 @@ async def _enrol(service, databases, keys, subject, finger, run) -> AsyncIterato
 
 def _threshold(databases: Databases) -> float:
     with _db(databases.biometric) as db:
-        return db.get(Algorithm, OPENCV_SIFT).threshold
+        return threshold_of(db.get_one(Algorithm, OPENCV_SIFT))
 
 
 @dataclass
@@ -444,15 +458,18 @@ class Saved:
 
 def _save(databases: Databases, keys: Keys, subject: uuid.UUID, finger: int, chosen: list[Kept], version: str,
           pore_data: list[bytes] | None = None, learned_data: list[bytes] | None = None) -> Saved:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     with _db(databases.biometric) as db, db.begin():
-        replaced = db.execute(update(Enrolment).where(
+        replaced = cast(CursorResult, db.execute(update(Enrolment).where(
             Enrolment.subject_id == subject, Enrolment.modality == FINGERPRINT, Enrolment.finger == finger,
-            Enrolment.replaced_at.is_(None)).values(replaced_at=now)).rowcount
+            Enrolment.replaced_at.is_(None)).values(replaced_at=now))).rowcount
         enrolment = Enrolment(id=uuid.uuid4(), subject_id=subject, modality=FINGERPRINT, finger=finger, created_at=now)
         db.add(enrolment)
         db.flush()
-        samples, templates, pore_templates, learned_templates = [], [], [], []
+        samples: list[Sample] = []
+        templates: list[Template] = []
+        pore_templates: list[Template] = []
+        learned_templates: list[Template] = []
         for index, capture in enumerate(chosen):
             sample = Sample(id=uuid.uuid4(), enrolment_id=enrolment.id, placement=capture.placement,
                             captured_at=capture.captured_at, media_type="image/png", width=1000, height=1000, ppi=1000,
@@ -499,12 +516,12 @@ def _saved_event(saved: Saved, chosen: list[Kept], kept: list[Kept], scores: dic
                       "created_at": saved.enrolment.created_at.isoformat(), "replaced_previous": saved.replaced},
         "samples": [{"id": str(s.id), "placement": s.placement, "captured_at": s.captured_at.isoformat(),
                      "media_type": s.media_type, "sealed_length": len(s.data), "quality": c.quality}
-                    for s, c in zip(saved.samples, chosen)],
+                    for s, c in zip(saved.samples, chosen, strict=True)],
         "templates": [{"id": str(t.id), "sample_id": str(t.sample_id), "placement": c.placement, "algorithm": t.algorithm,
                        "version": t.version, "created_at": t.created_at.isoformat(), "keypoints": c.keypoints,
                        "points": base64_text(c.points), "descriptors": base64_text(c.descriptors), "template_length": len(c.template),
-                       "sealed": _sealed_parts(t.data)}
-                      for t, c in zip(saved.templates, chosen)],
+                       "sealed": _sealed_parts(sealed_data(t))}
+                      for t, c in zip(saved.templates, chosen, strict=True)],
         "pairs": pairs, "threshold": threshold,
         "pending_methods": [code for code in PORE_METHODS if code not in {method["algorithm"] for method in prepared}],
         "prepared_methods": prepared,
@@ -515,7 +532,7 @@ def _saved_event(saved: Saved, chosen: list[Kept], kept: list[Kept], scores: dic
     }
 
 
-def ndjson(events: AsyncIterator[dict]) -> AsyncIterator[bytes]:
+def ndjson(events: AsyncGenerator[dict, None]) -> AsyncGenerator[bytes, None]:
     async def lines():
         async with aclosing(events):
             async for event in events:

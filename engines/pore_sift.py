@@ -24,10 +24,11 @@ ALGORITHM = "pore-sift"
 
 def verified_settings() -> dict:
     """Executed only in the research project Python, which has tomllib (H10)."""
-    import tomllib
-    import research_link
     import fpl3
+    import tomllib
     from fpl3.algorithms import pore_sift
+
+    import research_link
 
     link = research_link.load()
     research_link.verify(link)

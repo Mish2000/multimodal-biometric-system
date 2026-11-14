@@ -13,11 +13,11 @@ from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 from .. import accounts, fingerprint, identification, verification
-from ..accounts import AccountError, SignedIn
+from ..accounts import AccountError
 from ..fingerprint import FingerprintService
 from ..models import USER
 from .common import DatabasesDep, KeysDep
-from .policy import allow, signed_in
+from .policy import SignedInDep, allow
 
 router = APIRouter()
 
@@ -26,15 +26,15 @@ class FingerprintResponse(StreamingResponse):
     """H35: also close the capture generator when sending a progress event fails or is cancelled."""
 
     def __init__(self, events):
-        super().__init__(fingerprint.ndjson(events), media_type="application/x-ndjson",
-                         headers={"Cache-Control": "no-store"})
+        self.lines = fingerprint.ndjson(events)
+        super().__init__(self.lines, media_type="application/x-ndjson", headers={"Cache-Control": "no-store"})
 
     async def stream_response(self, send) -> None:
         try:
             await super().stream_response(send)
         finally:
             with anyio.CancelScope(shield=True):
-                await self.body_iterator.aclose()
+                await self.lines.aclose()
 
 
 async def _fingerprints(request: Request) -> FingerprintService | None:
@@ -62,10 +62,10 @@ class FingerprintIdentification(BaseModel):
 @router.post("/api/fingerprint/enrolments")
 @allow(USER)
 async def enrol_fingerprint(body: FingerprintEnrolment, databases: DatabasesDep, keys: KeysDep,
-                            service: FingerprintsDep, account: SignedIn = Depends(signed_in)) -> StreamingResponse:
+                            service: FingerprintsDep, account: SignedInDep) -> StreamingResponse:
     if service is None:
         raise AccountError("fingerprint_unavailable", 503)
-    subject = await run_in_threadpool(accounts.subject_of, databases, keys, account.id)
+    subject = await run_in_threadpool(accounts.user_subject, databases, keys, account.id)
     events = fingerprint.enrol(service, databases, keys, subject, body.finger)
     return FingerprintResponse(events)
 
@@ -75,8 +75,8 @@ async def enrol_fingerprint(body: FingerprintEnrolment, databases: DatabasesDep,
 @router.delete("/api/fingerprint/fingers/{finger}", status_code=204)
 @allow(USER)
 def delete_fingerprint(finger: Annotated[int, PathParameter(ge=1, le=10)], databases: DatabasesDep, keys: KeysDep,
-                       account: SignedIn = Depends(signed_in)) -> None:
-    subject = accounts.subject_of(databases, keys, account.id)
+                       account: SignedInDep) -> None:
+    subject = accounts.user_subject(databases, keys, account.id)
     if not fingerprint.delete_finger(databases, subject, finger):
         raise AccountError("not_enrolled", 404)
 
@@ -84,11 +84,11 @@ def delete_fingerprint(finger: Annotated[int, PathParameter(ge=1, le=10)], datab
 @router.post("/api/fingerprint/verifications")
 @allow(USER)
 async def verify_fingerprint(body: FingerprintVerification, databases: DatabasesDep, keys: KeysDep,
-                             service: FingerprintsDep, account: SignedIn = Depends(signed_in)) -> StreamingResponse:
+                             service: FingerprintsDep, account: SignedInDep) -> StreamingResponse:
     """H35: the signed-in user's chosen finger, through the same capture and progress channel as H33."""
     if service is None:
         raise AccountError("fingerprint_unavailable", 503)
-    subject = await run_in_threadpool(accounts.subject_of, databases, keys, account.id)
+    subject = await run_in_threadpool(accounts.user_subject, databases, keys, account.id)
     events = verification.verify(service, databases, keys, subject, body.finger, body.algorithm)
     return FingerprintResponse(events)
 
@@ -102,8 +102,8 @@ def fingerprint_methods(databases: DatabasesDep, service: FingerprintsDep) -> di
 @router.post("/api/fingerprint/identifications")
 @allow(USER)
 async def identify_fingerprint(body: FingerprintIdentification, databases: DatabasesDep, keys: KeysDep,
-                               service: FingerprintsDep, account: SignedIn = Depends(signed_in)) -> StreamingResponse:
+                               service: FingerprintsDep, account: SignedInDep) -> StreamingResponse:
     if service is None:
         raise AccountError("fingerprint_unavailable", 503)
-    subject = await run_in_threadpool(accounts.subject_of, databases, keys, account.id)
+    subject = await run_in_threadpool(accounts.user_subject, databases, keys, account.id)
     return FingerprintResponse(identification.identify(service, databases, keys, subject, body.algorithm))

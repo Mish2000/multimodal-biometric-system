@@ -4,7 +4,9 @@ here whatever the client shows."""
 
 from __future__ import annotations
 
-from fastapi import Request
+from typing import Annotated
+
+from fastapi import Depends, Request
 
 from .. import accounts
 from ..accounts import AccountError, SignedIn
@@ -37,10 +39,13 @@ def policy(request: Request) -> None:
         raise AccountError("not_signed_in", 401)
     if account.role not in allowed:
         raise AccountError("forbidden", 403)
-    if account.must_change_password and not endpoint.mbs_during_password_change:
+    if account.must_change_password and not getattr(endpoint, "mbs_during_password_change", False):
         raise AccountError("password_change_required", 403)
     request.state.account, request.state.token = account, token
 
 
 def signed_in(request: Request) -> SignedIn:
     return request.state.account
+
+
+SignedInDep = Annotated[SignedIn, Depends(signed_in)]

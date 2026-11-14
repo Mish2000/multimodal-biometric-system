@@ -11,3 +11,13 @@ requires-python = "==3.12.*"
 pythonpath = ["."]
 testpaths = ["tests"]
 addopts = "-p no:cacheprovider"
+
+# Type checks of the server and its tests (mypy 2.4.1, pinned in environments/server.yml): run `mypy` from this
+# folder. engines/ and methods/ run in other environments (numpy, OpenCV, PyTorch) and are checked by ruff only.
+[tool.mypy]
+python_version = "3.12"
+files = ["mbs", "tests"]
+mypy_path = "../engines"  # the protocol the stand-in engines share with the real ones
+check_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true

@@ -9,9 +9,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from test_engines import ENGINES, SYSTEM_ROOT, ask, png, research_available, research_link, ridges
 import pore_sift
 import protocol
+from test_engines import ENGINES, SYSTEM_ROOT, ask, png, research_available, research_link, ridges
 
 
 @pytest.mark.skipif(not research_available(), reason="the pinned research checkout is unavailable")

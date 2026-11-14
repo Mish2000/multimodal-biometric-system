@@ -13,12 +13,12 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from .. import accounts, voice
-from ..accounts import AccountError, SignedIn
+from ..accounts import AccountError
 from ..engines import EngineError
 from ..models import USER
 from ..voice import VoiceError, VoiceService
 from .common import JSON_AROUND, DatabasesDep, KeysDep, base64_length
-from .policy import allow, signed_in
+from .policy import SignedInDep, allow
 
 router = APIRouter()
 
@@ -98,11 +98,11 @@ def check_voice(body: VoiceRecording, voices: VoicesDep) -> dict:
 @router.post("/api/voice/enrolments")
 @allow(USER)
 def enrol_voice(body: VoiceEnrolment, databases: DatabasesDep, keys: KeysDep, voices: VoicesDep,
-                account: SignedIn = Depends(signed_in)) -> JSONResponse:
+                account: SignedInDep) -> JSONResponse:
     service = available(voices)
     recordings = [(voice.decode_recording(made.recording, voice.RECORDING_BYTES), made.captured_at)
                   for made in body.recordings]
-    subject = accounts.subject_of(databases, keys, account.id)
+    subject = accounts.user_subject(databases, keys, account.id)
     result = voice_work(lambda: voice.enrol(service, databases, keys, subject, recordings))
     return JSONResponse(result, status_code=201 if result["status"] == "saved" else 200)
 
@@ -112,10 +112,10 @@ def enrol_voice(body: VoiceEnrolment, databases: DatabasesDep, keys: KeysDep, vo
 @router.post("/api/voice/verifications")
 @allow(USER)
 def verify_voice(body: VoiceProbe, databases: DatabasesDep, keys: KeysDep, voices: VoicesDep,
-                 account: SignedIn = Depends(signed_in)) -> dict:
+                 account: SignedInDep) -> dict:
     service = available(voices)
     recording = body.data()
-    subject = accounts.subject_of(databases, keys, account.id)
+    subject = accounts.user_subject(databases, keys, account.id)
     return voice_work(lambda: voice.verify(service, databases, keys, subject, recording, body.source))
 
 
@@ -125,10 +125,10 @@ def verify_voice(body: VoiceProbe, databases: DatabasesDep, keys: KeysDep, voice
 @router.post("/api/voice/identifications")
 @allow(USER)
 def identify_voice(body: VoiceProbe, databases: DatabasesDep, keys: KeysDep, voices: VoicesDep,
-                   account: SignedIn = Depends(signed_in)) -> dict:
+                   account: SignedInDep) -> dict:
     service = available(voices)
     recording = body.data()
-    subject = accounts.subject_of(databases, keys, account.id)
+    subject = accounts.user_subject(databases, keys, account.id)
     return voice_work(lambda: voice.identify(service, databases, keys, subject, recording, body.source))
 
 
@@ -137,7 +137,7 @@ def identify_voice(body: VoiceProbe, databases: DatabasesDep, keys: KeysDep, voi
 # the link (H41, H56).
 @router.delete("/api/voice/enrolment", status_code=204)
 @allow(USER)
-def delete_voice(databases: DatabasesDep, keys: KeysDep, account: SignedIn = Depends(signed_in)) -> None:
-    subject = accounts.subject_of(databases, keys, account.id)
+def delete_voice(databases: DatabasesDep, keys: KeysDep, account: SignedInDep) -> None:
+    subject = accounts.user_subject(databases, keys, account.id)
     if not voice.delete_voice(databases, subject):
         raise AccountError("not_enrolled", 404)

@@ -5,21 +5,19 @@ import struct
 import threading
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import anyio
 import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from mbs import fingerprint, identification, verification
+from mbs import fingerprint, identification
 from mbs import keys as keyring
 from mbs.engines import EngineError
-from mbs.models import Account, Algorithm, Attempt, Enrolment, IdentityLink, Sample, Template
-
+from mbs.models import Account, Algorithm, Attempt, Enrolment, Sample, Template, sealed_data
 from test_api import administrator, auth, error, register, sign_in
-from test_fingerprint import (LIFT, enrol, finger, fp_client, plan, placements, script, service,
-                              subject_of, user)  # noqa: F401
+from test_fingerprint import LIFT, enrol, finger, fp_client, placements, plan, script, service, subject_of, user
 from test_verification import enrolled
 
 
@@ -90,7 +88,7 @@ def test_gallery_uses_only_current_enrolments_of_active_accounts(fp_client, scri
     plan(script, *placements("q60:C1", "q60:C2", "q60:C3"))
     enrol(fp_client, token, 7)
     with Session(databases.accounts) as db, db.begin():
-        db.scalar(select(Account).where(Account.username == "dana")).status = "disabled"
+        db.scalars(select(Account).where(Account.username == "dana")).one().status = "disabled"
     plan(script, finger("q60:B4"))
     result = identify(fp_client, token)[-1]
     assert result["gallery_size"] == 3 and result["enrolments"] == 1 and result["score"] == 5
@@ -182,14 +180,17 @@ def test_gallery_changes_before_save_invalidate_the_whole_result(fp_client, scri
                     fingerprint.delete_finger(databases, other_subject, 2)
                 elif change == "disable":
                     with Session(databases.accounts) as db, db.begin():
-                        db.scalar(select(Account).where(Account.username == "dana")).status = "disabled"
+                        db.scalars(select(Account).where(Account.username == "dana")).one().status = "disabled"
                 else:
                     with Session(databases.biometric) as db, db.begin():
                         row = db.scalar(select(Enrolment).where(Enrolment.subject_id == other_subject))
+                        assert row is not None
                         if change == "replace":
-                            row.replaced_at = datetime.now(timezone.utc)
+                            row.replaced_at = datetime.now(UTC)
                         else:
-                            db.scalars(select(Template).join(Sample).where(Sample.enrolment_id == row.id)).first().version = "changed"
+                            template = db.scalars(select(Template).join(Sample).where(Sample.enrolment_id == row.id)).first()
+                            assert template is not None
+                            template.version = "changed"
         return events
     assert anyio.run(run)[-1] == {"type": "failed", "error": "gallery_changed"}
     with Session(databases.biometric) as db:
@@ -206,9 +207,9 @@ def test_a_new_enrolment_and_threshold_change_do_not_change_the_snapshot(fp_clie
             events.append(event)
             if event["type"] == "captured":
                 with Session(databases.biometric) as db, db.begin():
-                    db.get(Algorithm, "opencv-sift").threshold = 1000
+                    db.get_one(Algorithm, "opencv-sift").threshold = 1000
                     db.add(Enrolment(id=uuid.uuid4(), subject_id=subject, modality="fingerprint", finger=2,
-                                     created_at=datetime.now(timezone.utc)))
+                                     created_at=datetime.now(UTC)))
         return events
     result = anyio.run(run)[-1]
     assert result["type"] == "identified" and result["accepted"] is True and result["threshold"] == 57
@@ -220,12 +221,13 @@ def test_broken_gallery_is_reported_without_a_saved_non_match(fp_client, script,
     token = enrolled(fp_client, script)
     with Session(databases.biometric) as db, db.begin():
         template = db.scalars(select(Template)).first()
+        assert template is not None
         if fault == "missing":
             db.delete(template)
         elif fault == "version":
             template.version = "old"
         else:
-            template.data = b"x" * len(template.data)
+            template.data = b"x" * len(sealed_data(template))
     plan(script, finger("q60:A4"))
     assert identify(fp_client, token)[-1]["error"] == code
     with Session(databases.biometric) as db:
@@ -239,9 +241,9 @@ def test_deleting_leader_preserves_identification_and_its_probe(fp_client, scrip
     plan(script, finger("q60:B4"))
     result = identify(fp_client, token)[-1]
     with Session(databases.biometric) as db:
-        stored = db.get(Attempt, uuid.UUID(result["attempt_id"]))
+        stored = db.get_one(Attempt, uuid.UUID(result["attempt_id"]))
         before = stored.probe
-        assert db.get(Enrolment, stored.top_enrolment_id).subject_id != subject
+        assert db.get_one(Enrolment, stored.top_enrolment_id).subject_id != subject
     assert fp_client.delete("/api/fingerprint/fingers/2", headers=auth(other_token)).status_code == 204
     with Session(databases.biometric) as db:
         attempt = db.get(Attempt, uuid.UUID(result["attempt_id"]))
@@ -362,6 +364,7 @@ def test_disconnect_while_sending_progress_releases_the_flow(fp_client, script, 
 def test_upgrade_retains_existing_attempts_and_applies_the_new_deletion_rule(fp_client, script, databases, keys):
     from alembic import command
     from alembic.config import Config
+
     from mbs.db import MIGRATIONS, migrate
     from test_verification import verify
 
@@ -375,7 +378,7 @@ def test_upgrade_retains_existing_attempts_and_applies_the_new_deletion_rule(fp_
     plan(script, finger("q60:A4"))
     result = identify(fp_client, token)[-1]
     with Session(databases.biometric) as db:
-        before = db.get(Attempt, uuid.UUID(result["attempt_id"])).probe
+        before = db.get_one(Attempt, uuid.UUID(result["attempt_id"])).probe
     migrate(databases)
     assert fp_client.delete("/api/fingerprint/fingers/7", headers=auth(token)).status_code == 204
     with Session(databases.biometric) as db:

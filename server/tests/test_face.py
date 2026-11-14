@@ -10,7 +10,7 @@ import math
 import random
 import struct
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -24,7 +24,6 @@ from mbs.api import create_app
 from mbs.engines import Engine
 from mbs.face import LIVE_BYTES, FaceService
 from mbs.models import Enrolment, Sample, Template, vector_text, vector_values
-
 from test_api import administrator, auth, error, register, sign_in
 
 FAKES = Path(__file__).resolve().parent / "fakes"
@@ -63,7 +62,7 @@ def image(*args, **kwargs) -> str:
 
 
 def taken(*images: str, start: datetime | None = None, step_s: int = 10) -> dict:
-    start = start or datetime.now(timezone.utc) - timedelta(minutes=2)
+    start = start or datetime.now(UTC) - timedelta(minutes=2)
     return {"images": [{"image": item, "captured_at": (start + timedelta(seconds=step_s * i)).isoformat()}
                        for i, item in enumerate(images)]}
 
@@ -81,7 +80,7 @@ def fake_embedding(person: str, variant: int) -> list[float]:
 
 
 def cosine(a: list[float], b: list[float]) -> float:
-    return sum(x * y for x, y in zip(a, b)) / math.sqrt(sum(x * x for x in a) * sum(y * y for y in b))
+    return sum(x * y for x, y in zip(a, b, strict=True)) / math.sqrt(sum(x * x for x in a) * sum(y * y for y in b))
 
 
 def subject_of(client, databases, keys, token):
@@ -184,8 +183,9 @@ def test_three_matching_images_enrol_the_face(face_client, databases, keys):
         assert (enrolment.subject_id, enrolment.modality, enrolment.finger, enrolment.replaced_at) == (subject, "face", None, None)
         samples = db.scalars(select(Sample).order_by(Sample.placement)).all()
         assert [(s.media_type, s.width, s.height, s.ppi) for s in samples] == [("image/png", 1280, 720, None)] * 3
+        assert samples[0].checks is not None
         assert [c["name"] for c in samples[0].checks] == CHECKS
-        for sample, original in zip(samples, images):
+        for sample, original in zip(samples, images, strict=True):
             assert keyring.open_sealed(keys, keyring.SAMPLE, sample.id.bytes + subject.bytes, sample.data) == b"PNG:" + original
         templates = db.scalars(select(Template)).all()
         assert {(t.algorithm, t.version, t.data) for t in templates} == {("sface", SFACE_SHA256, None)}
@@ -251,7 +251,7 @@ def test_enrolling_again_replaces_the_face_and_deleting_erases_every_enrolment(f
 def test_an_enrolment_needs_three_to_six_images_taken_in_order_in_the_last_half_hour(face_client):
     token = user(face_client)
     three = [image(variant=v) for v in range(3)]
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     for body in (taken(*three[:2]), taken(*(three * 3)[:7]), taken(*three, start=now + timedelta(minutes=5)),
                  taken(*three, start=now - timedelta(hours=2)), taken(*three, step_s=-10)):
         assert face_client.post("/api/face/enrolments", json=body, headers=auth(token)).status_code == 422

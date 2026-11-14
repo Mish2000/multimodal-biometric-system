@@ -24,9 +24,10 @@ ALGORITHM = "learned-pore"
 class LearnedPore:
     def __init__(self):
         import fpl3
-        import research_link
         import torch
         from fpl3.method import descriptor
+
+        import research_link
 
         link = research_link.load()
         research_link.verify(link)
