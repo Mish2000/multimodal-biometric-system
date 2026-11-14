@@ -51,7 +51,7 @@ MOST_KEPT = 6  # placements kept while looking for three that match each other (
 MOST_CAPTURES = 12  # captures, kept or not, in one enrolment (H33)
 FINGER_WAIT_S = 60
 LIFT_WAIT_S = 30
-PENDING_METHODS = ("pore-sift", "learned-pore")  # increment 3 makes their templates from the same captures (H6)
+PORE_METHODS = (PORE_SIFT, LEARNED_PORE)  # templates an enrolment makes besides OpenCV SIFT's, when set up (H38, H39)
 
 
 @dataclass
@@ -75,7 +75,7 @@ class FingerprintService:
     quality_minimum: int = QUALITY_MINIMUM
     pore: Engine | None = None  # H38: the research's separate Pore SIFT runtime
     learned: Engine | None = None  # H39: Pore CNN, in its research runtime
-    _busy: threading.Lock = field(default_factory=threading.Lock)
+    scanner_lock: threading.Lock = field(default_factory=threading.Lock)  # one capture at a time (H33, H35, H41)
     _search_peers: dict[str, list[Engine]] = field(default_factory=dict)
 
     def search_engines(self, algorithm: str = OPENCV_SIFT) -> list[Engine]:
@@ -253,7 +253,7 @@ def best_three(kept: list[Kept], scores: dict[tuple[int, int], int | None], thre
     return best
 
 
-def _b64(data: bytes) -> str:
+def base64_text(data: bytes) -> str:
     return base64.b64encode(data).decode("ascii")
 
 
@@ -264,7 +264,7 @@ def _check(name: str, passed: bool, detail: str, **extra) -> dict:
 async def enrol(service: FingerprintService, databases: Databases, keys: Keys, subject: uuid.UUID,
                 finger: int) -> AsyncIterator[dict]:
     """The enrolment as a series of events for the client; it ends with `saved` or `failed`."""
-    if not service._busy.acquire(blocking=False):
+    if not service.scanner_lock.acquire(blocking=False):
         yield {"type": "failed", "error": "scanner_busy"}
         return
     run = ScannerRun()
@@ -276,7 +276,7 @@ async def enrol(service: FingerprintService, databases: Databases, keys: Keys, s
         yield {"type": "failed", "error": "unexpected"}
     finally:
         run.cancel()  # the client went away or the enrolment ended: no scanner run outlives it
-        service._busy.release()
+        service.scanner_lock.release()
 
 
 def _quiet(_header: dict) -> None:
@@ -331,7 +331,7 @@ async def _enrol(service, databases, keys, subject, finger, run) -> AsyncIterato
         return
     version = ready["version"]
     kept: list[Kept] = []
-    scores: dict[tuple[int, int], int | None] = {}
+    scores: dict[tuple[int, int], int] = {}
     placement = captures = 0
     while True:
         if captures >= MOST_CAPTURES:
@@ -351,7 +351,7 @@ async def _enrol(service, databases, keys, subject, finger, run) -> AsyncIterato
             yield {"type": "failed", "error": "engine_unavailable"}
             return
         if not checks[-1]["passed"]:
-            yield {"type": "rejected", "reason": "quality", "image": _b64(png), "checks": checks, "score": score,
+            yield {"type": "rejected", "reason": "quality", "image": base64_text(png), "checks": checks, "score": score,
                    "minimum": service.quality_minimum}
         else:
             placement += 1
@@ -365,14 +365,17 @@ async def _enrol(service, databases, keys, subject, finger, run) -> AsyncIterato
             for index, earlier in enumerate(kept):
                 try:
                     result, _ = await run_in_threadpool(service.sift.request, {"op": "compare"}, [new.template, earlier.template])
+                    # As in verification and identification: a defined comparison failure scores zero, and a reply
+                    # that is not a comparison ends the enrolment instead of counting as a non-match (H10, H35).
+                    value = comparison_score(result)
                 except EngineError:
                     yield {"type": "failed", "error": "engine_unavailable"}
                     return
-                scores[(index, len(kept))] = result.get("score")
-                pairs.append({"probe": new.placement, "reference": earlier.placement, "score": result.get("score"),
-                              "accepted": (result.get("score") or 0) > threshold})
+                scores[(index, len(kept))] = value
+                pairs.append({"probe": new.placement, "reference": earlier.placement, "score": value,
+                              "accepted": value > threshold})
             kept.append(new)
-            yield {"type": "kept", "placement": placement, "image": _b64(png), "checks": checks,
+            yield {"type": "kept", "placement": placement, "image": base64_text(png), "checks": checks,
                    "keypoints": new.keypoints, "pairs": pairs}
             if len(kept) >= PLACEMENTS:
                 trio = best_three(kept, scores, threshold)
@@ -380,7 +383,7 @@ async def _enrol(service, databases, keys, subject, finger, run) -> AsyncIterato
                     chosen = [kept[i] for i in trio]
                     extra: dict[str, list[bytes]] = {}
                     comparisons = []
-                    for code in (PORE_SIFT, LEARNED_PORE):
+                    for code in PORE_METHODS:
                         engine = engine_for(service, code)
                         if engine is None:
                             continue
@@ -476,7 +479,7 @@ def _save(databases: Databases, keys: Keys, subject: uuid.UUID, finger: int, cho
 def _sealed_parts(sealed: bytes) -> dict:
     """How a sealed value is laid out (H14): MBS1, the key version, the salt, the nonce, the ciphertext, the tag."""
     header = keyring.HEADER_BYTES
-    return {"length": len(sealed), "head": _b64(sealed[:header + 48]), "tag": _b64(sealed[-16:]),
+    return {"length": len(sealed), "head": base64_text(sealed[:header + 48]), "tag": base64_text(sealed[-16:]),
             "magic": 4, "version": 2, "salt": keyring.SALT_BYTES, "nonce": keyring.NONCE_BYTES,
             "ciphertext": len(sealed) - header - 16, "tag_bytes": 16}
 
@@ -499,11 +502,11 @@ def _saved_event(saved: Saved, chosen: list[Kept], kept: list[Kept], scores: dic
                     for s, c in zip(saved.samples, chosen)],
         "templates": [{"id": str(t.id), "sample_id": str(t.sample_id), "placement": c.placement, "algorithm": t.algorithm,
                        "version": t.version, "created_at": t.created_at.isoformat(), "keypoints": c.keypoints,
-                       "points": _b64(c.points), "descriptors": _b64(c.descriptors), "template_length": len(c.template),
+                       "points": base64_text(c.points), "descriptors": base64_text(c.descriptors), "template_length": len(c.template),
                        "sealed": _sealed_parts(t.data)}
                       for t, c in zip(saved.templates, chosen)],
         "pairs": pairs, "threshold": threshold,
-        "pending_methods": [code for code in PENDING_METHODS if code not in {method["algorithm"] for method in prepared}],
+        "pending_methods": [code for code in PORE_METHODS if code not in {method["algorithm"] for method in prepared}],
         "prepared_methods": prepared,
         "referee": OPENCV_SIFT,
         "method_comparisons": [{"algorithm": OPENCV_SIFT, "threshold": threshold,

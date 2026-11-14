@@ -31,7 +31,7 @@ from .keys import Keys
 from .models import ACTIVE, USER, Account, Algorithm, Attempt, Enrolment, IdentityLink, Sample, Template
 
 logger = logging.getLogger("mbs.identification")
-SHOWN_CANDIDATES = 5
+SHOWN_CANDIDATES = 5  # the leading enrolments an answer shows, for every modality (H41, H50, H56)
 
 
 class IdentificationError(Exception):
@@ -273,7 +273,7 @@ def _save(databases: Databases, keys: Keys, subject: uuid.UUID, gallery: Gallery
 
 async def identify(service: fp.FingerprintService, databases: Databases, keys: Keys,
                    subject: uuid.UUID, algorithm: str = fp.OPENCV_SIFT) -> AsyncIterator[dict]:
-    if not service._busy.acquire(blocking=False):
+    if not service.scanner_lock.acquire(blocking=False):
         yield {"type": "failed", "error": "scanner_busy"}
         return
     run = ScannerRun()
@@ -293,7 +293,7 @@ async def identify(service: fp.FingerprintService, databases: Databases, keys: K
         yield {"type": "failed", "error": "unexpected"}
     finally:
         run.cancel()
-        service._busy.release()
+        service.scanner_lock.release()
 
 
 async def _extract(service: fp.FingerprintService, algorithm: str, png: bytes, pores: bytes | None = None) -> bytes:
@@ -328,7 +328,7 @@ async def _match_view(service, engine: Engine, databases, keys, gallery: Gallery
         raise EngineError("the repeated comparison changed its score")
     pairs = fp.match_pairs(result, data, score)
     return {"rank": rank, "finger": candidate.finger, "placement": reference.placement,
-            "reference_image": fp._b64(png), "count": score, "pairs": fp._b64(pairs)}
+            "reference_image": fp.base64_text(png), "count": score, "pairs": fp.base64_text(pairs)}
 
 
 async def _prepare_gallery(service, databases, keys, gallery: Gallery, subject: uuid.UUID | None = None,
@@ -386,7 +386,7 @@ async def _identify(service, databases, keys, subject, run, algorithm) -> AsyncI
         at, started = datetime.now(timezone.utc), time.perf_counter()
         yield {"type": "checking"}
         score, checks = await _engine_call(service.quality, lambda: fp.capture_quality(service, header, png))
-        image = fp._b64(png)
+        image = fp.base64_text(png)
         if checks[-1]["passed"]:
             break
         yield {"type": "rejected", "image": image, "checks": checks, "score": score, "minimum": service.quality_minimum}

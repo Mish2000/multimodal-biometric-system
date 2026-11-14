@@ -123,7 +123,7 @@ def test_retry_reuses_complete_enrolments_without_partial_trios(
     prepared = method_rows(databases, algorithm)
     assert list(Counter(enrolment for _, enrolment, _ in prepared).values()) == [3]
     ids = {row.id for row, _, _ in prepared}
-    assert len(json.loads(script.read_text())) == 1 and not service._busy.locked()
+    assert len(json.loads(script.read_text())) == 1 and not service.scanner_lock.locked()
     with Session(databases.biometric) as db:
         assert db.scalars(select(Attempt)).all() == []
     events = identify(fp_client, token, algorithm=algorithm)
@@ -151,7 +151,7 @@ def test_enrolment_change_during_preparation_invalidates_it(fp_client, script, s
                         db.scalars(select(Enrolment)).one().replaced_at = datetime.now(timezone.utc)
         return events
     assert anyio.run(run)[-1] == {"type": "failed", "error": "gallery_changed"}
-    assert method_rows(databases, algorithm) == [] and not service._busy.locked()
+    assert method_rows(databases, algorithm) == [] and not service.scanner_lock.locked()
 
 
 def test_deletion_waits_for_preparation_commit_and_removes_the_new_templates(
@@ -240,7 +240,7 @@ def test_cancel_interrupts_the_correct_preparation_process_and_allows_retry(
             tasks.cancel_scope.cancel()
     started = time.monotonic()
     anyio.run(cancel)
-    assert time.monotonic() - started < 10 and not service._busy.locked()
+    assert time.monotonic() - started < 10 and not service.scanner_lock.locked()
     assert method_rows(databases, algorithm) == [] and len(json.loads(script.read_text())) == 1
     for worker in {*service.search_engines(algorithm), service.pore}:
         if flag in worker.command:

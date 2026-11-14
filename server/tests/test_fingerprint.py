@@ -235,6 +235,45 @@ def test_an_engine_that_cannot_start_ends_the_enrolment(databases, keys, outbox,
         service.close()
 
 
+def test_a_defined_comparison_failure_scores_zero_in_the_enrolment(fp_client, script, service, monkeypatch):
+    """The referee counts the research's defined comparison failures as zero, as verification does (H10, H35)."""
+    token = user(fp_client)
+    original = service.sift.request
+
+    def fail_one_pair(header, parts):
+        if header["op"] == "compare" and parts == [b"TEMPLATE:A2", b"TEMPLATE:A1"]:
+            return {"status": "failure", "reason": "insufficient_features", "score": None}, []
+        return original(header, parts)
+
+    monkeypatch.setattr(service.sift, "request", fail_one_pair)
+    plan(script, *placements("q64:A1", "q64:A2", "q64:A3", "q64:A4"))
+    events = enrol(fp_client, token)
+    kept = [event for event in events if event["type"] == "kept"]
+    assert kept[1]["pairs"] == [{"probe": 2, "reference": 1, "score": 0, "accepted": False}]
+    saved = events[-1]
+    assert saved["type"] == "saved" and saved["not_kept"] == [2]
+    assert [(p["probe"], p["reference"], p["score"]) for p in saved["pairs"]] == [(3, 1, 90), (4, 1, 90), (4, 3, 90)]
+
+
+def test_a_reply_that_is_not_a_comparison_ends_the_enrolment(fp_client, script, service, databases, monkeypatch):
+    """An engine reply without a valid status and score is the engine's failure, never a non-match (H10, H35)."""
+    token = user(fp_client)
+    original = service.sift.request
+
+    def garbled(header, parts):
+        if header["op"] == "compare":
+            return {"status": "ok", "score": -3}, []
+        return original(header, parts)
+
+    monkeypatch.setattr(service.sift, "request", garbled)
+    plan(script, *placements("q64:A1", "q64:A2", "q64:A3"))
+    events = enrol(fp_client, token)
+    assert kinds(events) == ["started", "place", "kept", "lift", "place", "failed"]
+    assert events[-1] == {"type": "failed", "error": "engine_unavailable"}
+    with Session(databases.biometric) as db:
+        assert db.scalars(select(Enrolment)).all() == []
+
+
 def test_only_users_enrol_and_only_when_the_service_is_set_up(fp_client, client, databases):
     assert error(fp_client.post("/api/fingerprint/enrolments", json={"finger": 7})) == (401, "not_signed_in")
     admin = administrator(fp_client, databases)

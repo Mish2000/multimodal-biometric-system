@@ -12,7 +12,7 @@
   <img alt=".NET Framework 4.8" src="https://img.shields.io/badge/.NET_Framework-4.8-512BD4?logo=dotnet&logoColor=white">
 </p>
 <p align="center">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-341%20server%20%C2%B7%20194%20client%20%C2%B7%2015%20scanner%20%C2%B7%2039%20engines-2EA44F">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-344%20server%20%C2%B7%20194%20client%20%C2%B7%2015%20scanner%20%C2%B7%2039%20engines-2EA44F">
   <img alt="Cryptography" src="https://img.shields.io/badge/crypto-AES--256--GCM%20%C2%B7%20Argon2id%20%C2%B7%20HMAC-7C3AED">
   <img alt="Build" src="https://img.shields.io/badge/build-increment%205%20of%206%20complete-F59E0B">
 </p>
@@ -195,7 +195,7 @@ conda activate multimodal-server
 cd server
 python -m mbs setup        # key file, local settings, cluster and databases
 python -m mbs serve        # the API on 127.0.0.1:55433
-python -m pytest           # 341 tests, including four local checks with MBS_LIVE_CAPTURES
+python -m pytest           # 344 tests, including four local checks with MBS_LIVE_CAPTURES
 
 # The client, from its lock file
 cd ../client

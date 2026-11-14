@@ -12,7 +12,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from . import accounts, config as settings, keys as keyring, postgres
+from . import accounts, config as settings, keys as keyring, logs, postgres
 from .db import migrate, open_databases
 
 
@@ -125,6 +125,7 @@ def main(argv: list[str] | None = None) -> None:
     admin.set_defaults(run=create_admin)
     commands.add_parser("serve").set_defaults(run=serve)
     args = parser.parse_args(argv)
+    logs.configure()
     args.run(args)
 
 

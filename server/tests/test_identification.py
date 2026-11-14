@@ -292,7 +292,7 @@ def test_cancel_stops_inflight_work_releases_lock_and_allows_retry(fp_client, sc
             tasks.cancel_scope.cancel()
     started = time.monotonic()
     anyio.run(cancel)
-    assert time.monotonic() - started < 10 and not service._busy.locked()
+    assert time.monotonic() - started < 10 and not service.scanner_lock.locked()
     with Session(databases.biometric) as db:
         assert db.scalars(select(Attempt)).all() == []
     if stage == "engine":
@@ -324,18 +324,18 @@ def test_engine_failure_in_parallel_search_is_not_a_non_match(fp_client, script,
     monkeypatch.setattr(service.search_engines()[1], "request", fail_compare)
     plan(script, finger("q60:A4"))
     assert identify(fp_client, token)[-1]["error"] == "engine_unavailable"
-    assert not service._busy.locked()
+    assert not service.scanner_lock.locked()
     with Session(databases.biometric) as db:
         assert db.scalars(select(Attempt)).all() == []
 
 
 def test_maximum_quality_retries_and_shared_scanner_are_enforced(fp_client, script, service, databases):
     token = enrolled(fp_client, script)
-    service._busy.acquire()
+    service.scanner_lock.acquire()
     try:
         assert identify(fp_client, token)[-1]["error"] == "scanner_busy"
     finally:
-        service._busy.release()
+        service.scanner_lock.release()
     plan(script, *placements(*["q20:A4"] * fingerprint.MOST_CAPTURES))
     events = identify(fp_client, token)
     assert events[-1]["error"] == "too_many_captures"
@@ -356,7 +356,7 @@ def test_disconnect_while_sending_progress_releases_the_flow(fp_client, script, 
         with pytest.raises(OSError):
             await response.stream_response(fail_send)
     anyio.run(run)
-    assert not service._busy.locked()
+    assert not service.scanner_lock.locked()
 
 
 def test_upgrade_retains_existing_attempts_and_applies_the_new_deletion_rule(fp_client, script, databases, keys):

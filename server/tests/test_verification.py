@@ -214,7 +214,7 @@ def test_cancelled_scanner_wait_stops_immediately_and_releases_the_lock(fp_clien
     started = time.monotonic()
     anyio.run(cancel_wait)
     assert time.monotonic() - started < 10
-    assert not service._busy.locked()
+    assert not service.scanner_lock.locked()
     with Session(databases.biometric) as db:
         assert db.scalars(select(Attempt)).all() == []
     plan(script, finger("q60:A4"))
@@ -252,7 +252,7 @@ def test_storage_failure_is_not_reported_as_a_completed_result(fp_client, script
 
 def test_rejected_captures_are_bounded_and_enrolment_shares_the_scanner(fp_client, script, service, databases):
     token = enrolled(fp_client, script)
-    with service._busy:
+    with service.scanner_lock:
         assert verify(fp_client, token)[-1]["error"] == "scanner_busy"
         assert enrol(fp_client, token)[-1]["error"] == "scanner_busy"
     plan(script, *placements(*["q20:A4"] * fingerprint.MOST_CAPTURES))
@@ -300,4 +300,4 @@ def test_disconnect_while_sending_progress_closes_the_flow(fp_client, script, da
             await response.stream_response(disconnected_send)
 
     anyio.run(run)
-    assert not service._busy.locked()
+    assert not service.scanner_lock.locked()

@@ -1611,3 +1611,25 @@ NFIQ 2 and OpenCV SIFT engines and stored placements through a stand-in scanner:
 that waited for a finger, the server closed the stand-in scanner 15 to 17 ms later in three runs, and an enrolment
 started right after the reload completed. The server is unchanged. It passed a manual check on the HiScan PRO on
 2026-11-14.
+
+## 2026-11-14: corrections of the server's fingerprint code
+
+Approved on 2026-11-14, from a reading of the code before increment 6; no decision changed (H10, H33, H35, H41).
+
+- The enrolment's referee read OpenCV SIFT's score straight from the engine's reply, while verification and
+  identification read it through one check (H10, H35). So a defined comparison failure reached the screen without a
+  score, which it showed as zero, and a reply with an invalid score counted as a non-match while the enrolment went
+  on. The referee now uses the same check: a defined failure scores zero, and an invalid reply ends the enrolment as
+  the engine's failure, with nothing saved.
+- Two names that other modules used from inside the fingerprint module are now public: the scanner's lock, which
+  lets enrolment, verification and identification take the scanner one at a time, and the helper that writes data as
+  Base64 text. The number of candidates a 1:N answer shows is defined once for fingerprints, faces and voices (H41,
+  H50, H56), and the methods whose templates an enrolment makes besides OpenCV SIFT's (H38, H39) no longer carry a
+  name from before increment 3.
+- The server's own messages, which Python printed without their time, level or source and below WARNING not at all,
+  now carry all three on standard error, from INFO up; uvicorn's own lines are unchanged.
+
+All 344 server tests passed, three of them new, including the four local checks with stored captures and the real
+engines. Against the previous code the two new tests of the referee failed: the failed pair had no score, and the
+invalid reply let the enrolment go on until the stand-in scanner had no placement left. The client and the engines
+are unchanged. It passed a manual check on the HiScan PRO on 2026-11-14.

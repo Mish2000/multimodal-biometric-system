@@ -22,11 +22,9 @@ from sqlalchemy import Row, bindparam, select, text
 from sqlalchemy.orm import Session as DbSession
 
 from .db import Databases
-from .identification import Owner, active_owners, owners_unchanged
+from .identification import SHOWN_CANDIDATES, Owner, active_owners, owners_unchanged
 from .keys import Keys
 from .models import Attempt, Enrolment, Sample, Template, vector_text
-
-SHOWN_CANDIDATES = 5  # the leading enrolments an answer shows (H41)
 
 
 def _db(engine) -> DbSession:

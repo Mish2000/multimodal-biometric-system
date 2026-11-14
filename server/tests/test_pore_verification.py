@@ -126,7 +126,7 @@ def test_preparation_interruption_leaves_consistent_state(fp_client, script, ser
     events = anyio.run(prepare)
     if action == "delete":
         assert events[-1]["error"] == "enrolment_changed"
-    assert pore_rows(databases) == [] and not service._busy.locked()
+    assert pore_rows(databases) == [] and not service.scanner_lock.locked()
     with Session(databases.biometric) as db:
         assert db.scalars(select(Attempt)).all() == []
 

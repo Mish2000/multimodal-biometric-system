@@ -125,7 +125,7 @@ def test_preparation_interruption_does_not_commit_partial_templates(fp_client, s
     events = anyio.run(prepare)
     if action != "cancel":
         assert events[-1]["error"] == "enrolment_changed"
-    assert learned_rows(databases) == [] and not service._busy.locked()
+    assert learned_rows(databases) == [] and not service.scanner_lock.locked()
     with Session(databases.biometric) as db:
         assert db.scalars(select(Attempt)).all() == []
 

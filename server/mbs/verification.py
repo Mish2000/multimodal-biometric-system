@@ -155,7 +155,7 @@ def _reference_image(databases: Databases, keys: Keys, subject: uuid.UUID, enrol
 
 async def verify(service: fp.FingerprintService, databases: Databases, keys: Keys, subject: uuid.UUID,
                  finger: int, algorithm: str = fp.OPENCV_SIFT) -> AsyncIterator[dict]:
-    if not service._busy.acquire(blocking=False):
+    if not service.scanner_lock.acquire(blocking=False):
         yield {"type": "failed", "error": "scanner_busy"}
         return
     run = ScannerRun()
@@ -175,7 +175,7 @@ async def verify(service: fp.FingerprintService, databases: Databases, keys: Key
         yield {"type": "failed", "error": "unexpected"}
     finally:
         run.cancel()
-        service._busy.release()
+        service.scanner_lock.release()
 
 
 async def _verify(service, databases, keys, subject, finger, run, algorithm) -> AsyncIterator[dict]:
