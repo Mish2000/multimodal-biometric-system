@@ -1819,3 +1819,7 @@ things that this PC had not shown:
   control, so the key file and its folder are the user's alone whatever they started with (H14). A folder made
   private beforehand now ends with the user's permission alone, as a new folder already did; the key file on this
   PC, made by `setup` on 2026-10-21, is not touched.
+
+The second run on GitHub (run 43612459808, about 17 minutes) passed all three jobs: the client's lint, 198 tests and
+build with Node 24.18.0; ruff, mypy and 347 server tests, with the four local checks skipped; and the scanner tool
+with the runner's .NET SDK 10.0.403 and its 15 self-tests. It passed a manual check on 2026-11-14.
