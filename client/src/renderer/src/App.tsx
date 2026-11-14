@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactElement } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router'
 import type { Account, OpenedLink } from '../../shared/bridge'
+import { ErrorBoundary } from './ErrorBoundary'
 import { Layout } from './Layout'
 import { Admin } from './pages/Admin'
 import { ChangePassword } from './pages/ChangePassword'
@@ -36,23 +37,25 @@ export function App() {
   const signedOut = (screen: ReactElement): ReactElement => (account ? <Navigate to={home} replace /> : screen)
 
   return (
-    <Routes>
-      <Route path="/sign-in" element={signedOut(<SignIn />)} />
-      <Route path="/register" element={signedOut(<Register />)} />
-      <Route path="/forgot-password" element={signedOut(<ForgotPassword />)} />
-      {/* Each opened link checks its own token, so a newer link starts the screen afresh. */}
-      <Route path="/reset-password" element={<ResetPassword key={location.key} />} />
-      <Route element={account ? <Layout /> : <Navigate to="/sign-in" replace />}>
-        <Route path="/" element={only('user', <Home />)} />
-        <Route path="/fingerprint" element={only('user', <Fingerprint />)} />
-        <Route path="/face" element={only('user', <Face />)} />
-        <Route path="/voice" element={only('user', <Voice />)} />
-        <Route path="/admin" element={only('admin', <Admin />)} />
-        <Route path="/settings" element={only('any', <Settings />)} />
-        <Route path="/password" element={account?.must_change_password ? <ChangePassword /> : <Navigate to={home} replace />} />
-      </Route>
-      <Route path="*" element={<Navigate to={home} replace />} />
-    </Routes>
+    <ErrorBoundary resetKey={location.key}>
+      <Routes>
+        <Route path="/sign-in" element={signedOut(<SignIn />)} />
+        <Route path="/register" element={signedOut(<Register />)} />
+        <Route path="/forgot-password" element={signedOut(<ForgotPassword />)} />
+        {/* Each opened link checks its own token, so a newer link starts the screen afresh. */}
+        <Route path="/reset-password" element={<ResetPassword key={location.key} />} />
+        <Route element={account ? <Layout /> : <Navigate to="/sign-in" replace />}>
+          <Route path="/" element={only('user', <Home />)} />
+          <Route path="/fingerprint" element={only('user', <Fingerprint />)} />
+          <Route path="/face" element={only('user', <Face />)} />
+          <Route path="/voice" element={only('user', <Voice />)} />
+          <Route path="/admin" element={only('admin', <Admin />)} />
+          <Route path="/settings" element={only('any', <Settings />)} />
+          <Route path="/password" element={account?.must_change_password ? <ChangePassword /> : <Navigate to={home} replace />} />
+        </Route>
+        <Route path="*" element={<Navigate to={home} replace />} />
+      </Routes>
+    </ErrorBoundary>
   )
 }
 

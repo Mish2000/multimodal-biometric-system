@@ -1633,3 +1633,18 @@ All 344 server tests passed, three of them new, including the four local checks 
 engines. Against the previous code the two new tests of the referee failed: the failed pair had no score, and the
 invalid reply let the enrolment go on until the stand-in scanner had no placement left. The client and the engines
 are unchanged. It passed a manual check on the HiScan PRO on 2026-11-14.
+
+## 2026-11-14: a message instead of an empty window
+
+Approved on 2026-11-14, from a reading of the code before increment 6; no decision changed (H26, H31).
+
+- A screen of the client that failed while it was drawn left the window empty until the page was reloaded. The
+  client now shows a short message instead, in the screen's language (H31), with a way back to the main screen:
+  inside the frame, which keeps its bar, and on the screens before sign-in. Any move to a screen, even the same one,
+  shows it again, and React still reports the error to the client's console.
+
+All 198 client tests passed, four of them new: a screen made to fail shows the message inside the frame, with its
+bar, and before sign-in, in English and in Hebrew, and comes back after a move to it; without the change all four
+failed, the window left empty. Type checks and the build passed, and the built client passed the offscreen checks
+unchanged: 68 with the fingerprint engines and the 1:N gallery, and 78 with the face and voice engines. The server is
+unchanged. It passed a manual check in the client on 2026-11-14.

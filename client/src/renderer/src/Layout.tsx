@@ -1,10 +1,13 @@
-import { NavLink, Outlet, useNavigate } from 'react-router'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router'
+import { ErrorBoundary } from './ErrorBoundary'
 import { useSession } from './session'
 
-// The frame of every screen after sign-in: where to go, who is signed in, and sign-out.
+// The frame of every screen after sign-in: where to go, who is signed in, and sign-out. A screen that fails
+// leaves the frame in place.
 export function Layout() {
   const { account, signOut, t } = useSession()
   const navigate = useNavigate()
+  const location = useLocation()
   if (account === null) return null
 
   async function leave() {
@@ -37,7 +40,9 @@ export function Layout() {
         </button>
       </header>
       <main className="page">
-        <Outlet />
+        <ErrorBoundary resetKey={location.key}>
+          <Outlet />
+        </ErrorBoundary>
       </main>
     </div>
   )

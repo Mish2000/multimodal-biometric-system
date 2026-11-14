@@ -15,6 +15,12 @@ const en = {
   administratorSuffix: ', administrator',
   signOut: 'Sign out',
   sessionEnded: 'Your sign-in has ended. Please sign in again.',
+  // A screen that an error in the client stopped
+  screenFailed: {
+    title: 'This screen could not be shown',
+    text: 'An error in the client stopped it. Go back and try again; if it keeps happening, restart the client.',
+    back: 'Back to the main screen',
+  },
   // Sign-in
   signInLead: 'Sign in with your username or email.',
   serverDown: { before: 'The server is not running. Start it, then ', action: 'check again', after: '.' },
@@ -723,6 +729,11 @@ const he: Texts = {
   administratorSuffix: ', מנהל',
   signOut: 'יציאה',
   sessionEnded: 'הכניסה הסתיימה. צריך להיכנס שוב.',
+  screenFailed: {
+    title: 'לא ניתן היה להציג את המסך הזה',
+    text: 'שגיאה בלקוח עצרה אותו. אפשר לחזור ולנסות שוב; אם זה חוזר, מפעילים מחדש את הלקוח.',
+    back: 'חזרה למסך הראשי',
+  },
   signInLead: 'כניסה עם שם משתמש או אימייל.',
   serverDown: { before: 'השרת לא פועל. צריך להפעיל אותו, ואז ', action: 'לבדוק שוב', after: '.' },
   login: 'שם משתמש או אימייל',
