@@ -1648,3 +1648,31 @@ bar, and before sign-in, in English and in Hebrew, and comes back after a move t
 failed, the window left empty. Type checks and the build passed, and the built client passed the offscreen checks
 unchanged: 68 with the fingerprint engines and the 1:N gallery, and 78 with the face and voice engines. The server is
 unchanged. It passed a manual check in the client on 2026-11-14.
+
+## 2026-11-14: the local API answers only its own host names and bounded bodies
+
+- **H58** Approved on 2026-11-14. Before any route runs, the server refuses a request whose Host header names
+  anything but 127.0.0.1 or localhost, with 400 `invalid_host`, and a request body larger than its route takes, with
+  413 `body_too_large`: 64 KiB for every route, except the nine face and voice routes that take images or recordings,
+  whose limits are exactly what their models already allowed, with 1 KiB for the JSON around each image or recording
+  (H48, H51, H54, H57). The body is checked by its declared length and again while it arrives, and is read into
+  memory only within the limit; the route then gets exactly the body that was read. Each refusal is logged as a
+  warning.
+
+The server listens on 127.0.0.1 only (H11), yet a web page open in any browser on this PC can send it requests.
+Through DNS rebinding such a page could reach the routes that need no sign-in (registration, sign-in, password
+recovery) under a host name of its own, and any request could make the server read a body of any size before its
+route refused it. The client addresses the server as 127.0.0.1 and checks the size of every file it sends, so nothing
+changes for it. FastAPI 0.142.2 offers no body limit per route, and Starlette's own limit answers in plain text, so the
+server has one small layer of its own (`server/mbs/guard.py`). The tests now address the server as 127.0.0.1, as the
+client does.
+
+All 350 server tests passed, six of them new, including the four local checks with stored captures: a request to
+another host is refused while this PC's names pass with a port and in any case, a body one byte above its route's
+limit is refused while the largest image file still reaches its route, a body without a declared length is counted
+as it arrives, and every larger limit names a route of the API. Without the layer, the three of them that send
+requests through the API failed. One earlier test now expects the new refusal: a live view frame of 2 MiB, which the
+model refused before, is now refused before its route, while a frame a little longer than the model takes is still
+refused by the model. The client and the engines are unchanged, and the built client passed its offscreen checks
+against the guarded server without a refusal: 68 with the fingerprint engines and 78 with the face and voice engines,
+images and recordings from files included. It passed a manual check on 2026-11-14.

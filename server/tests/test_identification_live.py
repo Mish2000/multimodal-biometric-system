@@ -32,7 +32,7 @@ def test_real_search_equals_serial_comparisons_of_the_same_native_templates(data
             steps.extend([{"wait": "finger", "file": str(file)}, LIFT])
         plan(script, *steps[:-1])
     try:
-        with TestClient(create_app(databases, keys, outbox, service)) as client:
+        with TestClient(base_url="http://127.0.0.1", app=create_app(databases, keys, outbox, service)) as client:
             token = user(client)
             prepare(7)
             assert enrol(client, token, 7)[-1]["type"] == "saved"

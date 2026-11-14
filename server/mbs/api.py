@@ -1,6 +1,7 @@
 """The HTTP API on 127.0.0.1 (H11). Every route declares who may call it, and a route without a
 declaration is refused (deny by default); the role is checked here on every request, whatever the
-client shows (H12)."""
+client shows (H12). Before any route, a request to another host or with a body larger than its route
+takes is refused (H58, mbs/guard.py)."""
 
 from __future__ import annotations
 
@@ -21,6 +22,7 @@ from .db import Databases
 from .engines import EngineError
 from .face import FaceError, FaceService
 from .fingerprint import FingerprintService
+from .guard import Guard
 from .keys import Keys
 from .models import ADMIN, USER
 from .outbox import Outbox
@@ -207,6 +209,23 @@ class VoiceEnrolment(BaseModel):
     recordings: list[VoiceMade] = Field(min_length=voice.RECORDINGS, max_length=voice.MOST_KEPT)
 
 
+# H58: the routes that take images or recordings may receive bodies exactly as large as their models allow, with room
+# for the JSON around each image or recording; every other route takes at most guard.BODY_LIMIT.
+JSON_AROUND = 1 << 10
+
+BODY_LIMITS = {
+    "/api/face/detect": _base64_length(face.LIVE_BYTES) + JSON_AROUND,
+    "/api/face/checks": _base64_length(face.IMAGE_BYTES) + JSON_AROUND,
+    "/api/face/enrolments": face.MOST_KEPT * (_base64_length(face.IMAGE_BYTES) + JSON_AROUND),
+    "/api/face/verifications": _base64_length(face.FILE_BYTES) + JSON_AROUND,
+    "/api/face/identifications": _base64_length(face.FILE_BYTES) + JSON_AROUND,
+    "/api/voice/checks": _base64_length(voice.RECORDING_BYTES) + JSON_AROUND,
+    "/api/voice/enrolments": voice.MOST_KEPT * (_base64_length(voice.RECORDING_BYTES) + JSON_AROUND),
+    "/api/voice/verifications": _base64_length(voice.FILE_BYTES) + JSON_AROUND,
+    "/api/voice/identifications": _base64_length(voice.FILE_BYTES) + JSON_AROUND,
+}
+
+
 def account_json(account: SignedIn) -> dict:
     return {"id": str(account.id), "username": account.username, "email": account.email, "role": account.role,
             "must_change_password": account.must_change_password, "theme": account.theme,
@@ -218,6 +237,7 @@ def create_app(databases: Databases, keys: Keys, outbox: Outbox, fingerprints: F
     # The policy runs for every route of the application, also for routes added later.
     app = FastAPI(title="Multimodal biometric system", docs_url=None, redoc_url=None, openapi_url=None,
                   dependencies=[Depends(policy)])
+    app.add_middleware(Guard, limits=BODY_LIMITS)  # H58
     app.state.databases, app.state.keys, app.state.throttle = databases, keys, Throttle()
     app.state.fingerprints = fingerprints
     app.state.faces = faces

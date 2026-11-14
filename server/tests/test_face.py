@@ -22,7 +22,7 @@ from mbs import accounts
 from mbs import keys as keyring
 from mbs.api import create_app
 from mbs.engines import Engine
-from mbs.face import FaceService
+from mbs.face import LIVE_BYTES, FaceService
 from mbs.models import Enrolment, Sample, Template, vector_text, vector_values
 
 from test_api import administrator, auth, error, register, sign_in
@@ -46,7 +46,7 @@ def faces():
 
 @pytest.fixture
 def face_client(databases, keys, outbox, faces):
-    with TestClient(create_app(databases, keys, outbox, faces=faces)) as client:
+    with TestClient(base_url="http://127.0.0.1", app=create_app(databases, keys, outbox, faces=faces)) as client:
         yield client
 
 
@@ -131,7 +131,11 @@ def test_the_live_view_learns_where_the_faces_are_and_nothing_is_kept(face_clien
                                   headers=auth(token))) == (422, "invalid_image")
     assert error(face_client.post("/api/face/detect", json={"image": "not base64!"},
                                   headers=auth(token))) == (422, "invalid_image")
-    assert face_client.post("/api/face/detect", json={"image": "A" * (2 << 20)}, headers=auth(token)).status_code == 422
+    # A frame a little longer than the model takes is refused by the model; a much larger body never reaches it (H58).
+    longest = (LIVE_BYTES + 2) // 3 * 4
+    assert face_client.post("/api/face/detect", json={"image": "A" * (longest + 4)}, headers=auth(token)).status_code == 422
+    assert error(face_client.post("/api/face/detect", json={"image": "A" * (2 << 20)},
+                                  headers=auth(token))) == (413, "body_too_large")
     with Session(databases.biometric) as db:
         assert db.scalars(select(Sample)).all() == []
 
@@ -260,7 +264,7 @@ def test_an_enrolment_needs_three_to_six_images_taken_in_order_in_the_last_half_
 def test_a_model_other_than_the_pinned_one_is_refused(databases, keys, outbox):
     service = service_with("--sface-sha256", "0" * 64)
     try:
-        with TestClient(create_app(databases, keys, outbox, faces=service)) as client:
+        with TestClient(base_url="http://127.0.0.1", app=create_app(databases, keys, outbox, faces=service)) as client:
             token = user(client)
             body = taken(image(variant=0), image(variant=1), image(variant=2))
             assert error(client.post("/api/face/enrolments", json=body, headers=auth(token))) == (503, "method_version_differs")
@@ -271,7 +275,7 @@ def test_a_model_other_than_the_pinned_one_is_refused(databases, keys, outbox):
 def test_an_engine_answer_that_breaks_the_rules_is_a_server_failure(databases, keys, outbox):
     service = service_with("--broken")
     try:
-        with TestClient(create_app(databases, keys, outbox, faces=service)) as client:
+        with TestClient(base_url="http://127.0.0.1", app=create_app(databases, keys, outbox, faces=service)) as client:
             token = user(client)
             assert error(client.post("/api/face/checks", json={"image": image()}, headers=auth(token))) == (503, "engine_unavailable")
     finally:

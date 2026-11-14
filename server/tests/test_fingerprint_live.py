@@ -52,7 +52,7 @@ def test_the_real_engines_enrol_a_finger_of_the_second_set(databases, keys, outb
         steps += [{"wait": "finger", "file": str(file)}, LIFT]
     plan(script, *steps[:-1])
     try:
-        with TestClient(create_app(databases, keys, outbox, service)) as client:
+        with TestClient(base_url="http://127.0.0.1", app=create_app(databases, keys, outbox, service)) as client:
             token = user(client)
             events = enrol(client, token)
             plan(script, {"wait": "finger", "file": str(files[2])})

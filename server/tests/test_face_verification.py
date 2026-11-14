@@ -141,11 +141,11 @@ def test_templates_of_another_model_version_are_refused(face_client, databases):
 
 
 def test_a_stored_face_that_does_not_repeat_its_embedding_saves_nothing(databases, keys, outbox):
-    with TestClient(create_app(databases, keys, outbox, faces=service_with())) as client:
+    with TestClient(base_url="http://127.0.0.1", app=create_app(databases, keys, outbox, faces=service_with())) as client:
         token = enrolled(client)
     drifting = service_with("--drift")
     try:
-        with TestClient(create_app(databases, keys, outbox, faces=drifting)) as client:
+        with TestClient(base_url="http://127.0.0.1", app=create_app(databases, keys, outbox, faces=drifting)) as client:
             from test_api import sign_in
             again = sign_in(client)
             assert error(verify(client, again, variant=3)) == (503, "engine_unavailable")

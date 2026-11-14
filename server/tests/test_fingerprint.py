@@ -52,7 +52,7 @@ def service(script):
 
 @pytest.fixture
 def fp_client(databases, keys, outbox, service):
-    with TestClient(create_app(databases, keys, outbox, service)) as client:
+    with TestClient(base_url="http://127.0.0.1", app=create_app(databases, keys, outbox, service)) as client:
         yield client
 
 
@@ -228,7 +228,7 @@ def test_scanner_failures_end_the_enrolment(fp_client, script):
 def test_an_engine_that_cannot_start_ends_the_enrolment(databases, keys, outbox, script):
     service = service_for(script, sift=[PYTHON, "-c", "import sys; sys.exit(1)"])
     try:
-        with TestClient(create_app(databases, keys, outbox, service)) as client:
+        with TestClient(base_url="http://127.0.0.1", app=create_app(databases, keys, outbox, service)) as client:
             token = user(client)
             assert enrol(client, token)[-1] == {"type": "failed", "error": "engine_unavailable"}
     finally:

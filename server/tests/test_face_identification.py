@@ -253,11 +253,11 @@ def test_five_leading_candidates_are_shown_and_the_own_face_only_among_them(face
 
 
 def test_a_stored_face_that_does_not_repeat_its_embedding_saves_nothing(databases, keys, outbox):
-    with TestClient(create_app(databases, keys, outbox, faces=service_with())) as client:
+    with TestClient(base_url="http://127.0.0.1", app=create_app(databases, keys, outbox, faces=service_with())) as client:
         assert enrolled(client)
     drifting = service_with("--drift")
     try:
-        with TestClient(create_app(databases, keys, outbox, faces=drifting)) as client:
+        with TestClient(base_url="http://127.0.0.1", app=create_app(databases, keys, outbox, faces=drifting)) as client:
             assert error(identify(client, sign_in(client), variant=3)) == (503, "engine_unavailable")
     finally:
         drifting.close()

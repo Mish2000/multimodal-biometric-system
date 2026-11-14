@@ -37,7 +37,7 @@ def test_real_pore_gallery_templates_equal_h10_and_rank_like_serial_comparison(d
         plan(script, *steps[:-1])
 
     try:
-        with TestClient(create_app(databases, keys, outbox, service)) as client:
+        with TestClient(base_url="http://127.0.0.1", app=create_app(databases, keys, outbox, service)) as client:
             token = user(client)
             prepare(7)
             assert enrol(client, token, 7)[-1]["type"] == "saved"

@@ -12,7 +12,7 @@
   <img alt=".NET Framework 4.8" src="https://img.shields.io/badge/.NET_Framework-4.8-512BD4?logo=dotnet&logoColor=white">
 </p>
 <p align="center">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-344%20server%20%C2%B7%20198%20client%20%C2%B7%2015%20scanner%20%C2%B7%2039%20engines-2EA44F">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-350%20server%20%C2%B7%20198%20client%20%C2%B7%2015%20scanner%20%C2%B7%2039%20engines-2EA44F">
   <img alt="Cryptography" src="https://img.shields.io/badge/crypto-AES--256--GCM%20%C2%B7%20Argon2id%20%C2%B7%20HMAC-7C3AED">
   <img alt="Build" src="https://img.shields.io/badge/build-increment%205%20of%206%20complete-F59E0B">
 </p>
@@ -103,7 +103,7 @@ checked 1000 ppi images.
 <td valign="top">
 
 **📜 Every decision on record**<br>
-Each design choice is numbered (H1 to H57), dated, and cited in the code and the commits.
+Each design choice is numbered (H1 to H58), dated, and cited in the code and the commits.
 
 </td>
 <td valign="top">
@@ -156,6 +156,8 @@ flowchart LR
   insert-only audit log of every administrative action.
 - 🔁 **Password recovery**: a single-use link by SMS or email that works for 30 minutes, stored only as a
   hash, with the same answer whether the details belong to an account or not.
+- 🌐 **This PC only**: the API answers only requests addressed to 127.0.0.1 or localhost, and refuses a body larger
+  than its route needs before reading it.
 - 🚪 **Deny by default**: each API route declares its roles and is checked on every request; the client's
   page has no Node.js and never sees the session token.
 
@@ -195,7 +197,7 @@ conda activate multimodal-server
 cd server
 python -m mbs setup        # key file, local settings, cluster and databases
 python -m mbs serve        # the API on 127.0.0.1:55433
-python -m pytest           # 344 tests, including four local checks with MBS_LIVE_CAPTURES
+python -m pytest           # 350 tests, including four local checks with MBS_LIVE_CAPTURES
 
 # The client, from its lock file
 cd ../client

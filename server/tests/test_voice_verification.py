@@ -98,7 +98,7 @@ def test_equal_scores_go_to_the_earliest_recording(voice_client):
 def test_a_stored_recording_that_does_not_give_its_embedding_again_ends_unsaved(databases, keys, outbox):
     service = service_with("--drift")
     try:
-        with TestClient(create_app(databases, keys, outbox, voices=service)) as client:
+        with TestClient(base_url="http://127.0.0.1", app=create_app(databases, keys, outbox, voices=service)) as client:
             token = user(client)
             enrol(client, token)
             assert error(client.post("/api/voice/verifications", json={"recording": recording()}, headers=auth(token))) == (
@@ -112,14 +112,14 @@ def test_a_stored_recording_that_does_not_give_its_embedding_again_ends_unsaved(
 def test_a_model_other_than_the_pinned_one_is_refused(databases, keys, outbox):
     first = service_with()
     try:
-        with TestClient(create_app(databases, keys, outbox, voices=first)) as client:
+        with TestClient(base_url="http://127.0.0.1", app=create_app(databases, keys, outbox, voices=first)) as client:
             token = user(client)
             enrol(client, token)
     finally:
         first.close()
     other = service_with("--ecapa-sha256", "0" * 64)
     try:
-        with TestClient(create_app(databases, keys, outbox, voices=other)) as client:
+        with TestClient(base_url="http://127.0.0.1", app=create_app(databases, keys, outbox, voices=other)) as client:
             assert error(client.post("/api/voice/verifications", json={"recording": recording()}, headers=auth(token))) == (
                 503, "method_version_differs")
     finally:

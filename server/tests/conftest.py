@@ -78,5 +78,5 @@ def outbox(tmp_path):
 
 @pytest.fixture
 def client(databases, keys, outbox):
-    with TestClient(create_app(databases, keys, outbox)) as test_client:
+    with TestClient(base_url="http://127.0.0.1", app=create_app(databases, keys, outbox)) as test_client:
         yield test_client

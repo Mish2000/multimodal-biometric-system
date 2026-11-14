@@ -2,7 +2,7 @@
 
 Approved on 2026-10-20 (H11–H20 in `docs/decisions.md`),
 from the draft of 2026-10-19 as revised on 2026-10-20, and amended with his
-approval since (H24 to H57). Every decision is cited by its ID; a change needs
+approval since (H24 to H58). Every decision is cited by its ID; a change needs
 the researcher's approval and a new entry in the decision record.
 
 ## 1. Purpose and scope
@@ -75,6 +75,10 @@ FastAPI server: Python 3.12, its own environment
 - The client's main process is its only network client and keeps the
   session token; the page, sandboxed and without Node.js, reaches it only
   through a preload bridge that offers a fixed list of routes (H26).
+- Before any route, the server refuses a request addressed to a host other
+  than 127.0.0.1 or localhost, and a body larger than its route takes, which
+  it never reads beyond that limit: 64 KiB, or for the face and voice routes
+  that take images and recordings what their models allow (H58).
 - Live progress during capture (place the finger, placement kept, "lift the
   finger") comes as a streamed HTTP answer of JSON lines, one event each
   (H33, amending this section's WebSocket messages); closing the connection
@@ -661,3 +665,6 @@ themes during that work.
   OGG of Vorbis or Opus, MP3; 16 to 192 kHz; one or two channels; 3 seconds
   to 2 minutes), SpeechBrain's own conversion to 16 kHz and `source = file`
   (5.3, 6, 7).
+- **H58** The local API answers only requests addressed to 127.0.0.1 or
+  localhost, and refuses a body larger than its route takes before reading
+  more of it (3).

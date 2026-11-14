@@ -128,7 +128,7 @@ def test_a_refused_recording_makes_no_attempt(voice_client, databases):
 def test_the_gallery_has_only_the_current_voice_enrolments_of_active_user_accounts(databases, keys, outbox):
     faces, voices_ = face_service_with(), service_with()
     try:
-        with TestClient(create_app(databases, keys, outbox, faces=faces, voices=voices_)) as client:
+        with TestClient(base_url="http://127.0.0.1", app=create_app(databases, keys, outbox, faces=faces, voices=voices_)) as client:
             token = enrolled(client)
             again = client.post("/api/voice/enrolments", json=made(*(recording(variant=v) for v in (4, 5, 6))),
                                 headers=auth(token))
@@ -286,7 +286,7 @@ def test_five_leading_candidates_are_shown_and_the_own_recording_only_among_them
 def test_a_stored_recording_that_does_not_give_its_embedding_again_saves_nothing(databases, keys, outbox):
     service = service_with("--drift")
     try:
-        with TestClient(create_app(databases, keys, outbox, voices=service)) as client:
+        with TestClient(base_url="http://127.0.0.1", app=create_app(databases, keys, outbox, voices=service)) as client:
             token = enrolled(client)
             assert error(identify(client, token, variant=3)) == (503, "engine_unavailable")
     finally:
@@ -297,13 +297,13 @@ def test_a_stored_recording_that_does_not_give_its_embedding_again_saves_nothing
 def test_a_model_other_than_the_pinned_one_is_refused(databases, keys, outbox):
     first = service_with()
     try:
-        with TestClient(create_app(databases, keys, outbox, voices=first)) as client:
+        with TestClient(base_url="http://127.0.0.1", app=create_app(databases, keys, outbox, voices=first)) as client:
             token = enrolled(client)
     finally:
         first.close()
     another = service_with("--ecapa-sha256", "0" * 64)
     try:
-        with TestClient(create_app(databases, keys, outbox, voices=another)) as client:
+        with TestClient(base_url="http://127.0.0.1", app=create_app(databases, keys, outbox, voices=another)) as client:
             assert error(identify(client, token, variant=3)) == (503, "method_version_differs")
     finally:
         another.close()

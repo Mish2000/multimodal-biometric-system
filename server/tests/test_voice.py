@@ -47,7 +47,7 @@ def voices():
 
 @pytest.fixture
 def voice_client(databases, keys, outbox, voices):
-    with TestClient(create_app(databases, keys, outbox, voices=voices)) as client:
+    with TestClient(base_url="http://127.0.0.1", app=create_app(databases, keys, outbox, voices=voices)) as client:
         yield client
 
 
@@ -265,7 +265,7 @@ def test_an_enrolment_needs_three_to_six_recordings_made_in_order_in_the_last_ha
 def test_a_model_other_than_the_pinned_one_is_refused(databases, keys, outbox):
     service = service_with("--ecapa-sha256", "0" * 64)
     try:
-        with TestClient(create_app(databases, keys, outbox, voices=service)) as client:
+        with TestClient(base_url="http://127.0.0.1", app=create_app(databases, keys, outbox, voices=service)) as client:
             token = user(client)
             body = made(recording(variant=0), recording(variant=1), recording(variant=2))
             assert error(client.post("/api/voice/enrolments", json=body, headers=auth(token))) == (503, "method_version_differs")
@@ -277,7 +277,7 @@ def test_a_model_other_than_the_pinned_one_is_refused(databases, keys, outbox):
 def test_an_engine_answer_that_breaks_the_rules_is_a_server_failure(databases, keys, outbox, option):
     service = service_with(option)
     try:
-        with TestClient(create_app(databases, keys, outbox, voices=service)) as client:
+        with TestClient(base_url="http://127.0.0.1", app=create_app(databases, keys, outbox, voices=service)) as client:
             token = user(client)
             assert error(client.post("/api/voice/checks", json={"recording": recording()}, headers=auth(token))) == (
                 503, "engine_unavailable")
