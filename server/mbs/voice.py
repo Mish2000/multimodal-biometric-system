@@ -10,35 +10,28 @@ like every finding, each bound to its row and its subject (H25); the embeddings 
 every voice score is pgvector's cosine similarity, as every face score is.
 
 The server keeps nothing between requests: the enrolment request carries the recordings again, and every check
-is made anew on them.
+is made anew on them. Enrolment, verification, identification and deletion are the flows the voice shares with
+the face (mbs/embeddings.py); this module holds the voice's own steps: the engine's measurements and their checks,
+the checks of a recording file, and what of a recording is sealed and shown.
 """
 
 from __future__ import annotations
 
-import base64
-import itertools
 import logging
 import math
 import struct
-import threading
-import time
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 
-from sqlalchemy import CursorResult, delete, select, text, update
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session as DbSession
-
-from . import keys as keyring
+from . import embeddings
 from .config import REPOSITORY, Config
 from .db import Databases
-from .embeddings import Search
+from .embeddings import EngineService, Modality, ModalityError, base64_text, card, decode
+from .embeddings import check as _check
 from .engines import Engine, EngineError, conda_environment
-from .face import similarity
-from .fingerprint import best_three
 from .keys import Keys
-from .models import Algorithm, Attempt, Enrolment, Sample, Template, vector_text, vector_values
+from .models import Enrolment, Sample
 
 logger = logging.getLogger("mbs.voice")
 
@@ -55,8 +48,6 @@ RECORDING_BYTES = 1 << 20  # a recording of the page: 16-bit samples of one chan
 DURATION_MINIMUM, DURATION_MAXIMUM = 3.0, 30.0  # seconds, the limits H27 sets for recordings
 SPEECH_MINIMUM = 2.0  # seconds of speech that stand out of the room's noise (H54)
 CLIPPED_MAXIMUM = 0.001  # the share of samples at the 16-bit limits (H54)
-CAPTURE_AGE = timedelta(minutes=30)  # an enrolment's recordings were made in the last half hour
-CLOCK_SKEW = timedelta(minutes=1)
 # H27, H57: a recording file, for 1:1 and 1:N only. Its kind comes from its first bytes; then the engine reads its
 # header with libsndfile, and only a file within these limits is decoded (the engine keeps the same limits).
 FILE_BYTES = 10 << 20
@@ -68,29 +59,12 @@ FILE_CHANNELS = (1, 2)
 FILE_SECONDS_MAXIMUM = 120.0  # a file is compared whole up to two minutes; ECAPA's memory grows with the length
 
 
-class VoiceError(Exception):
+class VoiceError(ModalityError):
     """A refused voice request, answered as {"error": code, ...}."""
 
-    def __init__(self, code: str, status: int = 422, **extra):
-        super().__init__(code)
-        self.code, self.status, self.extra = code, status, extra
 
-
-@dataclass
-class VoiceService:
-    engine: Engine
-
-    def warm_up(self) -> None:
-        """Start the engine in the background, so the first recording does not wait for PyTorch to load."""
-        def start():
-            try:
-                self.engine.start()
-            except EngineError:
-                pass  # reported when a request needs it
-        threading.Thread(target=start, daemon=True).start()
-
-    def close(self) -> None:
-        self.engine.close()
+class VoiceService(EngineService):
+    """The voice engine (H54), started in the background, so the first recording does not wait for PyTorch to load."""
 
 
 def from_config(config: Config) -> tuple[VoiceService | None, str]:
@@ -107,19 +81,9 @@ def from_config(config: Config) -> tuple[VoiceService | None, str]:
     return VoiceService(Engine(VOICE, command, conda_environment(python))), ""
 
 
-def _db(engine) -> DbSession:
-    return DbSession(engine, expire_on_commit=False)
-
-
 def decode_recording(data: str, limit: int) -> bytes:
     """A recording sent in base64; whether it is one is decided by the engine from its content."""
-    try:
-        recording = base64.b64decode(data, validate=True)
-    except ValueError:
-        raise VoiceError("invalid_recording") from None
-    if not recording or len(recording) > limit:
-        raise VoiceError("invalid_recording")
-    return recording
+    return decode(data, limit, VoiceError, "invalid_recording")
 
 
 MEASUREMENTS = (("duration", 0.0, 3600.0), ("speech", 0.0, 3600.0), ("speech_level", -100.0, 0.5),
@@ -141,10 +105,6 @@ def _measurements(reply: dict) -> dict[str, float]:
     if values["speech"] > values["duration"] + 0.05:
         raise EngineError("invalid voice reply")
     return values
-
-
-def _check(name: str, passed: bool, detail: str, **extra) -> dict:
-    return {"name": name, "passed": passed, "detail": detail, **extra}
 
 
 def _length(duration: float, maximum: float = DURATION_MAXIMUM) -> dict:
@@ -262,134 +222,33 @@ def check(service: VoiceService, recording: bytes) -> dict:
 
 def method(databases: Databases, service: VoiceService | None) -> dict:
     """ECAPA-TDNN's card and the rules of a voice enrolment."""
-    with _db(databases.biometric) as db:
-        algorithm = db.get(Algorithm, ECAPA)
-    return {"code": ECAPA, "threshold": algorithm.threshold, "threshold_provisional": algorithm.threshold_provisional,
-            "threshold_origin": algorithm.threshold_origin, "available": service is not None,
-            "recordings": RECORDINGS, "most_kept": MOST_KEPT, "embedding_length": EMBEDDING_LENGTH,
-            "sample_rate": SAMPLE_RATE, "recording_seconds": RECORDING_SECONDS,
+    return {**card(databases, ECAPA, service), "recordings": RECORDINGS, "most_kept": MOST_KEPT,
+            "embedding_length": EMBEDDING_LENGTH, "sample_rate": SAMPLE_RATE, "recording_seconds": RECORDING_SECONDS,
             "duration_minimum": DURATION_MINIMUM, "duration_maximum": DURATION_MAXIMUM,
             "speech_minimum": SPEECH_MINIMUM, "clipped_maximum": CLIPPED_MAXIMUM}
 
 
 def current_enrolment(databases: Databases, subject: uuid.UUID) -> Enrolment | None:
-    with _db(databases.biometric) as db:
-        return db.scalar(select(Enrolment).where(Enrolment.subject_id == subject, Enrolment.modality == VOICE,
-                                                 Enrolment.replaced_at.is_(None)))
+    return embeddings.current_enrolment(databases, subject, VOICE)
 
 
 def enrol(service: VoiceService, databases: Databases, keys: Keys, subject: uuid.UUID,
           recordings: list[tuple[bytes, datetime]]) -> dict:
     """The recordings made so far, in the order they were made: saved when three of them match each other,
     otherwise the client is asked for another recording, until six have passed the checks."""
-    if not RECORDINGS <= len(recordings) <= MOST_KEPT:
-        raise VoiceError("invalid_request")
-    now = datetime.now(timezone.utc)
-    times = [made for _, made in recordings]
-    if any(made.tzinfo is None or not now - CAPTURE_AGE <= made <= now + CLOCK_SKEW for made in times) \
-            or times != sorted(times):
-        raise VoiceError("invalid_request")
-    with _db(databases.biometric) as db:
-        algorithm = db.get(Algorithm, ECAPA)
-        version, threshold = algorithm.version, algorithm.threshold
-    if service.engine.start().get("ecapa_sha256") != version:
-        raise VoiceError("method_version_differs", 503)
-    found = []
-    for index, (recording, _) in enumerate(recordings):
-        extracted = _extract(service, recording)
-        if not extracted.passed:
-            raise VoiceError("recording_rejected", index=index, checks=extracted.checks)
-        found.append(extracted)
-    scores: dict[tuple[int, int], float] = {}
-    with _db(databases.biometric) as db:
-        for a, b in itertools.combinations(range(len(found)), 2):
-            scores[(a, b)] = similarity(db, found[b].embedding, found[a].embedding)
-    pairs = [{"probe": b + 1, "reference": a + 1, "score": score, "accepted": score > threshold}
-             for (a, b), score in scores.items()]
-    trio = best_three(found, scores, threshold)
-    if trio is None:
-        status = "failed" if len(found) >= MOST_KEPT else "another"
-        return {"status": status, **({"error": "recordings_do_not_match"} if status == "failed" else {}),
-                "pairs": pairs, "threshold": threshold, "kept": len(found)}
-    chosen = [(index + 1, found[index], times[index]) for index in trio]
-    enrolment, replaced, samples, templates = _save(databases, keys, subject, chosen, version)
-    return {
-        "status": "saved",
-        "enrolment": {"id": str(enrolment.id), "created_at": enrolment.created_at.isoformat(),
-                      "replaced_previous": replaced},
-        "samples": [{"id": str(sample.id), "placement": sample.placement, "captured_at": sample.captured_at.isoformat(),
-                     "duration_ms": sample.duration_ms, "sealed_length": len(sample.data), "checks": sample.checks}
-                    for sample in samples],
-        "templates": [{"id": str(template.id), "sample_id": str(template.sample_id), "algorithm": ECAPA,
-                       "version": version, "embedding_length": EMBEDDING_LENGTH} for template in templates],
-        "pairs": [pair for pair in pairs if pair["reference"] - 1 in trio and pair["probe"] - 1 in trio],
-        "threshold": threshold,
-        "not_kept": [index + 1 for index in range(len(found)) if index not in trio],
-    }
+    return embeddings.enrol(VOICES, service, databases, keys, subject, recordings)
 
 
 def _save(databases: Databases, keys: Keys, subject: uuid.UUID, chosen: list[tuple[int, Extracted, datetime]],
-          version: str) -> tuple[Enrolment, bool, list[Sample], list[Template]]:
-    now = datetime.now(timezone.utc)
-    try:
-        with _db(databases.biometric) as db, db.begin():
-            result: CursorResult = db.execute(update(Enrolment).where(
-                Enrolment.subject_id == subject, Enrolment.modality == VOICE, Enrolment.replaced_at.is_(None)
-            ).values(replaced_at=now))
-            enrolment = Enrolment(id=uuid.uuid4(), subject_id=subject, modality=VOICE, finger=None, created_at=now)
-            db.add(enrolment)
-            db.flush()
-            samples, templates = [], []
-            for placement, extracted, made in chosen:
-                sample = Sample(id=uuid.uuid4(), enrolment_id=enrolment.id, placement=placement, captured_at=made,
-                                media_type="audio/wav", duration_ms=extracted.duration_ms, checks=extracted.checks)
-                sample.data = keyring.seal(keys, keyring.SAMPLE, sample.id.bytes + subject.bytes, extracted.wav)
-                db.add(sample)
-                db.flush()
-                template = Template(id=uuid.uuid4(), sample_id=sample.id, algorithm=ECAPA, version=version,
-                                    created_at=now, embedding=extracted.embedding)
-                db.add(template)
-                samples.append(sample)
-                templates.append(template)
-    except IntegrityError:
-        raise VoiceError("enrolment_busy", 409) from None  # another voice enrolment of this person ended first
-    return enrolment, result.rowcount > 0, samples, templates
+          version: str) -> tuple[Enrolment, bool, list[Sample], list]:
+    return embeddings.save(VOICES, databases, keys, subject, chosen, version)
 
 
 def delete_voice(databases: Databases, subject: uuid.UUID) -> bool:
     """As H34 for a finger and H48 for the face: the voice enrolment and those it replaced are erased with their
     sealed recordings and embeddings, and (H55) with their verification attempts, whose link cascades; the
     identification attempts they led stay, with the link emptied (H41, H56). False when the voice is not enrolled."""
-    with _db(databases.biometric) as db, db.begin():
-        rows = db.execute(select(Enrolment.id, Enrolment.replaced_at).where(
-            Enrolment.subject_id == subject, Enrolment.modality == VOICE
-        ).order_by(Enrolment.id).with_for_update()).all()
-        if not any(replaced_at is None for _, replaced_at in rows):
-            return False
-        enrolments = [enrolment_id for enrolment_id, _ in rows]
-        samples = select(Sample.id).where(Sample.enrolment_id.in_(enrolments))
-        db.execute(delete(Template).where(Template.sample_id.in_(samples)))
-        db.execute(delete(Sample).where(Sample.enrolment_id.in_(enrolments)))
-        db.execute(delete(Enrolment).where(Enrolment.id.in_(enrolments)))
-    return True
-
-
-# Voice verification (H55): one recording against the caller's current voice enrolment, as H49 does for the face.
-# The highest of the three cosine similarities decides, strictly above the threshold, and equal scores go to the
-# earliest recording (H43). A refused recording makes no attempt; a completed comparison is saved, match or not,
-# with its recording sealed, and the answer is sent only after that.
-
-COMPARISONS = """
-SELECT s.id AS sample_id, s.placement, t.version, t.embedding::text AS embedding,
-       1 - (t.embedding <=> CAST(:probe AS vector)) AS score
-FROM template t JOIN sample s ON s.id = t.sample_id
-WHERE s.enrolment_id = :enrolment AND t.algorithm = 'ecapa-voxceleb'
-ORDER BY s.placement
-"""
-
-
-def _b64(data: bytes) -> str:
-    return base64.b64encode(data).decode("ascii")
+    return embeddings.delete_enrolments(databases, subject, VOICE)
 
 
 def _take(service: VoiceService, recording: bytes, source: str) -> Extracted:
@@ -415,108 +274,45 @@ def _origin(probe: Extracted, source: str) -> dict:
     own, so the page can show it."""
     if source != "file":
         return {"source": source}
-    return {"source": source, "file": probe.file, "probe": _b64(probe.wav)}
+    return {"source": source, "file": probe.file, "probe": base64_text(probe.wav)}
 
 
 def _repeat_view(service: VoiceService, keys: Keys, databases: Databases, subject: uuid.UUID, sample_id: uuid.UUID,
                  stored: list[float]) -> bytes:
-    """The caller's own winning recording, for the result screen: the sealed recording is opened for its owner only
-    and described again, and the repeated embedding must equal the stored one (the engine's fixed threads make it
-    exact)."""
-    with _db(databases.biometric) as db:
-        sample = db.get(Sample, sample_id)
-    wav = keyring.open_sealed(keys, keyring.SAMPLE, sample.id.bytes + subject.bytes, sample.data)
-    again = _extract(service, wav)
-    if not again.passed or again.embedding is None or vector_values(vector_text(again.embedding)) != stored:
-        raise EngineError("the stored recording did not give its stored embedding again")
-    return wav
+    """The caller's own winning recording, for the result screen (H55); the engine's fixed threads make its repeated
+    embedding exact."""
+    return embeddings.repeat_view(VOICES, service, keys, databases, subject, sample_id, stored)
 
 
 def verify(service: VoiceService, databases: Databases, keys: Keys, subject: uuid.UUID, recording: bytes,
            source: str = "device") -> dict:
-    at = datetime.now(timezone.utc)
-    started = time.perf_counter()
-    with _db(databases.biometric) as db:
-        algorithm = db.get(Algorithm, ECAPA)
-        version, threshold = algorithm.version, algorithm.threshold
-        origin, provisional = algorithm.threshold_origin, algorithm.threshold_provisional
-    enrolment = current_enrolment(databases, subject)
-    if enrolment is None:
-        raise VoiceError("not_enrolled", 409)  # H15: the client offers the enrolment
-    if service.engine.start().get("ecapa_sha256") != version:
-        raise VoiceError("method_version_differs", 503)
-    probe = _take(service, recording, source)
-    if not probe.passed:
-        return _rejected(probe, source)
-    with _db(databases.biometric) as db:
-        rows = db.execute(text(COMPARISONS), {"probe": vector_text(probe.embedding), "enrolment": enrolment.id}).all()
-    if len(rows) != RECORDINGS:
-        raise VoiceError("enrolment_changed", 409)
-    if any(row.version != version for row in rows):
-        raise VoiceError("method_version_differs", 503)
-    comparisons = [{"placement": row.placement, "score": float(row.score), "accepted": float(row.score) > threshold}
-                   for row in rows]
-    best = sorted(rows, key=lambda row: (-float(row.score), row.placement))[0]
-    score = float(best.score)
-    duration_ms = round((time.perf_counter() - started) * 1000)  # receipt through the comparisons (H35)
-    reference = _repeat_view(service, keys, databases, subject, best.sample_id, vector_values(best.embedding))
-    attempt = Attempt(id=uuid.uuid4(), at=at, subject_id=subject, modality=VOICE, mode="verify", algorithm=ECAPA,
-                      enrolment_id=enrolment.id, score=score, threshold=threshold, accepted=score > threshold,
-                      duration_ms=duration_ms, source=source)
-    attempt.probe = keyring.seal(keys, keyring.PROBE, attempt.id.bytes + subject.bytes, probe.wav)
-    with _db(databases.biometric) as db, db.begin():
-        # A deletion or a new enrolment since the comparison invalidates it (H35); a later deletion cascades.
-        locked = db.scalar(select(Enrolment).where(Enrolment.id == enrolment.id, Enrolment.subject_id == subject)
-                           .with_for_update())
-        if locked is None or locked.replaced_at is not None:
-            raise VoiceError("enrolment_changed", 409)
-        db.add(attempt)
-    return {"status": "verified", "attempt_id": str(attempt.id), "at": at.isoformat(), "score": score,
-            "threshold": threshold, "threshold_origin": origin, "threshold_provisional": provisional,
-            "accepted": attempt.accepted, "duration_ms": duration_ms, "comparisons": comparisons, **_origin(probe, source),
-            "view": {"placement": best.placement, "reference": _b64(reference)}}
-
-
-# Voice identification (H56): one recording against every current voice enrolment of the active user accounts, as H50
-# does for the face, with the same gallery, ranking and locked save (mbs/embeddings.py). The gallery and the threshold
-# are fixed when the recording arrives; the leader is found only strictly above the threshold, and equal leaders are
-# ordered by enrolment and reported as a tie. A refused recording makes no attempt; a completed search is saved, found
-# or not, with its recording sealed, and the answer is sent only after that. Only the caller's own enrolment is named,
-# and only its recording is sent (H18).
-
-SEARCH = Search(VOICE, ECAPA, RECORDINGS, VoiceError)
+    """H55: one recording against the caller's current voice enrolment, as H49 does for the face."""
+    return embeddings.verify(VOICES, service, databases, keys, subject, recording, source)
 
 
 def identify(service: VoiceService, databases: Databases, keys: Keys, subject: uuid.UUID, recording: bytes,
              source: str = "device") -> dict:
-    at = datetime.now(timezone.utc)
-    started = time.perf_counter()
-    with _db(databases.biometric) as db:
-        algorithm = db.get(Algorithm, ECAPA)
-        version, threshold = algorithm.version, algorithm.threshold
-        origin, provisional = algorithm.threshold_origin, algorithm.threshold_provisional
-    gallery = SEARCH.gallery(databases, keys, subject, version)
-    if service.engine.start().get("ecapa_sha256") != version:
-        raise VoiceError("method_version_differs", 503)
-    probe = _take(service, recording, source)
-    if not probe.passed:
-        return _rejected(probe, source)
-    ranked = SEARCH.rank(databases, gallery, probe.embedding)
-    duration_ms = round((time.perf_counter() - started) * 1000)  # receipt through every comparison (H41)
-    own = ranked.own(subject)
-    view = None
-    if own is not None:  # the caller's own enrolled recording only, described again as H55 does
-        rank, row = own
-        reference = _repeat_view(service, keys, databases, subject, row.sample_id, vector_values(row.embedding))
-        view = {"rank": rank, "placement": row.placement, "reference": _b64(reference)}
-    attempt = Attempt(id=uuid.uuid4(), at=at, subject_id=subject, modality=VOICE, mode="identify", algorithm=ECAPA,
-                      top_enrolment_id=ranked.leader.enrolment_id, gallery_size=len(gallery.rows), score=ranked.score,
-                      threshold=threshold, accepted=ranked.score > threshold, duration_ms=duration_ms, source=source)
-    attempt.probe = keyring.seal(keys, keyring.PROBE, attempt.id.bytes + subject.bytes, probe.wav)
-    SEARCH.save(databases, gallery, attempt)
-    return {"status": "identified", "attempt_id": str(attempt.id), "at": at.isoformat(), "score": ranked.score,
-            "threshold": threshold, "threshold_origin": origin, "threshold_provisional": provisional,
-            "accepted": attempt.accepted, "duration_ms": duration_ms, "gallery_size": len(gallery.rows),
-            "enrolments": len(ranked.rows), "tied_leaders": ranked.tied_leaders(), **_origin(probe, source),
-            "candidates": ranked.candidates(subject, threshold),
-            **({"view": view} if view is not None else {})}
+    """H56: one recording against every current voice enrolment of the active user accounts, as H50 does for the
+    face."""
+    return embeddings.identify(VOICES, service, databases, keys, subject, recording, source)
+
+
+def _sample_json(sample: Sample, found: Extracted) -> dict:
+    return {"id": str(sample.id), "placement": sample.placement, "captured_at": sample.captured_at.isoformat(),
+            "duration_ms": sample.duration_ms, "sealed_length": len(sample.data), "checks": sample.checks}
+
+
+VOICES = Modality(
+    name=VOICE, algorithm=ECAPA, version_key="ecapa_sha256", per_enrolment=RECORDINGS, most_kept=MOST_KEPT,
+    embedding_length=EMBEDDING_LENGTH, noun="recording", refusal=VoiceError,
+    extract=lambda service, recording: _extract(service, recording),
+    take=lambda service, recording, source: _take(service, recording, source),
+    rejected=lambda probe, source: _rejected(probe, source),
+    sealed=lambda found: found.wav,
+    sample_fields=lambda found: {"media_type": "audio/wav", "duration_ms": found.duration_ms, "checks": found.checks},
+    sample_json=lambda sample, found: _sample_json(sample, found),
+    shown=lambda recording, again: recording,
+    origin=lambda probe, source: _origin(probe, source),
+    view=lambda probe, reference: {"reference": base64_text(reference)},
+    repeat_view=lambda *args: _repeat_view(*args),
+)

@@ -258,6 +258,11 @@ of the pinned version, the same ranking statement and the same locked save, one 
 (`mbs/embeddings.py`). The leader is found only strictly above 0.25; when the caller's own enrolment is among the five
 shown, its winning recording is described again as in H55 and sent with the answer.
 
+The face and the voice share all their flows, written once in `mbs/embeddings.py`: enrolment and its save,
+deletion, verification and identification. `mbs/face.py` and `mbs/voice.py` each describe their modality to them
+(`FACES`, `VOICES`: names, rules and own steps) and keep what is their own: the engine's answers and the checks of
+an image, a recording or a file.
+
 Both face routes take `{"image": base64, "source": "device" | "file"}` (H51): a camera image up to 8 MB, an image
 file up to 10 MB. Before the engine reads a file, the server takes its kind from its first bytes (JPEG or
 PNG) and its width and height from its header (at least 240 pixels on the shorter side, at most 50 million

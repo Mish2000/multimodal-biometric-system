@@ -10,34 +10,28 @@ values (H14), and every face score is pgvector's cosine similarity, the same com
 comparison of the system.
 
 The server keeps nothing between requests: the enrolment request carries the images again, and every
-check is made anew on them.
+check is made anew on them. Enrolment, verification, identification and deletion are the flows the face
+shares with the voice (mbs/embeddings.py); this module holds the face's own steps: the engine's answers,
+the checks of an image and of an image file, and what of an image is sealed and shown.
 """
 
 from __future__ import annotations
 
-import base64
-import itertools
 import logging
 import math
 import struct
-import threading
-import time
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 
-from sqlalchemy import CursorResult, delete, select, text, update
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session as DbSession
-
-from . import keys as keyring
+from . import embeddings
 from .config import REPOSITORY, Config
 from .db import Databases
-from .embeddings import Search
+from .embeddings import EngineService, Modality, ModalityError, base64_text, card, decode
+from .embeddings import check as _check
 from .engines import Engine, EngineError, conda_environment
-from .fingerprint import best_three
 from .keys import Keys
-from .models import Algorithm, Attempt, Enrolment, Sample, Template, vector_text, vector_values
+from .models import Enrolment, Sample
 
 logger = logging.getLogger("mbs.face")
 FACE = "face"
@@ -55,33 +49,14 @@ FILE_BYTES = 10 << 20  # H27: an image file, for 1:1 and 1:N only
 SHORT_SIDE_MINIMUM = 240  # H27: a file's shorter side, in pixels
 MAX_PIXELS = 50_000_000  # H27: a file's largest image; the engine refuses more too
 SOURCES = ("device", "file")
-CAPTURE_AGE = timedelta(minutes=30)  # an enrolment's images were taken in the last half hour
-CLOCK_SKEW = timedelta(minutes=1)
 
 
-class FaceError(Exception):
+class FaceError(ModalityError):
     """A refused face request, answered as {"error": code, ...}."""
 
-    def __init__(self, code: str, status: int = 422, **extra):
-        super().__init__(code)
-        self.code, self.status, self.extra = code, status, extra
 
-
-@dataclass
-class FaceService:
-    engine: Engine
-
-    def warm_up(self) -> None:
-        """Start the engine in the background, so the first view of the camera does not wait for it."""
-        def start():
-            try:
-                self.engine.start()
-            except EngineError:
-                pass  # reported when a request needs it
-        threading.Thread(target=start, daemon=True).start()
-
-    def close(self) -> None:
-        self.engine.close()
+class FaceService(EngineService):
+    """The face engine (H48), started in the background, so the first view of the camera does not wait for it."""
 
 
 def from_config(config: Config) -> tuple[FaceService | None, str]:
@@ -98,19 +73,9 @@ def from_config(config: Config) -> tuple[FaceService | None, str]:
     return FaceService(Engine(FACE, command, conda_environment(python))), ""
 
 
-def _db(engine) -> DbSession:
-    return DbSession(engine, expire_on_commit=False)
-
-
 def decode_image(data: str, limit: int) -> bytes:
     """An image sent in base64; its kind is decided by the engine from its content."""
-    try:
-        image = base64.b64decode(data, validate=True)
-    except ValueError:
-        raise FaceError("invalid_image") from None
-    if not image or len(image) > limit:
-        raise FaceError("invalid_image")
-    return image
+    return decode(data, limit, FaceError, "invalid_image")
 
 
 def _number(value, low: float = -math.inf, high: float = math.inf) -> float:
@@ -134,10 +99,6 @@ def _faces(reply: dict) -> tuple[int, int, list[dict]]:
                         "landmarks": [[_number(x), _number(y)] for x, y in face["landmarks"]],
                         "score": _number(face.get("score"), 0, 1)})
     return width, height, checked
-
-
-def _check(name: str, passed: bool, detail: str, **extra) -> dict:
-    return {"name": name, "passed": passed, "detail": detail, **extra}
 
 
 def checks_for(width: int, height: int, faces: list[dict]) -> list[dict]:
@@ -239,10 +200,6 @@ def _extract(service: FaceService, image: bytes) -> Extracted:
     return found
 
 
-def _b64(data: bytes | None) -> str | None:
-    return None if data is None else base64.b64encode(data).decode("ascii")
-
-
 def detect(service: FaceService, image: bytes) -> dict:
     """Where the faces of one live frame are, for the box drawn over the camera's view; nothing is kept."""
     reply, _ = service.engine.request({"op": "detect"}, [image])
@@ -254,132 +211,36 @@ def check(service: FaceService, image: bytes) -> dict:
     """One taken image's checks and its aligned face, for the page to show at once; nothing is kept."""
     found = _extract(service, image)
     return {"width": found.width, "height": found.height, "faces": found.faces, "checks": found.checks,
-            "passed": found.passed, "aligned": _b64(found.aligned) if found.passed else None}
+            "passed": found.passed, "aligned": base64_text(found.aligned) if found.passed else None}
 
 
 def method(databases: Databases, service: FaceService | None) -> dict:
     """SFace's card and the rules of a face enrolment."""
-    with _db(databases.biometric) as db:
-        algorithm = db.get(Algorithm, SFACE)
-    return {"code": SFACE, "threshold": algorithm.threshold, "threshold_provisional": algorithm.threshold_provisional,
-            "threshold_origin": algorithm.threshold_origin, "available": service is not None,
-            "images": IMAGES, "most_kept": MOST_KEPT, "score_minimum": SCORE_MINIMUM, "width_minimum": WIDTH_MINIMUM,
-            "embedding_length": EMBEDDING_LENGTH}
-
-
-def similarity(db: DbSession, a: list[float], b: list[float]) -> float:
-    """pgvector's cosine similarity of two embeddings: one minus its cosine distance."""
-    return float(db.scalar(text("SELECT 1 - (CAST(:a AS vector) <=> CAST(:b AS vector))"),
-                           {"a": vector_text(a), "b": vector_text(b)}))
+    return {**card(databases, SFACE, service), "images": IMAGES, "most_kept": MOST_KEPT,
+            "score_minimum": SCORE_MINIMUM, "width_minimum": WIDTH_MINIMUM, "embedding_length": EMBEDDING_LENGTH}
 
 
 def current_enrolment(databases: Databases, subject: uuid.UUID) -> Enrolment | None:
-    with _db(databases.biometric) as db:
-        return db.scalar(select(Enrolment).where(Enrolment.subject_id == subject, Enrolment.modality == FACE,
-                                                 Enrolment.replaced_at.is_(None)))
+    return embeddings.current_enrolment(databases, subject, FACE)
 
 
 def enrol(service: FaceService, databases: Databases, keys: Keys, subject: uuid.UUID,
           images: list[tuple[bytes, datetime]]) -> dict:
     """The images taken so far, in the order they were taken: saved when three of them match each other,
     otherwise the client is asked for another image, until six have passed the checks."""
-    if not IMAGES <= len(images) <= MOST_KEPT:
-        raise FaceError("invalid_request")
-    now = datetime.now(timezone.utc)
-    times = [taken for _, taken in images]
-    if any(taken.tzinfo is None or not now - CAPTURE_AGE <= taken <= now + CLOCK_SKEW for taken in times) \
-            or times != sorted(times):
-        raise FaceError("invalid_request")
-    with _db(databases.biometric) as db:
-        algorithm = db.get(Algorithm, SFACE)
-        version, threshold = algorithm.version, algorithm.threshold
-    if service.engine.start().get("sface_sha256") != version:
-        raise FaceError("method_version_differs", 503)
-    found = []
-    for index, (image, _) in enumerate(images):
-        extracted = _extract(service, image)
-        if not extracted.passed:
-            raise FaceError("image_rejected", index=index, checks=extracted.checks)
-        found.append(extracted)
-    scores: dict[tuple[int, int], float] = {}
-    with _db(databases.biometric) as db:
-        for a, b in itertools.combinations(range(len(found)), 2):
-            scores[(a, b)] = similarity(db, found[b].embedding, found[a].embedding)
-    pairs = [{"probe": b + 1, "reference": a + 1, "score": score, "accepted": score > threshold}
-             for (a, b), score in scores.items()]
-    trio = best_three(found, scores, threshold)
-    if trio is None:
-        status = "failed" if len(found) >= MOST_KEPT else "another"
-        return {"status": status, **({"error": "images_do_not_match"} if status == "failed" else {}),
-                "pairs": pairs, "threshold": threshold, "kept": len(found)}
-    chosen = [(index + 1, found[index], times[index]) for index in trio]
-    enrolment, replaced, samples, templates = _save(databases, keys, subject, chosen, version)
-    return {
-        "status": "saved",
-        "enrolment": {"id": str(enrolment.id), "created_at": enrolment.created_at.isoformat(),
-                      "replaced_previous": replaced},
-        "samples": [{"id": str(sample.id), "placement": sample.placement, "captured_at": sample.captured_at.isoformat(),
-                     "width": sample.width, "height": sample.height, "sealed_length": len(sample.data),
-                     "aligned": _b64(extracted.aligned)}
-                    for sample, (_, extracted, _) in zip(samples, chosen)],
-        "templates": [{"id": str(template.id), "sample_id": str(template.sample_id), "algorithm": SFACE,
-                       "version": version, "embedding_length": EMBEDDING_LENGTH} for template in templates],
-        "pairs": [pair for pair in pairs if pair["reference"] - 1 in trio and pair["probe"] - 1 in trio],
-        "threshold": threshold,
-        "not_kept": [index + 1 for index in range(len(found)) if index not in trio],
-    }
+    return embeddings.enrol(FACES, service, databases, keys, subject, images)
 
 
 def _save(databases: Databases, keys: Keys, subject: uuid.UUID, chosen: list[tuple[int, Extracted, datetime]],
-          version: str) -> tuple[Enrolment, bool, list[Sample], list[Template]]:
-    now = datetime.now(timezone.utc)
-    try:
-        with _db(databases.biometric) as db, db.begin():
-            result: CursorResult = db.execute(update(Enrolment).where(
-                Enrolment.subject_id == subject, Enrolment.modality == FACE, Enrolment.replaced_at.is_(None)
-            ).values(replaced_at=now))
-            enrolment = Enrolment(id=uuid.uuid4(), subject_id=subject, modality=FACE, finger=None, created_at=now)
-            db.add(enrolment)
-            db.flush()
-            samples, templates = [], []
-            for placement, extracted, taken in chosen:
-                sample = Sample(id=uuid.uuid4(), enrolment_id=enrolment.id, placement=placement, captured_at=taken,
-                                media_type="image/png", width=extracted.width, height=extracted.height,
-                                checks=extracted.checks)
-                sample.data = keyring.seal(keys, keyring.SAMPLE, sample.id.bytes + subject.bytes, extracted.png)
-                db.add(sample)
-                db.flush()
-                template = Template(id=uuid.uuid4(), sample_id=sample.id, algorithm=SFACE, version=version,
-                                    created_at=now, embedding=extracted.embedding)
-                db.add(template)
-                samples.append(sample)
-                templates.append(template)
-    except IntegrityError:
-        raise FaceError("enrolment_busy", 409) from None  # another face enrolment of this person ended first
-    return enrolment, result.rowcount > 0, samples, templates
+          version: str) -> tuple[Enrolment, bool, list[Sample], list]:
+    return embeddings.save(FACES, databases, keys, subject, chosen, version)
 
 
 def delete_face(databases: Databases, subject: uuid.UUID) -> bool:
     """As H34 for a finger: the face enrolment and those it replaced are erased with their sealed images and
     embeddings; False when the face is not enrolled."""
-    with _db(databases.biometric) as db, db.begin():
-        rows = db.execute(select(Enrolment.id, Enrolment.replaced_at).where(
-            Enrolment.subject_id == subject, Enrolment.modality == FACE
-        ).order_by(Enrolment.id).with_for_update()).all()
-        if not any(replaced_at is None for _, replaced_at in rows):
-            return False
-        enrolments = [enrolment_id for enrolment_id, _ in rows]
-        samples = select(Sample.id).where(Sample.enrolment_id.in_(enrolments))
-        db.execute(delete(Template).where(Template.sample_id.in_(samples)))
-        db.execute(delete(Sample).where(Sample.enrolment_id.in_(enrolments)))
-        db.execute(delete(Enrolment).where(Enrolment.id.in_(enrolments)))
-    return True
+    return embeddings.delete_enrolments(databases, subject, FACE)
 
-
-# Face verification (H49): one taken image against the caller's current face enrolment, as H35 does for a
-# finger. The highest of the three cosine similarities decides, strictly above the threshold, and equal
-# scores go to the earliest image (H43). A rejected image makes no attempt; a completed comparison is saved,
-# match or not, with its image sealed, and the answer is sent only after that.
 
 def _take(service: FaceService, image: bytes, source: str) -> Extracted:
     """The new image of a verification or an identification: from the camera, or from a file (H27, H51), whose
@@ -405,115 +266,43 @@ def _size(probe: Extracted) -> dict:
     return {"decoded": probe.decoded, "stored": probe.stored}
 
 
-COMPARISONS = """
-SELECT s.id AS sample_id, s.placement, t.version, t.embedding::text AS embedding,
-       1 - (t.embedding <=> CAST(:probe AS vector)) AS score
-FROM template t JOIN sample s ON s.id = t.sample_id
-WHERE s.enrolment_id = :enrolment AND t.algorithm = 'sface'
-ORDER BY s.placement
-"""
-
-
 def _repeat_view(service: FaceService, keys: Keys, databases: Databases, subject: uuid.UUID, sample_id: uuid.UUID,
                  stored: list[float]) -> bytes:
-    """The aligned face of the caller's own winning image, for the result screen: the sealed image is opened for
-    its owner only and extracted again, and the repeated embedding must equal the stored one."""
-    with _db(databases.biometric) as db:
-        sample = db.get(Sample, sample_id)
-    png = keyring.open_sealed(keys, keyring.SAMPLE, sample.id.bytes + subject.bytes, sample.data)
-    again = _extract(service, png)
-    if not again.passed or again.embedding is None or vector_values(vector_text(again.embedding)) != stored:
-        raise EngineError("the stored face did not give its stored embedding again")
-    return again.aligned
+    """The aligned face of the caller's own winning image, for the result screen (H49)."""
+    return embeddings.repeat_view(FACES, service, keys, databases, subject, sample_id, stored)
 
 
 def verify(service: FaceService, databases: Databases, keys: Keys, subject: uuid.UUID, image: bytes,
            source: str = "device") -> dict:
-    at = datetime.now(timezone.utc)
-    started = time.perf_counter()
-    with _db(databases.biometric) as db:
-        algorithm = db.get(Algorithm, SFACE)
-        version, threshold = algorithm.version, algorithm.threshold
-        origin, provisional = algorithm.threshold_origin, algorithm.threshold_provisional
-    enrolment = current_enrolment(databases, subject)
-    if enrolment is None:
-        raise FaceError("not_enrolled", 409)  # H15: the client offers the enrolment
-    if service.engine.start().get("sface_sha256") != version:
-        raise FaceError("method_version_differs", 503)
-    probe = _take(service, image, source)
-    if not probe.passed:
-        return _rejected(probe, source)
-    with _db(databases.biometric) as db:
-        rows = db.execute(text(COMPARISONS), {"probe": vector_text(probe.embedding), "enrolment": enrolment.id}).all()
-    if len(rows) != IMAGES:
-        raise FaceError("enrolment_changed", 409)
-    if any(row.version != version for row in rows):
-        raise FaceError("method_version_differs", 503)
-    comparisons = [{"placement": row.placement, "score": float(row.score), "accepted": float(row.score) > threshold}
-                   for row in rows]
-    best = sorted(rows, key=lambda row: (-float(row.score), row.placement))[0]
-    score = float(best.score)
-    duration_ms = round((time.perf_counter() - started) * 1000)  # receipt through the comparisons (H35)
-    reference = _repeat_view(service, keys, databases, subject, best.sample_id, vector_values(best.embedding))
-    attempt = Attempt(id=uuid.uuid4(), at=at, subject_id=subject, modality=FACE, mode="verify", algorithm=SFACE,
-                      enrolment_id=enrolment.id, score=score, threshold=threshold, accepted=score > threshold,
-                      duration_ms=duration_ms, source=source)
-    attempt.probe = keyring.seal(keys, keyring.PROBE, attempt.id.bytes + subject.bytes, probe.png)
-    with _db(databases.biometric) as db, db.begin():
-        # A deletion or a new enrolment since the comparison invalidates it (H35); a later deletion cascades.
-        locked = db.scalar(select(Enrolment).where(Enrolment.id == enrolment.id, Enrolment.subject_id == subject)
-                           .with_for_update())
-        if locked is None or locked.replaced_at is not None:
-            raise FaceError("enrolment_changed", 409)
-        db.add(attempt)
-    return {"status": "verified", "attempt_id": str(attempt.id), "at": at.isoformat(), "score": score,
-            "threshold": threshold, "threshold_origin": origin, "threshold_provisional": provisional,
-            "accepted": attempt.accepted, "duration_ms": duration_ms, "comparisons": comparisons,
-            "source": source, "size": _size(probe),
-            "view": {"placement": best.placement, "probe": _b64(probe.aligned), "reference": _b64(reference)}}
-
-
-# Face identification (H50): one taken image against every current face enrolment of the active user accounts, as
-# H41 does for fingerprints. The gallery and the threshold are fixed when the image arrives. One SQL statement ranks
-# the enrolments by their highest cosine similarity, an exact search without an index (docs/data-model.md); the
-# leader is found only strictly above the threshold, and equal leaders are ordered by enrolment and reported as a
-# tie. A completed search is saved, found or not, after the accounts, the enrolments and their templates are checked
-# again under locks, and the answer is sent only after that. Only the caller's own enrolment is named or shown (H18).
-# The gallery, the ranking and the locked save are the voice's too (H56, mbs/embeddings.py).
-
-SEARCH = Search(FACE, SFACE, IMAGES, FaceError)
+    """H49: one taken image against the caller's current face enrolment, as H35 does for a finger."""
+    return embeddings.verify(FACES, service, databases, keys, subject, image, source)
 
 
 def identify(service: FaceService, databases: Databases, keys: Keys, subject: uuid.UUID, image: bytes,
              source: str = "device") -> dict:
-    at = datetime.now(timezone.utc)
-    started = time.perf_counter()
-    with _db(databases.biometric) as db:
-        algorithm = db.get(Algorithm, SFACE)
-        version, threshold = algorithm.version, algorithm.threshold
-        origin, provisional = algorithm.threshold_origin, algorithm.threshold_provisional
-    gallery = SEARCH.gallery(databases, keys, subject, version)
-    if service.engine.start().get("sface_sha256") != version:
-        raise FaceError("method_version_differs", 503)
-    probe = _take(service, image, source)
-    if not probe.passed:
-        return _rejected(probe, source)
-    ranked = SEARCH.rank(databases, gallery, probe.embedding)
-    duration_ms = round((time.perf_counter() - started) * 1000)  # receipt through every comparison (H41)
-    own = ranked.own(subject)
-    view = None
-    if own is not None:  # the caller's own enrolled face only, extracted again as H49 does
-        rank, row = own
-        reference = _repeat_view(service, keys, databases, subject, row.sample_id, vector_values(row.embedding))
-        view = {"rank": rank, "placement": row.placement, "probe": _b64(probe.aligned), "reference": _b64(reference)}
-    attempt = Attempt(id=uuid.uuid4(), at=at, subject_id=subject, modality=FACE, mode="identify", algorithm=SFACE,
-                      top_enrolment_id=ranked.leader.enrolment_id, gallery_size=len(gallery.rows), score=ranked.score,
-                      threshold=threshold, accepted=ranked.score > threshold, duration_ms=duration_ms, source=source)
-    attempt.probe = keyring.seal(keys, keyring.PROBE, attempt.id.bytes + subject.bytes, probe.png)
-    SEARCH.save(databases, gallery, attempt)
-    return {"status": "identified", "attempt_id": str(attempt.id), "at": at.isoformat(), "score": ranked.score,
-            "threshold": threshold, "threshold_origin": origin, "threshold_provisional": provisional,
-            "accepted": attempt.accepted, "duration_ms": duration_ms, "gallery_size": len(gallery.rows),
-            "enrolments": len(ranked.rows), "tied_leaders": ranked.tied_leaders(), "source": source, "size": _size(probe),
-            "candidates": ranked.candidates(subject, threshold),
-            **({"view": view} if view is not None else {})}
+    """H50: one taken image against every current face enrolment of the active user accounts, as H41 does for
+    fingerprints."""
+    return embeddings.identify(FACES, service, databases, keys, subject, image, source)
+
+
+def _sample_json(sample: Sample, found: Extracted) -> dict:
+    return {"id": str(sample.id), "placement": sample.placement, "captured_at": sample.captured_at.isoformat(),
+            "width": sample.width, "height": sample.height, "sealed_length": len(sample.data),
+            "aligned": base64_text(found.aligned)}
+
+
+FACES = Modality(
+    name=FACE, algorithm=SFACE, version_key="sface_sha256", per_enrolment=IMAGES, most_kept=MOST_KEPT,
+    embedding_length=EMBEDDING_LENGTH, noun="image", refusal=FaceError,
+    extract=lambda service, image: _extract(service, image),
+    take=lambda service, image, source: _take(service, image, source),
+    rejected=lambda probe, source: _rejected(probe, source),
+    sealed=lambda found: found.png,
+    sample_fields=lambda found: {"media_type": "image/png", "width": found.width, "height": found.height,
+                                 "checks": found.checks},
+    sample_json=lambda sample, found: _sample_json(sample, found),
+    shown=lambda image, again: again.aligned,
+    origin=lambda probe, source: {"source": source, "size": _size(probe)},
+    view=lambda probe, reference: {"probe": base64_text(probe.aligned), "reference": base64_text(reference)},
+    repeat_view=lambda *args: _repeat_view(*args),
+)

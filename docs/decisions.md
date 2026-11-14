@@ -1696,3 +1696,24 @@ Approved on 2026-11-14, from a reading of the code before increment 6; no decisi
 All 351 server tests passed, one of them new, including the four local checks with stored captures, and the built
 client passed its offscreen checks against the new server unchanged: 68 with the fingerprint engines and 78 with the
 face and voice engines. The client and the engines are unchanged. It passed a manual check on 2026-11-14.
+
+## 2026-11-14: one implementation of the face's and the voice's flows
+
+Approved on 2026-11-14, from a reading of the code before increment 6; no decision changed (H48 to H57).
+
+- `server/mbs/face.py` and `server/mbs/voice.py` held the same enrolment and its save, deletion, verification and
+  identification twice, apart from names, and copies drift apart, as two of the client's voice screens had before the
+  corrections of 2026-11-12. The flows now live once in `server/mbs/embeddings.py`, next to the 1:N search they
+  already shared (H56), with the modalities' common refusal and engine service. Each modality module describes itself
+  in one object (its names, its rules and its own steps, such as how a finding is checked, what of it is sealed and
+  what the result screen shows) and keeps what is truly its own: the engine's answers, the checks of an image, a
+  recording or a file, and the face's live view. The functions the routes and the tests call keep their names.
+- Behaviour is unchanged. The face's and the voice's tests passed without a change, among them the tests that replace
+  a modality's extraction or repeated view meanwhile: the shared flows look those steps up in the modality's module
+  at each call.
+
+All 351 server tests passed, including the four local checks with stored captures, and the built client passed its
+offscreen checks against the new server unchanged: 78 with the face and voice engines, in which a synthetic voice was
+enrolled, verified and identified live and from an MP3 file, and deleted, through the real engine, and a synthetic
+face enrolment was saved through the face's own save, and 68 with the fingerprint engines. The client and the engines
+are unchanged. It passed a manual check on 2026-11-14.
