@@ -14,7 +14,8 @@
 <p align="center">
   <img alt="Tests" src="https://img.shields.io/badge/tests-351%20server%20%C2%B7%20198%20client%20%C2%B7%2015%20scanner%20%C2%B7%2039%20engines-2EA44F">
   <img alt="Cryptography" src="https://img.shields.io/badge/crypto-AES--256--GCM%20%C2%B7%20Argon2id%20%C2%B7%20HMAC-7C3AED">
-  <img alt="Build" src="https://img.shields.io/badge/build-increment%205%20of%206%20complete-F59E0B">
+  <a href="https://github.com/Mish2000/multimodal-biometric-system/actions/workflows/checks.yml"><img alt="Checks" src="https://github.com/Mish2000/multimodal-biometric-system/actions/workflows/checks.yml/badge.svg?branch=main"></a>
+  <img alt="Progress" src="https://img.shields.io/badge/progress-increment%205%20of%206%20complete-F59E0B">
 </p>
 
 A desktop system that recognises a person by **fingerprint, face and voice**: enrolment once, then
@@ -188,11 +189,11 @@ environments/  locked conda environments of the server, the database and the fac
 <summary><b>Getting started</b> (Windows)</summary>
 
 ```bash
-# The server and its database, from their locked conda environments
-conda create -n multimodal-server --file environments/server-win-64.lock
-conda create -n multimodal-postgres --file environments/postgres-win-64.lock
-conda create -n multimodal-face --file environments/face-win-64.lock    # its two models: engines/README.md
-conda create -n multimodal-voice --file environments/voice-win-64.lock  # with voice-pip.txt and its model: engines/README.md
+# The server and its database, from their locked conda environments (conda-forge only)
+conda create --override-channels -c conda-forge -n multimodal-server --file environments/server-win-64.lock
+conda create --override-channels -c conda-forge -n multimodal-postgres --file environments/postgres-win-64.lock
+conda create --override-channels -c conda-forge -n multimodal-face --file environments/face-win-64.lock    # its two models: engines/README.md
+conda create --override-channels -c conda-forge -n multimodal-voice --file environments/voice-win-64.lock  # with voice-pip.txt and its model: engines/README.md
 conda activate multimodal-server
 cd server
 python -m mbs setup        # key file, local settings, cluster and databases
@@ -208,6 +209,10 @@ npm run dev                # the app, with the server running
 npm test                   # 198 tests
 npm run lint               # oxlint (.oxlintrc.json)
 ```
+
+Every push to `main` runs the client's, the server's and the scanner's checks on GitHub's Windows runners
+([workflow](.github/workflows/checks.yml)); the engines, the research methods and the local checks need models,
+captures and the scanner, so they run on the project's PC.
 
 Details: [server](server/README.md) · [scanner](scanner/README.md) · [research methods](methods/README.md)
 </details>

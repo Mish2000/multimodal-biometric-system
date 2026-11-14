@@ -1776,3 +1776,32 @@ Approved on 2026-11-14, from a reading of the code before increment 6; no decisi
 The 198 client tests, the type checks and the build passed, and the built client passed its offscreen checks: 68 with
 the fingerprint engines and 78 with the face and voice engines, among them a camera stopped by cancelling. The server
 is unchanged. It passed a manual check on 2026-11-14.
+
+## 2026-11-14: checks on every push
+
+Approved on 2026-11-14, from a reading of the code before increment 6; no decision changed (H23).
+
+- Until now the repository was checked only by runs on this PC, and the README's build badge was a fixed image.
+  Every push to `main` and every pull request to it now runs `.github/workflows/checks.yml` on GitHub's Windows
+  Server 2025 runners, with read access to the repository only, in three jobs. The client job installs the client
+  from its lock with Node 24.18.0, as on this PC, without Electron's own program, which the checks and the build do
+  not start, then runs its type checks, its lint, its 198 tests and its build. The server job builds the server's and
+  the database's environments from their locks with the runner's Miniconda, then runs ruff, mypy and the 351 server
+  tests, of which the four local checks are skipped without the captures. The scanner job builds the capture tool
+  from its NuGet lock with the runner's .NET SDK 10 and its .NET Framework 4.8 targeting pack, then runs its 15
+  self-tests.
+- The engines, the research methods and the local checks stay on this PC: they need the models, the captures and
+  the scanner, which never leave it.
+- The workflow uses two published actions, each pinned by its commit: actions/checkout 7.0.1 and actions/setup-node
+  7.1.0, the newest releases published at least 14 days earlier (H23). The runner's own .NET SDK and Miniconda
+  replace the two further actions considered on 2026-11-13.
+- conda refuses to create an environment when no one is at the keyboard while Anaconda's default channels are
+  configured and their terms are not accepted, even from a lock that names only conda-forge. The workflow therefore
+  names conda-forge as the only channel, and so do the commands in the READMEs and in the environment files.
+- The README shows the workflow's own status in place of the fixed build badge; the increments' progress keeps a
+  badge of its own, named so.
+
+Before the first push, the three jobs ran on a clean copy of the repository on this PC, without its local folder,
+from environments built again from the locks without the network, and in an elevated process, as on GitHub's
+runners: the client's type checks, lint, 198 tests and build passed; ruff and mypy found nothing and 347 server tests
+passed with the four local checks skipped; the scanner tool built and its 15 self-tests passed.

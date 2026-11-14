@@ -6,7 +6,7 @@
 # chooses a CUDA build of kaldi with 1.77 GB of CUDA libraries. The full solved set, with SHA-256 per
 # package, is voice-win-64.lock; SpeechBrain and HyperPyYAML are not on conda-forge and come from PyPI
 # with their hashes in voice-pip.txt:
-#   conda create -n multimodal-voice --file environments/voice-win-64.lock
+#   conda create --override-channels -c conda-forge -n multimodal-voice --file environments/voice-win-64.lock
 #   python -m pip install --no-deps --only-binary :all: --require-hashes -r environments/voice-pip.txt
 name: multimodal-voice
 channels:

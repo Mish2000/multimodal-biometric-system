@@ -146,7 +146,7 @@ packages from `environments/voice-win-64.lock`, and SpeechBrain and HyperPyYAML 
 does not have, pinned by SHA-256 in `environments/voice-pip.txt`:
 
 ```bash
-conda create -n multimodal-voice --file environments/voice-win-64.lock
+conda create --override-channels -c conda-forge -n multimodal-voice --file environments/voice-win-64.lock
 conda activate multimodal-voice
 python -m pip install --no-deps --only-binary :all: --require-hashes -r environments/voice-pip.txt
 python -m pip check

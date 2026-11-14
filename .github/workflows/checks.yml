@@ -1,0 +1,82 @@
+# The checks GitHub's Windows runners can run (H23): the client, the server with its locked environments, and the
+# scanner tool. The engines, the research methods and the local checks need models, captures and the scanner, which
+# never leave this project's PC, so they run there only.
+name: Checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  client:
+    name: Client
+    runs-on: windows-2025-vs2026
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: client
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"  # the checks and the build do not start Electron
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
+        with:
+          node-version: 24.18.0
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+
+  server:
+    name: Server
+    runs-on: windows-2025-vs2026
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      # The image's Miniconda, conda-forge only: the locks name every package with its SHA-256.
+      - name: Server environment
+        run: >-
+          & "$env:CONDA\Scripts\conda.exe" create --yes --quiet --override-channels -c conda-forge
+          -n multimodal-server --file environments/server-win-64.lock
+      - name: Database environment
+        run: >-
+          & "$env:CONDA\Scripts\conda.exe" create --yes --quiet --override-channels -c conda-forge
+          -n multimodal-postgres --file environments/postgres-win-64.lock
+      - name: Use the server environment
+        run: |
+          $environment = "$env:CONDA\envs\multimodal-server"
+          foreach ($folder in "bin", "Scripts", "Library\bin", "Library\usr\bin", "Library\mingw-w64\bin", "") {
+            Join-Path $environment $folder | Add-Content $env:GITHUB_PATH
+          }
+      - run: ruff check
+      - run: python -m mypy
+        working-directory: server
+      - run: python -m pytest
+        working-directory: server
+
+  scanner:
+    name: Scanner
+    runs-on: windows-2025-vs2026
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - run: dotnet --version
+      - run: dotnet build scanner/ScannerCapture -c Release -p:RestoreLockedMode=true
+      - run: '& ./scanner/ScannerCapture/bin/Release/net48/ScannerCapture.exe selftest'

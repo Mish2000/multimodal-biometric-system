@@ -11,10 +11,10 @@ starts PostgreSQL from the `multimodal-postgres` environment (`environments/`); 
 `multimodal-face` and the voice engine in `multimodal-voice`.
 
 ```powershell
-conda create -n multimodal-server --file environments/server-win-64.lock
-conda create -n multimodal-postgres --file environments/postgres-win-64.lock
-conda create -n multimodal-face --file environments/face-win-64.lock   # and the two models: engines/README.md
-conda create -n multimodal-voice --file environments/voice-win-64.lock # with voice-pip.txt and the model: engines/README.md
+conda create --override-channels -c conda-forge -n multimodal-server --file environments/server-win-64.lock
+conda create --override-channels -c conda-forge -n multimodal-postgres --file environments/postgres-win-64.lock
+conda create --override-channels -c conda-forge -n multimodal-face --file environments/face-win-64.lock   # and the two models: engines/README.md
+conda create --override-channels -c conda-forge -n multimodal-voice --file environments/voice-win-64.lock # with voice-pip.txt and the model: engines/README.md
 cd server
 $python = '<conda envs>\multimodal-server\python.exe'
 & $python -m mbs setup        # key file, local/server.toml, cluster, both databases (safe to rerun)

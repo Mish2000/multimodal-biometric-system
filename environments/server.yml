@@ -1,6 +1,6 @@
 # The server's environment (H4, H14, H20), conda-forge only, exact versions.
 # The full solved set, with SHA-256 per package, is server-win-64.lock:
-#   conda create -n multimodal-server --file environments/server-win-64.lock
+#   conda create --override-channels -c conda-forge -n multimodal-server --file environments/server-win-64.lock
 name: multimodal-server
 channels:
   - conda-forge
