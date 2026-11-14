@@ -1589,3 +1589,25 @@ H26, H31).
 The README's screenshots are still the design prototypes of October, among them one that shows Pore CNN under its
 earlier name beside a fusion card; screenshots of the real client replace them when the final design is built (H35).
 No code changed.
+
+## 2026-11-14: a fingerprint enrolment ends with its page
+
+Approved on 2026-11-14, from a reading of the code before increment 6; no decision changed (H33, H35, H41).
+
+- Leaving the fingerprint screen already cancelled an enrolment, but reloading the page, or the page losing its
+  process, did not. The client's main process kept the enrolment's request open, so the scanner went on waiting, up
+  to 60 seconds for each placement, for an enrolment that no screen showed; a finger placed meanwhile still counted
+  toward it, and every new capture was refused as busy until it ended. The main process now cancels an enrolment
+  when its page reloads, loses its process or is closed, as H35 and H41 made it do for verification and
+  identification, and the server stops the scanner as when the user cancels.
+- The three streamed captures, enrolment, verification and identification, now share one implementation of that
+  rule in the main process.
+
+All 194 client tests passed, 15 of them new: each of the three captures is cancelled when its own page is closed,
+starts loading again or loses its process, and not when another page does; its events reach only its page; and only
+the window's top frame can start or cancel it. Against the previous main process the three enrolment cases failed and
+the other twelve passed. Type checks and the build passed. The built client passed 68 offscreen checks with the real
+NFIQ 2 and OpenCV SIFT engines and stored placements through a stand-in scanner: after a reload during an enrolment
+that waited for a finger, the server closed the stand-in scanner 15 to 17 ms later in three runs, and an enrolment
+started right after the reload completed. The server is unchanged. It passed a manual check on the HiScan PRO on
+2026-11-14.
