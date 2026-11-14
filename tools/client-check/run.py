@@ -64,6 +64,7 @@ def electron_program() -> str:
 
 
 def main() -> int:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # the logs hold Hebrew; a console's code page may not
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("name")
     parser.add_argument("--captures", type=Path)
