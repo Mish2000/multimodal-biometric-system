@@ -102,8 +102,10 @@ def load(path: Path) -> Keys:
 
 
 def restrict(path: Path, folder: bool = False) -> None:
-    """Remove inherited permissions and give only the current user (by SID) full control."""
+    """Give only the current user (by SID) full control: every earlier permission goes, inherited or the path's own,
+    such as those of a folder Python made private (mode 0o700)."""
     grant = f"*{current_user_sid()}:" + ("(OI)(CI)(F)" if folder else "(F)")
+    subprocess.run(["icacls", str(path), "/reset"], check=True, capture_output=True)  # only inherited ones are left
     subprocess.run(["icacls", str(path), "/inheritance:r", "/grant:r", grant], check=True, capture_output=True)
 
 

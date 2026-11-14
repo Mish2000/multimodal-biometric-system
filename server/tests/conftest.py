@@ -3,7 +3,10 @@ of both databases for every test (from template databases), so tests never share
 
 from __future__ import annotations
 
+import os
 import socket
+import subprocess
+import sys
 from dataclasses import replace
 
 import pytest
@@ -16,6 +19,29 @@ from mbs import postgres
 from mbs.api import create_app
 from mbs.db import migrate, open_databases
 from mbs.outbox import Outbox
+
+
+def _grant_private_folders_to_the_user() -> None:
+    """In an elevated process on Windows, as on GitHub's runners, the folders Python makes private (mode 0o700, as
+    pytest's and tempfile's are) can belong to the Administrators group alone, which PostgreSQL's initdb gives up when
+    it starts, so it could not read its password file. The current user is granted those folders as well."""
+    grant = f"*{keyring.current_user_sid()}:(OI)(CI)F"
+    make_folder = os.mkdir
+
+    def mkdir(path, mode=0o777, *, dir_fd=None):
+        make_folder(path, mode, dir_fd=dir_fd)
+        if mode == 0o700:
+            subprocess.run(["icacls", os.fspath(path), "/grant", grant], check=True, capture_output=True,
+                           creationflags=postgres.NO_WINDOW)
+
+    os.mkdir = mkdir
+
+
+if sys.platform == "win32":
+    import ctypes
+
+    if ctypes.windll.shell32.IsUserAnAdmin():
+        _grant_private_folders_to_the_user()
 
 
 def free_port() -> int:

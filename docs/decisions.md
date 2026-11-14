@@ -1805,3 +1805,17 @@ Before the first push, the three jobs ran on a clean copy of the repository on t
 from environments built again from the locks without the network, and in an elevated process, as on GitHub's
 runners: the client's type checks, lint, 198 tests and build passed; ruff and mypy found nothing and 347 server tests
 passed with the four local checks skipped; the scanner tool built and its 15 self-tests passed.
+
+The first run on GitHub (run 43611040900) passed the client's and the scanner's jobs, and the server's job found two
+things that this PC had not shown:
+
+- PostgreSQL's initdb could not read its password file. On the runner the folders Python makes private (mode 0o700,
+  as pytest's and tempfile's are) belonged to the Administrators group alone, which initdb gives up when it starts.
+  The tests now grant the current user those folders as well, when they run elevated on Windows
+  (`server/tests/conftest.py`); the server itself is unchanged in this.
+- The key file's folder kept permissions for SYSTEM, the Administrators group and the owner beside the user's,
+  because `keys.restrict` removed only inherited permissions, while that folder had its own: those of a private
+  folder. It now removes every earlier permission, inherited or the path's own, before it grants the user full
+  control, so the key file and its folder are the user's alone whatever they started with (H14). A folder made
+  private beforehand now ends with the user's permission alone, as a new folder already did; the key file on this
+  PC, made by `setup` on 2026-10-21, is not touched.
