@@ -1,6 +1,7 @@
-# The checks GitHub's Windows runners can run (H23): the client, the server with its locked environments, and the
-# scanner tool. The engines, the research methods and the local checks need models, captures and the scanner, which
-# never leave this project's PC, so they run there only.
+# The checks GitHub's Windows runners can run (H23): the client, the server with its locked environments, the built
+# client against a throwaway server (offscreen, synthetic data only), and the scanner tool. The engines, the research
+# methods and the local checks need models, captures and the scanner, which never leave this project's PC, so they
+# run there only.
 name: Checks
 
 on:
@@ -68,6 +69,38 @@ jobs:
         working-directory: server
       - run: python -m pytest
         working-directory: server
+
+  offscreen:
+    name: Offscreen
+    runs-on: windows-2025-vs2026
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
+        with:
+          node-version: 24.18.0
+      - run: npm ci  # with Electron's own program, which the check starts
+        working-directory: client
+      - run: npm run build
+        working-directory: client
+      - name: Server environment
+        run: >-
+          & "$env:CONDA\Scripts\conda.exe" create --yes --quiet --override-channels -c conda-forge
+          -n multimodal-server --file environments/server-win-64.lock
+      - name: Database environment
+        run: >-
+          & "$env:CONDA\Scripts\conda.exe" create --yes --quiet --override-channels -c conda-forge
+          -n multimodal-postgres --file environments/postgres-win-64.lock
+      - name: Use the server environment
+        run: |
+          $environment = "$env:CONDA\envs\multimodal-server"
+          foreach ($folder in "bin", "Scripts", "Library\bin", "Library\usr\bin", "Library\mingw-w64\bin", "") {
+            Join-Path $environment $folder | Add-Content $env:GITHUB_PATH
+          }
+      # The flows that need no engine, with synthetic data only (tools/client-check/README.md).
+      - run: python tools/client-check/run.py ci
 
   scanner:
     name: Scanner

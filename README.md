@@ -183,6 +183,7 @@ engines/       engine processes: the three research fingerprint methods, NIST's 
 methods/       pinned link to the research methods and their evaluation on the scanner
 docs/          specification, data model, decision record and validations
 environments/  locked conda environments of the server, the database and the face and voice engines
+tools/         the offscreen check of the built client against a throwaway server, with synthetic data
 ```
 
 <details>
@@ -208,9 +209,12 @@ npm ci
 npm run dev                # the app, with the server running
 npm test                   # 198 tests
 npm run lint               # oxlint (.oxlintrc.json)
+npm run build && cd ..
+python tools/client-check/run.py first   # the built client against a throwaway server, offscreen
 ```
 
-Every push to `main` runs the client's, the server's and the scanner's checks on GitHub's Windows runners
+Every push to `main` runs the client's, the server's and the scanner's checks on GitHub's Windows runners, and
+the built client's [offscreen check](tools/client-check/README.md) against a throwaway server
 ([workflow](.github/workflows/checks.yml)); the engines, the research methods and the local checks need models,
 captures and the scanner, so they run on the project's PC.
 

@@ -1823,3 +1823,30 @@ things that this PC had not shown:
 The second run on GitHub (run 43612459808, about 17 minutes) passed all three jobs: the client's lint, 198 tests and
 build with Node 24.18.0; ruff, mypy and 347 server tests, with the four local checks skipped; and the scanner tool
 with the runner's .NET SDK 10.0.403 and its 15 self-tests. It passed a manual check on 2026-11-14.
+
+## 2026-11-14: the offscreen check in the repository
+
+Approved on 2026-11-14, from a reading of the code before increment 6, with a fourth job of the checks on GitHub; no
+decision changed (H23, H26).
+
+- The end-to-end check of the built client, which has followed every increment since H26, lived only on this PC
+  (`local/tools/client-check`), so no one else could run it, and it named one session of captures in its code. It is
+  now in `tools/client-check/`, with synthetic data only: made-up accounts, Chromium's own synthetic camera (H48) and
+  a synthetic voice that `voice_files.py` computes, as the microphone's WAV, as the same sound in an MP3 file at
+  44.1 kHz in two channels, and at 8 kHz, which the server refuses (H54, H57). The microphone's WAV is, byte for
+  byte, the one the check used before.
+- Fingerprint captures are a person's, so none is in the repository: `--captures` names a git-ignored folder of
+  ScannerCapture's captures, and the check picks its files by finger position and placement, as ScannerCapture names
+  them (H9), instead of by the name of a session.
+- One command, `python tools/client-check/run.py NAME`, starts the throwaway server, runs the check in Electron and
+  stops the server; its options add the engines. It replaces this PC's own scripts and launcher, which held a
+  Windows user's identifier. Everything it writes stays in the git-ignored `local/client-check/`.
+- The workflow's fourth job, Offscreen, runs the check without engines on GitHub's runners with every push:
+  registration, sign-in, password recovery, settings, both languages and themes, and the administration.
+- The server writes initdb's password file into a private temporary folder, which initdb could not read on an
+  elevated machine, as the server's tests showed on GitHub. `postgres.initialize`, which `setup` and the throwaway
+  server share, now grants the current user that folder as well.
+
+From its new place the check passed 37 of 37 without engines, 68 of 68 with the fingerprint engines and the stored
+captures of the second set, and 78 of 78 with the face and voice engines. All 351 server tests passed with the
+change to `postgres.initialize`, including the four local checks with stored captures.

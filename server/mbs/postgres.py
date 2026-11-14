@@ -16,7 +16,7 @@ import psycopg
 from psycopg import sql
 
 from .config import Config
-from .keys import Keys
+from .keys import Keys, current_user_sid
 
 SUPERUSER = "postgres"
 ACCOUNTS = "mbs_accounts"  # the accounts database and its role
@@ -52,6 +52,10 @@ def initialize(config: Config, keys: Keys) -> bool:
         return False
     config.data_dir.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as tmp:
+        # initdb gives up the Administrators group when it starts elevated, and a private folder (mode 0o700) can
+        # belong to that group alone, as on GitHub's runners, so the user is granted the folder as well.
+        subprocess.run(["icacls", tmp, "/grant", f"*{current_user_sid()}:(OI)(CI)F"], check=True, capture_output=True,
+                       creationflags=NO_WINDOW)
         password_file = Path(tmp) / "superuser"
         password_file.write_text(keys.database[SUPERUSER], encoding="utf-8")
         _run([tool(config, "initdb"), "-D", str(config.data_dir), "-U", SUPERUSER, "--pwfile", str(password_file),
