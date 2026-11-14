@@ -1855,3 +1855,9 @@ The first run of the four jobs on GitHub (run 43638940686) passed the client's, 
 while the offscreen one found no Electron program: since Electron 44 its package downloads the program, checked
 against its checksums, the first time it is needed rather than when npm installs the package, and `run.py` looked
 for the file directly. `run.py` now asks the package for its program, which downloads it on a new machine.
+
+The second run (43640816943) found the program, but the check's log, which holds Hebrew, could not be printed in the
+runner's console; `run.py` now prints it in UTF-8. The third run (43642828473) passed all four jobs: the offscreen
+check passed 37 of 37 in about two minutes, while the server's job took about 17. A push or pull request that changes
+only documentation, `docs/` or Markdown files, no longer starts the checks: they would find what they found before.
+Approved on 2026-11-14.

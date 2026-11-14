@@ -4,11 +4,14 @@
 # run there only.
 name: Checks
 
+# A push or pull request that changes only documentation starts nothing: the checks would find what they found before.
 on:
   push:
     branches: [main]
+    paths-ignore: ["docs/**", "**.md"]
   pull_request:
     branches: [main]
+    paths-ignore: ["docs/**", "**.md"]
   workflow_dispatch:
 
 permissions:
