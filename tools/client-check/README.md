@@ -21,7 +21,7 @@ recovery through the outbox, the theme and the language in both directions, the 
 disabling an account and a new administrator. The options add the engines, each found as the server finds it
 (`local/server.toml`): `--captures DIR` with `--identify`, `--pore`, `--learned`, `--match-view` and
 `--identify-methods` for the fingerprint methods, and `--face` and `--voice` for the other modalities; `--page URL`
-checks the development server's page (`dev_server.mjs`) instead of the built one.
+checks the development server's page (`dev_server.mts`) instead of the built one.
 
 Everything the check writes goes to the git-ignored `local/client-check/`: `NAME-server.log`, `NAME-check.log`,
 `shots-NAME/` and `run-NAME/`, whose throwaway cluster is removed at the end. The check without options also runs on
@@ -31,6 +31,11 @@ GitHub's runners with every push (`.github/workflows/checks.yml`).
 | --- | --- |
 | `run.py` | starts the throwaway server, runs the check in Electron, then stops the server |
 | `throwaway_server.py` | the server with its own cluster, as the server's tests make theirs |
-| `check.mjs` | the check itself, in Electron's main process |
+| `check.mts` | the check itself, in Electron's main process |
 | `voice_files.py` | the synthetic recordings: the microphone's WAV, the same as an MP3 file and at 8 kHz |
-| `dev_server.mjs` | the renderer's development server without Electron |
+| `dev_server.mts` | the renderer's development server without Electron |
+| `tsconfig.json` | the type check of the two TypeScript files, run by the client's `npm run typecheck` |
+
+`check.mts` and `dev_server.mts` are TypeScript that Electron and Node.js run as it is, removing the types when they
+load a file. The client's `npm run typecheck` checks those types, against the types of the client's own bridge and
+window, and its `npm run lint` lints both files.

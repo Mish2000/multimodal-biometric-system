@@ -1940,3 +1940,26 @@ check passed 36 of its 37 checks: on the runner's slower machine it counted the 
 home screen's own request to the server had answered, as the greeting comes first. The check now waits up to ten seconds
 for the modalities, as it already waited for the greeting; the client is unchanged, and the check passed 37 of 37 on
 this PC with the change.
+
+## 2026-11-15: the client's last JavaScript files become TypeScript
+
+Approved on 2026-11-15; no decision changed (H23, H26, H54).
+
+- Three files were still JavaScript, outside the type checks, and two of them outside the lint: the recorder's worklet
+  in the client (H54), and the offscreen check with its development server in `tools/client-check/`. All three are
+  TypeScript now, so every file of the client and of its check passes the same strict type check and the same lint.
+- The worklet, `recorder-worklet.ts`, declares the two names of an audio worklet's own scope that it uses, since
+  TypeScript's libraries describe the page's side only. The page imports it as a worker's address (`?worker&url`), so
+  Vite compiles it to a file of its own, as the page's Content Security Policy needs (H26). The built file does what
+  the JavaScript did.
+- The check and its development server, `check.mts` and `dev_server.mts`, run as they are: Electron 45 and Node.js 24
+  remove the types when they load a file, so nothing is compiled first. The client's `npm run typecheck` checks their
+  types through `tools/client-check/tsconfig.json`, with the client's own TypeScript and packages. The check takes the
+  types of the client's bridge and window from their sources, so a change there that the check does not follow now
+  fails the type check. `npm run lint` lints both files with the client's rules, 77 files in all.
+- No package was added.
+
+The type checks, the lint, the 198 client tests and the build passed. The offscreen check, run from `check.mts`,
+passed 37 of 37 without engines, 68 of 68 with the fingerprint engines and the stored captures of the second set, and
+78 of 78 with the face and voice engines, where the voice is recorded through the worklet. The development server's
+page, served by `dev_server.mts`, passed the same 78.

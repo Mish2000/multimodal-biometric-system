@@ -1,0 +1,33 @@
+{
+  // The type check of the offscreen check's own files, run by the client's `npm run typecheck` with the client's
+  // TypeScript and packages: this folder installs none. Electron and Node.js run the files as they are and remove
+  // the types when they load them, so the files keep to syntax that can be removed, which Node.js enforces.
+  // check.mts takes the types of the client's bridge and window from their sources, so those are checked here too.
+  "include": ["*.mts"],
+  "compilerOptions": {
+    "noEmit": true,
+    "target": "es2024",
+    "lib": ["es2024"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "typeRoots": ["../../client/node_modules/@types"],
+    "types": ["node"],
+    "paths": {
+      "electron": ["../../client/node_modules/electron/electron.d.ts"],
+      "vite": ["../../client/node_modules/vite/dist/node/index.d.ts"],
+      "@vitejs/plugin-react": ["../../client/node_modules/@vitejs/plugin-react/dist/index.d.ts"]
+    },
+    "allowImportingTsExtensions": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "noUncheckedSideEffectImports": true,
+    "moduleDetection": "force",
+    "skipLibCheck": true
+  }
+}

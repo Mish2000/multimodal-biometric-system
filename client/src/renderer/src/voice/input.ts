@@ -3,8 +3,9 @@
 // alike; an audio context at the model's rate (16 kHz) mixes it down to one channel and resamples it, and a worklet
 // hands the samples to the page. Nothing is stored here.
 
-// The worklet stays a file of its own: inlined as a data URL, the page's Content Security Policy would refuse it (H26).
-import workletUrl from './recorder-worklet.js?url&no-inline'
+// The worklet is built as a file of its own: inlined as a data URL, the page's Content Security Policy would refuse it
+// (H26).
+import workletUrl from './recorder-worklet.ts?worker&url'
 
 export type MicrophoneProblem = 'busy' | 'denied' | 'failed'
 

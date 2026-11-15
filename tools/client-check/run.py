@@ -10,7 +10,7 @@ themes, and the administration. The options add the engines, each found as the s
     --pore, --learned, --match-view, --identify-methods   with --captures: the pore methods and the drawings
     --face            the face engine and its models, with Chromium's synthetic camera (H48)
     --voice           the voice engine and its model, with the synthetic recordings of voice_files.py (H54, H57)
-    --page URL        the development server's page instead of the built one (dev_server.mjs)
+    --page URL        the development server's page instead of the built one (dev_server.mts)
 
 Everything it writes goes to the git-ignored local/client-check/: NAME-server.log, NAME-check.log, shots-NAME/
 (screenshots, which show the stored captures when --captures is given) and run-NAME/ (the throwaway cluster, removed
@@ -99,7 +99,7 @@ def main() -> int:
             return 1
         time.sleep(0.5)
 
-    command = [electron_program(), str(HERE / "check.mjs"), str(ROOT / "client"), str(run), str(shots)]
+    command = [electron_program(), str(HERE / "check.mts"), str(ROOT / "client"), str(run), str(shots)]
     try:
         with open(check_log, "w", encoding="utf-8") as log:
             status = subprocess.run(command + ([args.page] if args.page else []), env=env, stdout=log,

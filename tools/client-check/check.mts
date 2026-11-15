@@ -1,7 +1,9 @@
 // End-to-end check of the client skeleton (H26) and of sign-up and sign-in after H29-H32 against the
 // throwaway server, offscreen: the built page (or the development server's), the real preload, bridge and
 // window security, and nothing on the desktop.
-//   electron check.mjs CLIENT_DIR RUN_DIR OUT_DIR [PAGE_URL]   (run.py starts the server and this check: README.md)
+//   electron check.mts CLIENT_DIR RUN_DIR OUT_DIR [PAGE_URL]   (run.py starts the server and this check: README.md)
+// Electron runs this file as it is: Node.js removes the types when it loads it, so they are checked by the client's
+// `npm run typecheck` (tsconfig.json, beside this file), not here.
 // Every failure is printed and ends the process: with its own 'uncaughtException' listener, Electron never
 // opens its blocking "A JavaScript error occurred in the main process" window. The mbs:// link of H32 is
 // not registered with Windows here: the check hands the outbox's link to the bridge as the main process does.
@@ -10,8 +12,8 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { app, BrowserWindow, nativeTheme, session } from 'electron'
 
-const fail = (what, e) => {
-  console.log('FAIL', what, (e && e.stack) || String(e))
+function fail(what: string, e: unknown): never {
+  console.log('FAIL', what, (e instanceof Error && e.stack) || String(e))
   process.exit(1)
 }
 process.on('uncaughtException', (e) => fail('uncaught', e))
@@ -19,6 +21,7 @@ process.on('unhandledRejection', (e) => fail('unhandled', e))
 setTimeout(() => fail('watchdog', 'gave up after 420 s'), 420_000).unref()
 
 const [client, run, out, pageUrl] = process.argv.slice(2)
+if (!client || !run || !out) fail('arguments', 'electron check.mts CLIENT_DIR RUN_DIR OUT_DIR [PAGE_URL]')
 // H48: Chromium's own synthetic camera instead of the PC's cameras, so the check never films anyone.
 app.commandLine.appendSwitch('use-fake-device-for-media-stream')
 // H54: the fake microphone plays a synthetic recording in a loop (voice_files.py), never a person's voice.
@@ -26,13 +29,34 @@ if (process.env.MBS_CHECK_VOICE_WAV) app.commandLine.appendSwitch('use-file-for-
 app.setPath('userData', path.join(path.dirname(path.resolve(run)), `electron-profile-${path.basename(run)}`))
 fs.mkdirSync(out, { recursive: true })
 
-const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
-const results = []
-function check(name, passed, detail) {
+// What run.py's throwaway server writes about itself (server.json).
+interface ServerDescription {
+  url: string
+  administrator: string
+  one_time_password: string
+  outbox: string
+  fingerprint: boolean
+  face: boolean
+  voice: boolean
+}
+// One identification as the bridge's client ran it: its method and the progress events it sent to the page.
+interface IdentifyEvent {
+  type: string
+  completed?: number
+  total?: number
+}
+interface IdentifyRun {
+  algorithm: unknown
+  events: IdentifyEvent[]
+}
+
+const pause = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+const results: { name: string; passed: boolean; detail?: unknown }[] = []
+function check(name: string, passed: unknown, detail?: unknown): void {
   results.push({ name, passed: Boolean(passed), ...(detail === undefined ? {} : { detail }) })
   console.log(passed ? 'ok  ' : 'FAIL', name, detail === undefined ? '' : JSON.stringify(detail))
 }
-async function until(test, what, ms = 10_000) {
+async function until<T>(test: () => T | Promise<T>, what: string, ms = 10_000): Promise<NonNullable<T>> {
   const end = Date.now() + ms
   while (Date.now() < end) {
     const value = await test()
@@ -73,7 +97,9 @@ window.__t = {
 }`
 
 app.whenReady().then(async () => {
-  let bridge, security, server
+  let bridge: typeof import('../../client/src/main/bridge.ts')
+  let security: typeof import('../../client/src/main/window.ts')
+  let server: ServerDescription
   try {
     bridge = await import(pathToFileURL(path.join(client, 'out/main/bridge.js')).href)
     security = await import(pathToFileURL(path.join(client, 'out/main/window.js')).href)
@@ -84,14 +110,15 @@ app.whenReady().then(async () => {
   app.on('web-contents-created', (_event, contents) => security.confine(contents))
   security.permitMedia(session.defaultSession, security.appPageMatcher(pageUrl)) // H48, H54, as the app's main process
   const serverClient = bridge.registerBridge(server.url)
-  const identifyRuns = []
+  const identifyRuns: IdentifyRun[] = []
   if (process.env.MBS_CHECK_IDENTIFY_METHODS) {
     const identify = serverClient.identify.bind(serverClient)
     serverClient.identify = (runId, emit, algorithm) => {
-      const trace = { algorithm, events: [] }
+      const trace: IdentifyRun = { algorithm, events: [] }
       identifyRuns.push(trace)
       return identify(runId, (event) => {
-        trace.events.push({ type: event.type, completed: event.completed, total: event.total })
+        const { type, completed, total } = event as IdentifyEvent
+        trace.events.push({ type, ...(completed === undefined ? {} : { completed }), ...(total === undefined ? {} : { total }) })
         emit(event)
       }, algorithm)
     }
@@ -110,29 +137,29 @@ app.whenReady().then(async () => {
     },
   })
   win.webContents.setFrameRate(30)
-  const messages = []
+  const messages: string[] = []
   win.webContents.on('console-message', (event) => {
     if (event.level === 'error' || event.level === 'warning') messages.push(`${event.level}: ${event.message}`)
   })
 
-  const page = (code) => win.webContents.executeJavaScript(`(async () => { ${code}\n})()`)
-  const has = (text) => page(`return document.body.innerText.includes(${JSON.stringify(text)})`)
-  const waitText = (text, ms) => until(() => has(text), JSON.stringify(text), ms)
-  const fill = (label, value, scope = 'document') =>
+  const page = (code: string) => win.webContents.executeJavaScript(`(async () => { ${code}\n})()`)
+  const has = (text: string): Promise<boolean> => page(`return document.body.innerText.includes(${JSON.stringify(text)})`)
+  const waitText = (text: string, ms?: number) => until(() => has(text), JSON.stringify(text), ms)
+  const fill = (label: string, value: string, scope = 'document') =>
     page(`window.__t.fill(${JSON.stringify(label)}, ${JSON.stringify(value)}, ${scope})`)
-  const click = async (name, scope = 'document') => {
+  const click = async (name: string, scope = 'document') => {
     const find = `window.__t.button(${JSON.stringify(name)}, ${scope})`
     await until(() => page(`return Boolean(${find})`), 'the control ' + name)
     await page(`${find}.click()`)
   }
-  const shot = async (name) => {
+  const shot = async (name: string) => {
     await pause(500)
     fs.writeFileSync(path.join(out, `${name}.png`), (await win.webContents.capturePage()).toPNG())
   }
-  const loaded = () => new Promise((resolve) => win.webContents.once('did-finish-load', resolve))
+  const loaded = () => new Promise<void>((resolve) => win.webContents.once('did-finish-load', () => resolve()))
   const direction = () => page(`return document.documentElement.dir`)
   // H44: a pore method's result shows its counted pore pairs, one line per point of the deciding score.
-  const checkPoreView = async (method, name) => {
+  const checkPoreView = async (method: string, name: string) => {
     check(`${method} shows the pore pairs of its deciding comparison`, await has('Pore matches in this comparison') &&
       await has('so some lines may cross') && await page(`
         const score = Number(document.querySelector('.score-labels strong').textContent.match(/[0-9]+/)[0])
@@ -201,7 +228,7 @@ app.whenReady().then(async () => {
     await fill('Username', 'dana')
     await fill('Email', 'dana@example.com')
     await fill('Mobile phone', '050-123-4567')
-    const levels = []
+    const levels: string[] = []
     for (const typed of ['dana', 'DANA2026', 'Dana2026', 'Dana password 1']) {
       await fill('Password', typed)
       levels.push(await strength())
@@ -225,7 +252,8 @@ app.whenReady().then(async () => {
     const unenrolled = await until(async () => ((await countUnenrolled()) === 3 ? 3 : false), "the home screen's modalities")
       .catch(countUnenrolled)
     check('the home screen shows the three modalities, none enrolled', unenrolled === 3, unenrolled)
-    const token = serverClient.token
+    // The token is the client's own, private field: the check looks inside it on purpose.
+    const token = (serverClient as unknown as { token: string | null }).token
     const leak = await page(`return { storage: localStorage.length + sessionStorage.length, cookie: document.cookie,
       found: document.documentElement.outerHTML.includes(${JSON.stringify(token)}) ||
              JSON.stringify(await window.mbs.call('me')).includes(${JSON.stringify(token)}) }`)
@@ -277,15 +305,17 @@ app.whenReady().then(async () => {
       await until(() => page(`return Boolean(${leftHand})`), 'the hands')
       await page(`${leftHand}.querySelectorAll('button')[1].click()`)
       // H35: a different finger, the same finger, cancellation and retry, with real engines.
-      const captureFiles = fs.readdirSync(process.env.MBS_CHECK_CAPTURES)
+      const captures = process.env.MBS_CHECK_CAPTURES
+      if (!captures) throw new Error('the fingerprint steps need MBS_CHECK_CAPTURES')
+      const captureFiles = fs.readdirSync(captures)
       // A stored capture by finger position and placement, named as ScannerCapture names them (SESSION_fNN_pN_...).
-      const captureFile = (finger, placement) => {
+      const captureFile = (finger: number, placement: number) => {
         const label = `_f${String(finger).padStart(2, '0')}_p${placement}_`
         const name = captureFiles.find((file) => file.includes(label) && file.endsWith('.png'))
         if (!name) throw new Error(`MBS_CHECK_CAPTURES has no capture of finger ${finger}, placement ${placement}`)
-        return path.join(process.env.MBS_CHECK_CAPTURES, name)
+        return path.join(captures, name)
       }
-      const nextScan = (file) => fs.writeFileSync(path.join(run, 'scanner.json'), JSON.stringify([{ wait: 'finger', file }]))
+      const nextScan = (file: string) => fs.writeFileSync(path.join(run, 'scanner.json'), JSON.stringify([{ wait: 'finger', file }]))
       nextScan(captureFile(2, 1))
       await click('Verify this finger (1:1)')
       check('choosing a method does not start the scanner', await has('Choose how to compare') && !await has('Place the selected finger'))
@@ -400,7 +430,7 @@ app.whenReady().then(async () => {
         await click('Back to the fingers')
         const placements = captureFiles.filter((name) => /_f07_p[123]_.*\.png$/.test(name)).sort()
         if (placements.length !== 3) throw new Error('expected three stored left-index placements')
-        const steps = placements.flatMap((name) => [{ wait: 'finger', file: path.join(process.env.MBS_CHECK_CAPTURES, name) }, { wait: 'lift' }])
+        const steps = placements.flatMap((name) => [{ wait: 'finger', file: path.join(captures, name) }, { wait: 'lift' }])
         fs.writeFileSync(path.join(run, 'scanner.json'), JSON.stringify(steps.slice(0, -1)))
         await click('Enrol this finger again')
         await waitText('How your fingerprint is stored', 90_000)
@@ -489,7 +519,7 @@ app.whenReady().then(async () => {
         await shot('03n-own-result-dark')
         nativeTheme.themeSource = 'light'
         // H45: the drawing shows the caller's own highest-ranked print, one line per point of its score.
-        const ownDrawing = (rank) => page(`
+        const ownDrawing = (rank: number) => page(`
           const row = [...document.querySelectorAll('tbody tr')].find((tr) => tr.innerText.includes('Your left index'))
           const score = Number(row?.querySelector('strong')?.textContent ?? -1)
           const paths = document.querySelector('.match-connections')?.getAttribute('d') ?? ''
@@ -534,14 +564,19 @@ app.whenReady().then(async () => {
         if (process.env.MBS_CHECK_IDENTIFY_METHODS) {
           const poreRadio = 'document.querySelector(\'input[value="pore-sift"]\')'
           const learnedRadio = 'document.querySelector(\'input[value="learned-pore"]\')'
-          const preparation = () => identifyRuns.at(-1).events.filter((event) => event.type === 'preparing_templates')
+          const lastRun = () => {
+            const trace = identifyRuns.at(-1)
+            if (!trace) throw new Error('no identification ran')
+            return trace
+          }
+          const preparation = () => lastRun().events.filter((event) => event.type === 'preparing_templates')
           await click('Change method')
           await until(() => page(`return ${poreRadio} && ${learnedRadio}`), 'the identification methods')
           check('identification disables the unavailable pore engines', await page(`return ${poreRadio}.disabled && ${learnedRadio}.disabled`))
           fs.writeFileSync(path.join(run, 'enable-pore'), 'yes')
           await until(async () => {
             const result = await serverClient.call('fingerprintMethods')
-            return result.ok && result.data.methods.filter((method) => method.available).length === 3
+            return result.ok && (result.data as { methods: { available: boolean }[] }).methods.filter((method) => method.available).length === 3
           }, 'all three engines to be configured')
           await click('Back to the fingers')
           await click('Home')
@@ -565,12 +600,12 @@ app.whenReady().then(async () => {
           await waitText('Identification cancelled.')
           check('cancelling 1:N gallery preparation leaves the scanner unused',
             JSON.parse(fs.readFileSync(path.join(run, 'scanner.json'), 'utf8')).length === 1 &&
-            !identifyRuns.at(-1).events.some((event) => event.type === 'identified'))
+            !lastRun().events.some((event) => event.type === 'identified'))
           await pause(350)
           await click('Try again')
           await waitText('A matching fingerprint was found', 120_000)
           check('Pore SIFT prepares both accounts and finds the enrolled finger on retry',
-            identifyRuns.at(-1).algorithm === 'pore-sift' && preparation().at(-1)?.completed === 6 &&
+            lastRun().algorithm === 'pore-sift' && preparation().at(-1)?.completed === 6 &&
             await has('Your left index') && await has('Match above 37') && await has('Matching pores') &&
             await has('This threshold is provisional'))
           await shot('03n-pore-identification-light')
@@ -587,7 +622,7 @@ app.whenReady().then(async () => {
           await click('Start identification')
           await waitText('A matching fingerprint was found', 90_000)
           check('the learned descriptor prepares its own gallery and shows its threshold and ranking',
-            identifyRuns.at(-1).algorithm === 'learned-pore' && preparation().at(-1)?.completed === 6 &&
+            lastRun().algorithm === 'learned-pore' && preparation().at(-1)?.completed === 6 &&
             await has('Learned pore descriptor') && await has('Match above 21') && await has('Matching pores') &&
             await page('return document.querySelector(".verification-result").innerText.includes("Another registered user")'))
           await shot('03n-learned-identification-light')
@@ -648,7 +683,7 @@ app.whenReady().then(async () => {
       await until(() => page(`return Boolean(${leftHand})`), 'the fingers after the reload')
       await page(`${leftHand}.querySelectorAll('button')[1].click()`)
       const againSteps = captureFiles.filter((name) => /_f07_p[123]_.*\.png$/.test(name)).sort()
-        .flatMap((name) => [{ wait: 'finger', file: path.join(process.env.MBS_CHECK_CAPTURES, name) }, { wait: 'lift' }])
+        .flatMap((name) => [{ wait: 'finger', file: path.join(captures, name) }, { wait: 'lift' }])
       fs.writeFileSync(path.join(run, 'scanner.json'), JSON.stringify(againSteps.slice(0, -1)))
       await click('Enrol this finger again')
       await waitText('How your fingerprint is stored', 90_000)
@@ -672,7 +707,7 @@ app.whenReady().then(async () => {
     // Chromium's synthetic one, which shows no face: the live view must open it, have the engine look at its
     // frames and keep the button off. Enrolling a real face is the researcher's manual check.
     if (server.face) {
-      const openCard = (name) => page(`[...document.querySelectorAll('.card')].find((c) => c.querySelector('h2')?.textContent === ${JSON.stringify(name)}).querySelector('a').click()`)
+      const openCard = (name: string) => page(`[...document.querySelectorAll('.card')].find((c) => c.querySelector('h2')?.textContent === ${JSON.stringify(name)}).querySelector('a').click()`)
       await waitText('Not enrolled yet')
       await openCard('Face')
       await waitText('The face is recognised by SFace')
@@ -830,7 +865,7 @@ app.whenReady().then(async () => {
     // a person's voice), so its recordings pass the checks and match each other: the check enrols that synthetic
     // voice through the real engine, looks at the result, and deletes the enrolment again.
     if (server.voice) {
-      const openCard = (name) => page(`[...document.querySelectorAll('.card')].find((c) => c.querySelector('h2')?.textContent === ${JSON.stringify(name)}).querySelector('a').click()`)
+      const openCard = (name: string) => page(`[...document.querySelectorAll('.card')].find((c) => c.querySelector('h2')?.textContent === ${JSON.stringify(name)}).querySelector('a').click()`)
       await waitText('Not enrolled yet')
       await openCard('Voice')
       await waitText('The voice is recognised by ECAPA-TDNN')
@@ -849,9 +884,9 @@ app.whenReady().then(async () => {
         const now = Number(meter?.getAttribute('aria-valuenow'))
         return now > -60 ? { now, lit: meter.querySelectorAll('i.on').length } : null`), 'the level meter', 15_000)
       check('the level meter follows the microphone (H54)', meter.lit > 0, meter)
-      const inputs = await page(`return (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput').map((d) => d.label)`)
+      const inputs: string[] = await page(`return (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput').map((d) => d.label)`)
       check('the page sees the microphones, and the permission is audio only for the voice (H54)', inputs.length > 0 && inputs.every((label) => label !== ''), inputs)
-      const sentences = []
+      const sentences: string[] = []
       for (let n = 1; n <= 3; n += 1) {
         sentences.push(await page(`return document.querySelector('.sentence q').textContent`))
         await click('Record')
@@ -873,7 +908,7 @@ app.whenReady().then(async () => {
         pairs: [...document.querySelectorAll('.voice-result .checks li')].map((li) => li.innerText.replace(/\\s+/g, ' ')),
         stored: document.body.innerText.includes('Stored: 3 recordings, each sealed with AES-256-GCM, and 3 embeddings of 192 numbers each') }`)
       check('three synthetic recordings enrol the voice through the real engine, with their waveforms and pairs (H54)',
-        result.waveforms === 3 && result.play === 3 && result.stored && result.pairs.filter((line) => line.includes('above the threshold')).length === 3, result)
+        result.waveforms === 3 && result.play === 3 && result.stored && result.pairs.filter((line: string) => line.includes('above the threshold')).length === 3, result)
       await shot('h54-c-voice-saved-light')
       nativeTheme.themeSource = 'dark'
       await shot('h54-c-voice-saved-dark')
@@ -889,7 +924,7 @@ app.whenReady().then(async () => {
       await waitText('Each recording lasts 5 seconds', 30_000)
       check('the verification reads the last sentence (H55)', await has('The numbers seven, four and nine are written on the board.'))
       // The status line under the microphone is empty until the comparison starts, and then takes no room at all.
-      const emptyPrompt = (screen) => page(`const p = document.querySelector('.${screen} .prompt')
+      const emptyPrompt = (screen: string) => page(`const p = document.querySelector('.${screen} .prompt')
         return { text: p.textContent, height: p.getBoundingClientRect().height, background: getComputedStyle(p).backgroundColor }`)
       const verifyPrompt = await emptyPrompt('voice-verification')
       check('the empty status line of live verification takes no room (H55)', verifyPrompt.text === '' && verifyPrompt.height === 0, verifyPrompt)
@@ -949,15 +984,17 @@ app.whenReady().then(async () => {
       await waitText('Enrol my voice again')
       // H57: recording files, the synthetic voice as an MP3 of 44.1 kHz and two channels (made from the synthetic WAV)
       // and an 8 kHz copy that its header refuses; never a person's voice. A file is dropped on the window.
-      const dropFile = async (file, name, type) => {
+      const dropFile = async (file: string, name: string, type: string) => {
         const encoded = fs.readFileSync(file).toString('base64')
         await page(`const bytes = Uint8Array.from(atob(${JSON.stringify(encoded)}), (c) => c.charCodeAt(0))
           const transfer = new DataTransfer(); transfer.items.add(new File([bytes], ${JSON.stringify(name)}, { type: ${JSON.stringify(type)} }))
           window.dispatchEvent(new DragEvent('dragenter', { dataTransfer: transfer, bubbles: true, cancelable: true }))
           window.dispatchEvent(new DragEvent('drop', { dataTransfer: transfer, bubbles: true, cancelable: true }))`)
       }
-      const mp3 = path.join(path.dirname(process.env.MBS_CHECK_VOICE_WAV), 'voice-synthetic.mp3')
-      const narrow = path.join(path.dirname(process.env.MBS_CHECK_VOICE_WAV), 'voice-synthetic-8k.wav')
+      const voiceWav = process.env.MBS_CHECK_VOICE_WAV
+      if (!voiceWav) throw new Error('the voice steps need MBS_CHECK_VOICE_WAV')
+      const mp3 = path.join(path.dirname(voiceWav), 'voice-synthetic.mp3')
+      const narrow = path.join(path.dirname(voiceWav), 'voice-synthetic-8k.wav')
       await click('Verify my voice (1:1)')
       await waitText('Upload an existing recording')
       await click('Upload an existing recording')
@@ -1094,10 +1131,11 @@ app.whenReady().then(async () => {
     await shot('06-forgot-password')
     const sent = await until(() => {
       const files = fs.existsSync(server.outbox) ? fs.readdirSync(server.outbox).filter((f) => f.endsWith('.html')) : []
-      return files.length ? fs.readFileSync(path.join(server.outbox, files[0]), 'utf8') : null
+      return files[0] ? fs.readFileSync(path.join(server.outbox, files[0]), 'utf8') : null
     }, 'the message in the outbox')
     const [, resetToken, lang] = sent.match(/href="mbs:\/\/reset-password\?token=([\w-]+)&amp;lang=(\w+)"/) ?? []
     check('the outbox holds the email with its link', Boolean(resetToken) && lang === 'en' && sent.includes('dana@example.com'))
+    if (!resetToken || lang !== 'en') throw new Error('the outbox has no link to open')
     serverClient.openLink({ token: resetToken, language: lang })
     win.webContents.send('mbs:link')
     await waitText('Choose a new password for your account.')
@@ -1177,7 +1215,7 @@ app.whenReady().then(async () => {
     await shot('13-admin-new')
 
     // 11. The administration area in both themes, then sign-out.
-    for (const [theme, label] of [['light', 'Light'], ['dark', 'Dark']]) {
+    for (const [theme, label] of [['light', 'Light'], ['dark', 'Dark']] as const) {
       await click('Settings')
       await waitText('Appearance')
       await page(`window.__t.choose(${JSON.stringify(label)})`)
@@ -1198,14 +1236,14 @@ app.whenReady().then(async () => {
     await shot('15-sign-in-disabled')
 
     // 13. Sign-in when Windows is set to light, and to dark.
-    for (const theme of ['light', 'dark']) {
+    for (const theme of ['light', 'dark'] as const) {
       nativeTheme.themeSource = theme
       await shot(`16-sign-in-${theme}`)
     }
     nativeTheme.themeSource = 'system'
   } catch (e) {
     await shot('failure').catch(() => {})
-    check('the flow ran to its end', false, String((e && e.message) || e))
+    check('the flow ran to its end', false, String((e instanceof Error && e.message) || e))
   }
 
   console.log('console', JSON.stringify(messages, null, 1))
