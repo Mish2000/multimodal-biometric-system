@@ -6,6 +6,8 @@ import type { VerificationEvent, VerificationResult, FingerprintAlgorithm } from
 import { useSession } from '../session'
 import { errorText } from '../texts'
 import { Checks, type Captured } from './Journey'
+import { MatchResult } from './MatchResult'
+import { stageSupported } from './stage'
 import { MatchView } from './MatchView'
 
 type Phase = 'starting' | 'preparing' | 'place' | 'checking' | 'lift' | 'comparing' | 'saving' | 'verified' | 'failed' | 'cancelled'
@@ -124,6 +126,8 @@ export function Verification({ finger, enrolled, algorithm, onLeave, onEnrol, on
   }
   const result = run.result
   const scoreLabel = algorithm === 'opencv-sift' ? v.score : v.pores
+  // H22: the result on its stage, where the page can draw one; otherwise the same comparison is drawn flat.
+  const staged = stageSupported()
   const scoreMaximum = result ? Math.max(Math.ceil(result.score / 100) * 100, result.threshold * 2, 1) : 1
   const ended = result !== null || run.phase === 'failed' || run.phase === 'cancelled'
   const error = run.error === 'server_unreachable'
@@ -154,7 +158,13 @@ export function Verification({ finger, enrolled, algorithm, onLeave, onEnrol, on
                 className={result !== null || index < stages[run.phase] ? 'complete' : ''}>{stage}</li>
             ))}
           </ol>
-          {result !== null ? (
+          {result !== null && staged && result.match_view && run.latest ? (
+            <>
+              <MatchResult key={result.attempt_id} result={result} view={result.match_view} image={run.latest.image} />
+              <p>{v.saved}</p>
+              {!result.accepted && <p>{v.retryHint}</p>}
+            </>
+          ) : result !== null ? (
             <>
               <div className={`verification-result ${result.accepted ? 'matched' : 'unmatched'}`} role="status">
                 <h2>{result.accepted ? v.accepted : v.rejected}</h2>
@@ -201,7 +211,7 @@ export function Verification({ finger, enrolled, algorithm, onLeave, onEnrol, on
           </div>
           {result !== null && (
             <>
-              {result.match_view && run.latest && (
+              {!staged && result.match_view && run.latest && (
                 <MatchView key={result.attempt_id} view={result.match_view} image={run.latest.image} algorithm={result.algorithm} />
               )}
               <div className="table-wrap">

@@ -1,13 +1,33 @@
-/* The skeleton's neutral look (H26). The visual direction and the component library come with the
-   supervisor's choice (H22). Light or dark follows the window's theme, which the main process sets (H24). */
+/* The client's look. The base colours and the typeface are H22's and apply to every screen; the screens
+   themselves are rebuilt in that direction one flow at a time, and until then keep the skeleton's layout (H26).
+   Light or dark follows the window's theme, which the main process sets (H24); the dark theme is the light
+   one's negative, with ink and paper exchanged. */
+
+/* IBM Plex Sans and IBM Plex Sans Hebrew, SIL Open Font License 1.1 (fonts/OFL.txt). The files ship with the
+   client, since the page loads only its own files (H22, H26). */
+@font-face { font-family: 'IBM Plex Sans'; font-weight: 300; font-display: swap; src: url('./fonts/IBMPlexSans-Light.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Sans'; font-weight: 400; font-display: swap; src: url('./fonts/IBMPlexSans-Regular.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Sans'; font-weight: 600; font-display: swap; src: url('./fonts/IBMPlexSans-SemiBold.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Sans Hebrew'; font-weight: 300; font-display: swap; src: url('./fonts/IBMPlexSansHebrew-Light.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Sans Hebrew'; font-weight: 400; font-display: swap; src: url('./fonts/IBMPlexSansHebrew-Regular.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Sans Hebrew'; font-weight: 600; font-display: swap; src: url('./fonts/IBMPlexSansHebrew-SemiBold.woff2') format('woff2'); }
 
 :root {
   color-scheme: light dark;
-  --bg: #f6f7f9;
+  /* H22's roles: the canvas, the surface, ink, second ink and mist. */
+  --bg: #f4f6fa;
   --surface: #ffffff;
-  --text: #1b1f24;
-  --muted: #5b6470;
-  --line: #d9dde3;
+  --text: #171a4a;
+  --muted: #555a86;
+  --line: #d5dbe8;
+  /* What a method found, and a device that is capturing now (never an error). */
+  --mark: #0c97a6;
+  --mark-text: #086c77;
+  --sensor: #d92f25;
+  /* What arrives eases out; what moves while it stays on screen eases in and out. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --font: 'IBM Plex Sans', 'IBM Plex Sans Hebrew', 'Segoe UI', system-ui, sans-serif;
   --accent: #1f5fbf;
   --accent-text: #ffffff;
   --error: #b42318;
@@ -18,7 +38,7 @@
   --weak: #c2410c;
   --medium: #a16207;
   --radius: 8px;
-  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-family: var(--font);
   font-size: 15px;
   line-height: 1.5;
   color: var(--text);
@@ -27,11 +47,14 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #16181d;
-    --surface: #1f232a;
-    --text: #e6e8eb;
-    --muted: #9aa3ae;
-    --line: #343a45;
+    --bg: #111337;
+    --surface: #1a1d50;
+    --text: #f4f6fa;
+    --muted: #a7aed6;
+    --line: #2c3070;
+    --mark: #45d2de;
+    --mark-text: #45d2de;
+    --sensor: #ff6253;
     --accent: #6aa5f2;
     --accent-text: #0d1117;
     --error: #f2a39b;
@@ -819,7 +842,7 @@ table.row th {
 }
 
 .sealed .label {
-  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-family: var(--font);
   color: var(--muted);
 }
 
@@ -1071,3 +1094,120 @@ button.danger {
 .waveform path { stroke: currentColor; stroke-width: 0.7; fill: none; }
 .voice-enrolment .prompt:empty { padding: 0; margin: 0; border: 0; background: none; }
 .voice-verification .prompt:empty, .voice-identification .prompt:empty { padding: 0; margin: 0; border: 0; background: none; }
+
+/* H22: the result of a fingerprint 1:1 verification on its stage. */
+.match-result { margin-block: 1.5rem 0.5rem; }
+
+.match-headline {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 3rem;
+}
+
+.match-headline h2 {
+  margin: 0 0 0.75rem;
+  font-weight: 300;
+  font-size: clamp(2.6rem, 5vw, 4.2rem);
+  line-height: 1.04;
+  letter-spacing: -0.022em;
+  /* The verdict arrives: it rises a little into its place. */
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 250ms var(--ease-out), transform 250ms var(--ease-out);
+}
+
+:root[lang='he'] .match-headline h2 { letter-spacing: 0; }
+.match-headline h2.shown { opacity: 1; transform: none; }
+.match-headline p { max-width: 62ch; margin: 0.25rem 0 0; color: var(--muted); }
+
+.match-count {
+  flex: none;
+  text-align: end;
+  font-size: 0.9rem;
+}
+
+.match-count strong {
+  display: block;
+  color: var(--mark-text);
+  font-weight: 300;
+  font-size: clamp(2.6rem, 5vw, 4.2rem);
+  line-height: 1.04;
+  font-variant-numeric: tabular-nums;
+}
+
+.match-stage {
+  position: relative;
+  height: clamp(280px, 46vh, 480px);
+  margin-top: 1rem;
+}
+
+.match-stage canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--bg);
+}
+
+/* The captures keep their own left and right in both languages, like the images themselves (H43). */
+.match-plates {
+  position: absolute;
+  inset: auto 0 0;
+  display: flex;
+  justify-content: space-around;
+  color: var(--muted);
+  font-size: 0.9rem;
+  pointer-events: none;
+}
+
+.match-rail { margin-top: 1rem; }
+.match-track { position: relative; height: 6px; }
+
+.match-groove {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--line);
+}
+
+/* The fill is scaled, never resized: the count moves it through the moment. */
+.match-groove i {
+  position: absolute;
+  inset: 0;
+  transform-origin: left;
+  background: var(--mark);
+}
+
+:root[dir='rtl'] .match-groove i { transform-origin: right; }
+.match-track b { position: absolute; inset-block: -5px; width: 2px; background: var(--text); }
+
+.match-ends {
+  position: relative;
+  height: 1.4rem;
+  margin-top: 0.4rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.match-ends span { position: absolute; inset-inline-start: 0; white-space: nowrap; }
+.match-ends span + span { color: var(--text); translate: -50% 0; }
+:root[dir='rtl'] .match-ends span + span { translate: 50% 0; }
+
+.match-pair {
+  min-height: 1.5em;
+  margin: 0.4rem 0 1rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .match-stage { cursor: crosshair; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .match-headline h2 { transform: none; }
+}

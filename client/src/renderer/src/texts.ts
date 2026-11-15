@@ -236,6 +236,12 @@ const en = {
       } as Record<string, string>,
     },
     matches: {
+      // H22: the stage of a 1:1 result.
+      stage: {
+        label: 'The two captures and the pairs between them',
+        hint: 'Move over a print, or use the arrow keys, to follow one pair.',
+        pair: (index: number, count: number, fresh: string, stored: string) => `Pair ${index} of ${count}: new (${fresh}), stored (${stored})`,
+      },
       // H43: OpenCV SIFT keypoints. H44: the pores of Pore SIFT and Pore CNN (H46).
       points: {
         title: 'Point matches in this comparison',
@@ -942,6 +948,11 @@ const he: Texts = {
       },
     },
     matches: {
+      stage: {
+        label: 'שתי הסריקות והזוגות שביניהן',
+        hint: 'מעבר מעל טביעה, או מקשי החיצים, עוקבים אחרי זוג אחד.',
+        pair: (index, count, fresh, stored) => `זוג ${index} מתוך ${count}: בחדשה (${fresh}), בשמורה (${stored})`,
+      },
       points: {
         title: 'התאמות הנקודות בהשוואה הזו',
         explanation: (placement, count) => `הנחה שמורה ${placement} קיבלה את הציון הגבוה ביותר. בציון הזה נספרו ${count} זוגות נקודות תואמות בהשוואה הזו.`,

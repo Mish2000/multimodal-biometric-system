@@ -2022,3 +2022,37 @@ screenshots of the real client replace them.
 
 After the installation the type checks, the lint, the 198 client tests and the build passed. The built page is
 unchanged, since no screen uses the library yet.
+
+## 2026-11-15: the fingerprint 1:1 result on its stage
+
+Approved on 2026-11-15 as the first screen built in the design direction (H22); it updates one sentence of that
+decision.
+
+- H22 said the client keeps its neutral look until each flow is rebuilt. The base colours and the typeface now apply
+  to every screen at once: the canvas, the surface, ink, second ink and mist in both themes, and IBM Plex Sans with
+  IBM Plex Sans Hebrew, whose six font files and licence text are in `client/src/renderer/src/fonts/`. The buttons
+  and the layout of the other screens stay as they were until their flows are rebuilt.
+- The result of a fingerprint 1:1 verification is shown on a stage drawn with `three`. The new capture lies on the
+  left and the highest-scoring stored capture on the right, as in the earlier drawing (H43), each as a relief made
+  from its own image: the area the finger darkens rises as a dome, and the ridges are shaded from the image's own
+  grey levels. A thread joins each pair the method counted, for all three methods (H43, H44). Nothing drawn is
+  invented: the two images and the counted pairs are the comparison's own data.
+- The moment follows H22's rules. The captures tilt and rise in 600 ms, the threads start when that is nearly done
+  and sweep across the new capture, each counted when it lands, and the verdict's words enter the moment the count
+  passes the threshold; for a non-match they enter when the last pair is counted. A press or Escape plays out at
+  once whatever is left. With reduced motion the result appears with a fade. A comparison of hundreds of pairs is
+  drawn with lighter marks, so the prints stay readable.
+- Under the stage a rail shows the count against the threshold, and after the moment the pointer or the arrow keys
+  follow one pair, whose places in the two native images are written out. The slider and the "show all" switch of
+  the earlier drawing are not on this screen. The three comparisons, the capture's details and the buttons are
+  unchanged, and a non-match is said in plain ink, never in red.
+- Where the page cannot draw the stage (no WebGL 2), the result is shown as before, with the earlier flat drawing.
+  Identification (1:N) keeps that drawing until its own flow is rebuilt.
+- The page's script grew from 1.0 MB to 2.2 MB with `three`.
+
+The client has 211 tests (13 new: the moment's times and curves, and the result screen through a stand-in for the
+stage, since the test environment draws nothing). The type checks, the lint and the build passed. The offscreen check
+passed 37 of 37 without engines and 75 of 75 with the fingerprint engines and the stored captures of the second set,
+where the real stage ran in Electron: it played to its end, showed the verdict, counted the deciding score, and
+followed pairs by the keys and by the pointer, for a match, a non-match and in Hebrew. The pore methods and the face
+and voice flows were not run offscreen for this change. The manual check with the HiScan PRO passed on 2026-11-15.

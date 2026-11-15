@@ -159,14 +159,23 @@ app.whenReady().then(async () => {
   const loaded = () => new Promise<void>((resolve) => win.webContents.once('did-finish-load', () => resolve()))
   const direction = () => page(`return document.documentElement.dir`)
   // H44: a pore method's result shows its counted pore pairs, one line per point of the deciding score.
+  // H22: a 1:1 result on its stage: the moment plays to its end, the verdict's words are shown, the count is the
+  // deciding score, and the arrow keys and the pointer follow single pairs.
+  const stageSettled = () => until(() => page(`return (document.querySelector('.match-pair')?.textContent ?? '') !== '' ||
+    document.querySelector('.match-count strong')?.textContent === '0'`), 'the result moment to end', 15_000)
+  const checkStage = async (what: string) => {
+    await stageSettled()
+    await pause(400)
+    check(`${what}: the stage shows the verdict and counts the deciding score`, await page(`
+      const canvas = document.querySelector('.match-stage canvas')
+      const score = Number(document.querySelector('.match-count strong').textContent)
+      const saved = Number((document.body.innerText.match(/highest of the three scores is ([0-9]+)/) ?? [])[1])
+      return canvas.width > 0 && canvas.height > 0 && score === saved &&
+        document.querySelector('.match-headline h2').classList.contains('shown')`))
+  }
   const checkPoreView = async (method: string, name: string) => {
-    check(`${method} shows the pore pairs of its deciding comparison`, await has('Pore matches in this comparison') &&
-      await has('so some lines may cross') && await page(`
-        const score = Number(document.querySelector('.score-labels strong').textContent.match(/[0-9]+/)[0])
-        const paths = document.querySelector('.match-connections')?.getAttribute('d') ?? ''
-        return score > 0 && (paths.match(/M/g) ?? []).length === score && document.querySelectorAll('.match-drawing image').length === 2
-      `))
-    await page('document.querySelector(".match-view").scrollIntoView({ block: "start" })')
+    await checkStage(method)
+    await page('document.querySelector(".match-stage").scrollIntoView({ block: "center" })')
     await shot(`${name}-matches-light`)
     nativeTheme.themeSource = 'dark'
     await shot(`${name}-matches-dark`)
@@ -325,8 +334,8 @@ app.whenReady().then(async () => {
       check('all three comparison scores are shown', await page('return document.querySelectorAll("tbody tr").length === 3'))
       await shot('03d-verification-non-match')
       if (process.env.MBS_CHECK_MATCH_VIEW) {
-        check('a completed non-match also has the winning comparison illustration', await has('Point matches in this comparison'))
-        await page('document.querySelector(".match-view").scrollIntoView({ block: "start" })')
+        await checkStage('a completed non-match')
+        await page('document.querySelector(".match-stage").scrollIntoView({ block: "center" })')
         await shot('03m-non-match')
       }
       nextScan(captureFile(7, 3))
@@ -341,24 +350,20 @@ app.whenReady().then(async () => {
       await shot('03g-verification-match-dark')
       nativeTheme.themeSource = 'light'
       if (process.env.MBS_CHECK_MATCH_VIEW) {
-        check('the displayed pair count equals the deciding score', await page(`
-          const score = Number(document.querySelector('.score-labels strong').textContent.match(/[0-9]+/)[0])
-          const paths = document.querySelector('.match-connections')?.getAttribute('d') ?? ''
-          return (paths.match(/M/g) ?? []).length === score && document.querySelectorAll('.match-drawing image').length === 2
-        `))
-        await page('document.querySelector(".match-view").scrollIntoView({ block: "start" })')
+        await checkStage('a match')
+        await page('document.querySelector(".match-stage").scrollIntoView({ block: "center" })')
         await shot('03m-matches-light')
-        await page(`const range = document.querySelector('.match-picker input');
-          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(range, '2');
-          range.dispatchEvent(new Event('input', { bubbles: true }))`)
-        await waitText('Highlighted pair 2 of')
-        const selectedBefore = await page('return document.querySelector(".match-selected path:not(.match-halo)").getAttribute("d")')
-        await page(`const drawing = document.querySelector('.match-drawing'); const box = drawing.getBoundingClientRect();
-          drawing.dispatchEvent(new PointerEvent('pointermove', { clientX: box.left + box.width * 0.23, clientY: box.top + box.height * 0.5, bubbles: true }))`)
-        check('the pointer highlights a matching pair in the native image frames',
-          await page('return document.querySelector(".match-selected path:not(.match-halo)").getAttribute("d")') !== selectedBefore)
-        await page('document.querySelector(".match-toggle input").click()')
-        check('hiding the full set keeps the selected pair visible', await page('return !document.querySelector(".match-connections") && document.querySelectorAll(".match-selected circle").length === 2'))
+        const key = (name: string) => page(`document.querySelector('.match-stage').dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(name)}, bubbles: true }))`)
+        await key('ArrowRight')
+        await key('ArrowRight')
+        await waitText('Pair 2 of')
+        const chosenBefore = await page('return document.querySelector(".match-pair").textContent')
+        check('the arrow keys follow one pair, with its places in the native image frames', /^Pair 2 of \d+: new \(\d+, \d+\), stored \(\d+, \d+\)$/.test(chosenBefore), chosenBefore)
+        await page(`const stage = document.querySelector('.match-stage'); const box = stage.getBoundingClientRect();
+          stage.dispatchEvent(new PointerEvent('pointermove', { clientX: box.left + box.width * 0.3, clientY: box.top + box.height * 0.5, bubbles: true }))`)
+        await pause(300)
+        const chosenAfter = await page('return document.querySelector(".match-pair").textContent')
+        check('the pointer follows the pair nearest to it', chosenAfter.startsWith('Pair ') && chosenAfter !== chosenBefore, chosenAfter)
         nativeTheme.themeSource = 'dark'
         await shot('03m-highlight-dark')
         nativeTheme.themeSource = 'light'
@@ -402,7 +407,7 @@ app.whenReady().then(async () => {
         await click('Verify again')
         await waitText('Fingerprint does not match', 90_000)
         check('Pore SIFT rejects a different finger', await has('The result and its encrypted capture were saved.'))
-        if (process.env.MBS_CHECK_MATCH_VIEW) check('a Pore SIFT non-match also shows its pore pairs', await has('Pore matches in this comparison'))
+        if (process.env.MBS_CHECK_MATCH_VIEW) await checkStage('a Pore SIFT non-match')
         await click('Back to the fingers')
       }
       if (process.env.MBS_CHECK_LEARNED) {
@@ -469,10 +474,9 @@ app.whenReady().then(async () => {
       nativeTheme.themeSource = 'dark'
       await shot('03g-verification-hebrew-dark')
       if (process.env.MBS_CHECK_MATCH_VIEW) {
-        const hebrewTitle = process.env.MBS_CHECK_LEARNED || process.env.MBS_CHECK_PORE ? 'התאמות הנקבוביות בהשוואה הזו' : 'התאמות הנקודות בהשוואה הזו'
-        check('the Hebrew illustration keeps both native image axes left to right', await has(hebrewTitle) &&
-          await page('return getComputedStyle(document.querySelector(".match-drawing")).direction === "ltr"'))
-        await page('document.querySelector(".match-view").scrollIntoView({ block: "start" })')
+        await stageSettled()
+        check('the Hebrew stage keeps both captures in their own left and right', await page('return getComputedStyle(document.querySelector(".match-plates")).direction === "ltr"'))
+        await page('document.querySelector(".match-stage").scrollIntoView({ block: "center" })')
         await shot('03m-matches-hebrew-dark')
       }
       nativeTheme.themeSource = 'light'
