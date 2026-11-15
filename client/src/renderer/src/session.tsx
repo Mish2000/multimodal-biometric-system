@@ -66,10 +66,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     if (ready) window.mbs.setTheme(theme)
   }, [ready, theme])
 
-  // The account's language once signed in, the switch's before (H31): direction and title follow it.
+  // The account's language once signed in, the switch's before (H31): direction and title follow it, before the
+  // browser paints, so the words of a new language never show for a frame in the other direction.
   const language = account?.language ?? screenLanguage
   const t = TEXTS[language]
-  useEffect(() => {
+  useLayoutEffect(() => {
     document.documentElement.lang = language
     document.documentElement.dir = language === 'he' ? 'rtl' : 'ltr'
     document.title = TEXTS[language].appName

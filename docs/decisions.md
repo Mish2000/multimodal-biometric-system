@@ -2103,3 +2103,13 @@ lines neither rise nor wait, which failed on Pore CNN's note on its provisional 
 corrected. It passed 37 of 37 without engines, 79 of 79 with OpenCV SIFT in 1:1 and 1:N, 82 of 82 with Pore SIFT and
 Pore CNN in 1:1, 88 of 88 with the three methods in 1:N, and 78 of 78 with the face and the voice. The manual check
 with the HiScan PRO passed on 2026-11-15.
+
+## 2026-11-15: the page's direction changes before it is painted
+
+The client set the page's language, direction and title in an effect that runs after the browser has painted, so a
+screen could show the words of a new language in the other direction for one frame, for example after a reload of an
+account in Hebrew. A client test that reads the direction as soon as the Hebrew words appear failed once on GitHub's
+runner for that reason (run 43762378926), and passed here. The three are now set while the page is updated, before it
+is painted. The client's 218 tests, the type checks, the lint and the build passed, and the offscreen check passed 37
+of 37 without engines and 79 of 79 with the fingerprint engines. Nothing visible changes beyond that one frame, so no
+manual check was asked for.
