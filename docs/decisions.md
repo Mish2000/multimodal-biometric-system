@@ -2063,3 +2063,43 @@ set, Pore SIFT and Pore CNN in 1:1, their stages included, passed 75 of 75, and 
 texts still named Pore CNN by its former name (H46); its wait for the stage took the count of 0 that is shown before
 the moment begins for the moment's end, which a Pore SIFT non-match checked at once exposed; and one 1:N step returned
 a page element, which Electron cannot pass back to the check.
+
+## 2026-11-15: the result's motion after its review
+
+Approved on 2026-11-15, after a review of the motion of the fingerprint 1:1 result found 13 points; all of them were
+corrected. Two of the corrections change what the earlier entry describes, and the rest refine it.
+
+- A result after an earlier one on the same screen ("Verify again") starts from the captures' reliefs: the tilt is
+  skipped and only the threads are drawn, so that moment lasts at most 800 ms. The first result on a screen keeps the
+  whole moment, which now lasts at most 1.2 s, as H22 sets: the threads start over 420 ms instead of 450 ms.
+- The words that explain the verdict enter with it, as one movement: the heading first, the explanation 50 ms later
+  and the notes (a provisional threshold, the hint after a non-match) 40 ms after that, all within 300 ms. Before, the
+  explanation gave the final score at once, while the count was still climbing and the heading was still hidden.
+- The stage enters as one: its first frame and its labels fade in over 160 ms once both captures are decoded, while
+  before the captures appeared in one frame after an empty box with its labels. The stage's three shader programs
+  compile in 56 ms the first time on this laptop's graphics card, measured in Chromium.
+- Each thread's bright head settles as the thread lands, instead of going out in one frame at its end, and the points
+  grow on the threads' own ease-out curve.
+- Escape or a press anywhere on the page plays out the rest of the moment, also when it comes before the stage is
+  drawn. Before, only the stage listened, and the page moves the focus to its title when a result arrives.
+- A key that chooses a pair dims the other threads at once; the pointer keeps the gradual dimming.
+- The stage writes the count and the rail in the frame that draws their threads, and only the verdict and the end of
+  the moment go through React, which before showed the count one frame after its thread.
+- A screen reader hears the verdict and its explanation once, from a status line of their own, and not the climbing
+  count. Before, the count sat inside the result's status region, which is read in full on every change.
+- With reduced motion the result is drawn finished and fades in at once, without the earlier wait of 160 ms, and the
+  lines that explain it appear with the verdict by their fade alone.
+- In the other fingerprint screens, the template screen's steps enter on the strong ease-out curve and keep their fade
+  with reduced motion, and the colour of the kept placements and the 1:N progress cells change on CSS's `ease`, as
+  colour changes do; the placements' colour now also changes with reduced motion.
+- Checked and left as it was: the stage sets the canvas's size on every frame. On this laptop's graphics card, setting
+  the size the canvas already has keeps its image and costs 0.341 ms a frame, against 0.328 ms without it.
+
+The client has 218 tests (7 new); 15 of the result's and the timeline's tests failed against the code before the
+corrections. The type checks, the lint and the build passed. The offscreen check gained four checks: the stage fades
+in and the explanation enters with the verdict, which alone is read out; Escape on the page ends the moment at once
+(213 to 218 ms after it, where the moment takes 800 ms); and with reduced motion the result is drawn finished and its
+lines neither rise nor wait, which failed on Pore CNN's note on its provisional threshold before that note's rule was
+corrected. It passed 37 of 37 without engines, 79 of 79 with OpenCV SIFT in 1:1 and 1:N, 82 of 82 with Pore SIFT and
+Pore CNN in 1:1, 88 of 88 with the three methods in 1:N, and 78 of 78 with the face and the voice. The manual check
+with the HiScan PRO passed on 2026-11-15.

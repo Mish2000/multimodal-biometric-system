@@ -7,7 +7,12 @@ import { TEXTS } from '../texts'
 // jsdom draws nothing, so the stage is a stand-in that the tests drive as the real one drives the screen.
 const stages = vi.hoisted(() => ({ made: [] as Array<{
   input: { pairs: Float32Array; threshold: number }
-  options: { reduced: boolean; onChange: (state: { count: number; verdict: boolean; done: boolean }) => void }
+  options: {
+    reduced: boolean
+    tilted: boolean
+    onChange: (state: { verdict: boolean; done: boolean }) => void
+    onCount: (count: number) => void
+  }
   running: boolean
   play: ReturnType<typeof vi.fn>
   finish: ReturnType<typeof vi.fn>
@@ -47,9 +52,10 @@ const result = (accepted: boolean): VerificationResult => ({
   attempt_id: 'a1', at: '2026-11-15T10:00:00Z', finger: 7, algorithm: 'opencv-sift', score: 3, threshold: accepted ? 2 : 57,
   threshold_origin: 'test', accepted, duration_ms: 410, comparisons: [],
 })
+const v = TEXTS.en.fingerprint.verification
 
-async function shown(accepted = true) {
-  const rendered = render(<MatchResult result={result(accepted)} view={view} image="bmV3" />)
+async function shown(accepted = true, tilted = false) {
+  const rendered = render(<MatchResult result={result(accepted)} view={view} image="bmV3" tilted={tilted} />)
   await act(async () => { await Promise.resolve() })
   return { ...rendered, stage: stages.made.at(-1)! }
 }
@@ -64,32 +70,52 @@ afterEach(() => {
 })
 
 describe('the result of a fingerprint 1:1 verification on its stage (H22)', () => {
-  it('gives the stage both captures and the counted pairs, and plays the moment once', async () => {
-    const { stage } = await shown()
+  it('gives the stage both captures and the counted pairs, plays the moment once and fades the stage in', async () => {
+    const { stage, container } = await shown()
     expect(stages.decode.mock.calls.slice(-2)).toEqual([['bmV3'], ['c3RvcmVk']])
     expect(Array.from(stage.input.pairs)).toEqual(ROWS.flat())
     expect(stage.input.threshold).toBe(2)
+    expect(stage.options.tilted).toBe(false)
     expect(stage.play).toHaveBeenCalledTimes(1)
+    expect(container.querySelector('.match-stage')!.className).toBe('match-stage ready')
   })
 
-  it('holds the verdict back until the count decides it, while the count and the rail follow the threads', async () => {
+  it('holds the verdict and its explanation back until the count decides them, while the count and the rail follow the threads', async () => {
     const { stage, container } = await shown()
     const heading = screen.getByRole('heading', { name: 'Fingerprint matches' })
+    const explanation = screen.getByText(v.explanation(3, 2))
+    const status = screen.getByRole('status')
     expect(heading.className).toBe('')
+    expect(explanation.className).toBe('match-later')
+    expect(status.textContent).toBe('')
     expect(container.querySelector('.match-count strong')!.textContent).toBe('0')
-    act(() => stage.options.onChange({ count: 2, verdict: false, done: false }))
+    act(() => stage.options.onCount(2))
     expect(container.querySelector('.match-count strong')!.textContent).toBe('2')
     expect((container.querySelector('.match-groove i') as HTMLElement).style.transform).toBe(`scaleX(${2 / (3 * 1.12)})`)
     expect(heading.className).toBe('')
-    act(() => stage.options.onChange({ count: 3, verdict: true, done: false }))
+    act(() => stage.options.onChange({ verdict: true, done: false }))
     expect(heading.className).toBe('shown')
+    expect(explanation.className).toBe('match-later shown')
+    expect(status.textContent).toBe(`Fingerprint matches. ${v.explanation(3, 2)}`)
     expect(container.querySelector('.match-pair')!.textContent).toBe('')
   })
 
-  it('says a non-match in the same plain words, with the threshold on the rail', async () => {
+  it('keeps the climbing count out of what a screen reader says', async () => {
+    const { container } = await shown()
+    expect(container.querySelector('.match-count')!.getAttribute('aria-hidden')).toBe('true')
+    expect(container.querySelector('.match-headline')!.getAttribute('role')).toBeNull()
+    expect(screen.getAllByRole('status')).toHaveLength(1)
+  })
+
+  it('says a non-match in the same plain words, with the threshold on the rail and the hint entering after it', async () => {
     const { stage, container } = await shown(false)
-    act(() => stage.options.onChange({ count: 3, verdict: true, done: true }))
+    const hint = screen.getByText(v.retryHint)
+    expect(hint.className).toBe('match-later match-note')
+    expect(screen.getByText(v.saved)).toBeTruthy()
+    act(() => stage.options.onCount(3))
+    act(() => stage.options.onChange({ verdict: true, done: true }))
     expect(screen.getByRole('heading', { name: 'Fingerprint does not match' }).className).toBe('shown')
+    expect(hint.className).toBe('match-later match-note shown')
     expect(screen.getByText('Match above 57')).toBeTruthy()
     expect((container.querySelector('.match-groove i') as HTMLElement).style.transform).toBe(`scaleX(${3 / (57 * 1.12)})`)
   })
@@ -101,17 +127,52 @@ describe('the result of a fingerprint 1:1 verification on its stage (H22)', () =
     expect(stage.finish).toHaveBeenCalledTimes(1)
     expect(stage.select).not.toHaveBeenCalled()
     stage.running = false
-    act(() => stage.options.onChange({ count: 3, verdict: true, done: true }))
+    act(() => stage.options.onChange({ verdict: true, done: true }))
     expect(container.querySelector('.match-pair')!.textContent).toBe('Move over a print, or use the arrow keys, to follow one pair.')
+    // A key chooses at once; the pointer lets the other threads dim gradually.
     fireEvent.keyDown(group, { key: 'ArrowLeft' })
-    expect(stage.select).toHaveBeenLastCalledWith(2)
+    expect(stage.select).toHaveBeenLastCalledWith(2, true)
     expect(container.querySelector('.match-pair')!.textContent).toBe('Pair 3 of 3: new (500, 600), stored (510, 610)')
     fireEvent.keyDown(group, { key: 'ArrowRight' })
-    expect(stage.select).toHaveBeenLastCalledWith(0)
+    expect(stage.select).toHaveBeenLastCalledWith(0, true)
     fireEvent.pointerMove(group, { clientX: 10, clientY: 10 })
-    expect(stage.select).toHaveBeenLastCalledWith(2)
+    expect(stage.select).toHaveBeenLastCalledWith(2, false)
     fireEvent.pointerLeave(group)
-    expect(stage.select).toHaveBeenLastCalledWith(-1)
+    expect(stage.select).toHaveBeenLastCalledWith(-1, false)
+  })
+
+  it('plays out the rest on Escape or a press anywhere on the page, until the moment ends', async () => {
+    const { stage } = await shown()
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(stage.finish).toHaveBeenCalledTimes(1)
+    fireEvent.keyDown(window, { key: 'a' })
+    expect(stage.finish).toHaveBeenCalledTimes(1)
+    fireEvent.pointerDown(document.body)
+    expect(stage.finish).toHaveBeenCalledTimes(2)
+    act(() => stage.options.onChange({ verdict: true, done: true }))
+    fireEvent.keyDown(window, { key: 'Escape' })
+    fireEvent.pointerDown(document.body)
+    expect(stage.finish).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps a press made before the stage exists for the moment it starts', async () => {
+    let release = () => {}
+    stages.decode.mockImplementationOnce(() => new Promise((resolve) => { release = () => resolve({} as HTMLImageElement) }))
+    render(<MatchResult result={result(true)} view={view} image="bmV3" />)
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(stages.made).toHaveLength(0)
+    await act(async () => {
+      release()
+      await Promise.resolve()
+    })
+    const stage = stages.made.at(-1)!
+    expect(stage.play).toHaveBeenCalledTimes(1)
+    expect(stage.finish).toHaveBeenCalledTimes(1)
+  })
+
+  it('starts from the reliefs for a result after an earlier one on the same screen', async () => {
+    const { stage } = await shown(true, true)
+    expect(stage.options.tilted).toBe(true)
   })
 
   it('lets go of the stage when the screen leaves', async () => {
@@ -120,11 +181,13 @@ describe('the result of a fingerprint 1:1 verification on its stage (H22)', () =
     expect(stage.dispose).toHaveBeenCalledTimes(1)
   })
 
-  it('draws the comparison flat, with the verdict at once, when the stage cannot be made', async () => {
+  it('draws the comparison flat, with the verdict and its notes at once, when the stage cannot be made', async () => {
     stages.decode.mockRejectedValueOnce(new Error('no image'))
-    const { container } = await shown()
-    expect(screen.getByRole('heading', { name: 'Fingerprint matches' })).toBeTruthy()
+    const { container } = await shown(false)
+    expect(screen.getByRole('heading', { name: 'Fingerprint does not match' })).toBeTruthy()
     expect(container.querySelector('.match-drawing')).not.toBeNull()
     expect(container.querySelector('.match-stage')).toBeNull()
+    expect(screen.getByText(v.saved)).toBeTruthy()
+    expect(screen.getByText(v.retryHint).className).toBe('')
   })
 })

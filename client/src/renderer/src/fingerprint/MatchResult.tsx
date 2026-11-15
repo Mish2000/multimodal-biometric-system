@@ -1,6 +1,7 @@
 // H22: the result of a fingerprint 1:1 verification. The verdict, the count and the stage on which the new capture
 // and the stored one are joined by the pairs the method counted (H43, H44). The verdict's words enter the moment
-// the count decides them; a press plays out whatever is left of the motion at once.
+// the count decides them, with the lines that explain them; a press or Escape anywhere plays out whatever is left
+// of the motion at once.
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import type { MatchViewData, VerificationResult } from '../../../shared/bridge'
 import { useSession } from '../session'
@@ -8,7 +9,7 @@ import { MatchView } from './MatchView'
 import { decodeMatchPairs } from './match-data'
 import { MatchStage, decodeCapture, type StageColors, type StageState } from './stage'
 
-const WAITING: StageState = { count: 0, verdict: false, done: false }
+const WAITING: StageState = { verdict: false, done: false }
 
 function colorsNow(): StageColors {
   const style = getComputedStyle(document.documentElement)
@@ -16,14 +17,27 @@ function colorsNow(): StageColors {
   return { canvas: of('--bg'), surface: of('--surface'), ink: of('--text'), mist: of('--line'), mark: of('--mark') }
 }
 
-export function MatchResult({ result, view, image }: { result: VerificationResult; view: MatchViewData; image: string }) {
+/** The rail's length in pairs: a little beyond the larger of the count and the threshold. */
+const railOf = (count: number, threshold: number) => Math.max(count, threshold, 1) * 1.12
+
+export function MatchResult({ result, view, image, tilted = false }: {
+  result: VerificationResult
+  view: MatchViewData
+  image: string
+  /** A result after an earlier one on the same screen: its moment starts from the reliefs. */
+  tilted?: boolean
+}) {
   const { t } = useSession()
   const v = t.fingerprint.verification
   const m = t.fingerprint.matches
   const canvas = useRef<HTMLCanvasElement>(null)
+  const counter = useRef<HTMLElement>(null)
+  const fill = useRef<HTMLElement>(null)
   const stage = useRef<MatchStage | null>(null)
+  const skipped = useRef(false)
   const pairs = useMemo(() => decodeMatchPairs(view.pairs, view.count), [view.pairs, view.count])
   const [shown, setShown] = useState<StageState>(WAITING)
+  const [ready, setReady] = useState(false)
   const [selected, setSelected] = useState(-1)
   const [failed, setFailed] = useState(false)
 
@@ -34,15 +48,24 @@ export function MatchResult({ result, view, image }: { result: VerificationResul
     let left = false
     const dark = matchMedia('(prefers-color-scheme: dark)')
     const recolor = () => made?.setColors(colorsNow())
+    const rail = railOf(pairs.length / 4, result.threshold)
     void Promise.all([decodeCapture(image), decodeCapture(view.reference_image)]).then(([fresh, stored]) => {
       if (left) return
       made = new MatchStage(element, { fresh, stored, pairs, threshold: result.threshold }, colorsNow(), {
         reduced: matchMedia('(prefers-reduced-motion: reduce)').matches,
+        tilted,
         onChange: setShown,
+        // Written here and not through React, so that the number lands in the frame that draws its thread.
+        onCount: (count) => {
+          if (counter.current) counter.current.textContent = String(count)
+          if (fill.current) fill.current.style.transform = `scaleX(${count / rail})`
+        },
       })
       stage.current = made
       dark.addEventListener('change', recolor)
+      setReady(true)
       made.play()
+      if (skipped.current) made.finish()
     }).catch(() => {
       if (!left) setFailed(true)
     })
@@ -52,7 +75,22 @@ export function MatchResult({ result, view, image }: { result: VerificationResul
       made?.dispose()
       stage.current = null
     }
-  }, [image, view.reference_image, pairs, result.threshold])
+  }, [image, view.reference_image, pairs, result.threshold, tilted])
+
+  // While the moment plays, a press or Escape anywhere on the page plays out the rest, even before the stage exists.
+  useEffect(() => {
+    if (shown.done) return
+    const skip = (event: Event) => {
+      if (event.type === 'keydown' && (event as globalThis.KeyboardEvent).key !== 'Escape') return
+      if (!stage.current?.finish()) skipped.current = true
+    }
+    window.addEventListener('keydown', skip)
+    window.addEventListener('pointerdown', skip)
+    return () => {
+      window.removeEventListener('keydown', skip)
+      window.removeEventListener('pointerdown', skip)
+    }
+  }, [shown.done])
 
   if (!pairs || failed) {
     // Without the stage the same comparison is drawn flat, with the verdict in words at once.
@@ -63,14 +101,16 @@ export function MatchResult({ result, view, image }: { result: VerificationResul
           <p>{v.explanation(result.score, result.threshold)}</p>
         </div>
         <MatchView view={view} image={image} algorithm={result.algorithm} />
+        <p>{v.saved}</p>
+        {!result.accepted && <p>{v.retryHint}</p>}
       </>
     )
   }
 
   const count = pairs.length / 4
-  const choose = (index: number) => {
+  const choose = (index: number, instant = false) => {
     setSelected(index)
-    stage.current?.select(index)
+    stage.current?.select(index, instant)
   }
   const fine = () => matchMedia('(hover: hover) and (pointer: fine)').matches
   const at = (event: PointerEvent<HTMLElement>) => {
@@ -83,25 +123,31 @@ export function MatchResult({ result, view, image }: { result: VerificationResul
     if (!step || count === 0) return
     event.preventDefault()
     if (stage.current?.finish() || !shown.done) return
-    choose(selected < 0 ? (step > 0 ? 0 : count - 1) : (selected + step + count) % count)
+    choose(selected < 0 ? (step > 0 ? 0 : count - 1) : (selected + step + count) % count, true)
   }
   const native = (offset: number) => `${Math.round(pairs[selected * 4 + offset]!)}, ${Math.round(pairs[selected * 4 + offset + 1]!)}`
-  const scale = Math.max(count, result.threshold, 1) * 1.12
+  const scale = railOf(count, result.threshold)
+  const verdict = result.accepted ? v.accepted : v.rejected
+  const explanation = v.explanation(result.score, result.threshold)
+  // What explains the verdict enters with it: the explanation just after the heading, the notes just after that.
+  const later = (part = '') => `match-later${part ? ` ${part}` : ''}${shown.verdict ? ' shown' : ''}`
 
   return (
     <div className="match-result">
-      <div className="match-headline" role="status">
+      <div className="match-headline">
         <div>
-          <h2 className={shown.verdict ? 'shown' : undefined}>{result.accepted ? v.accepted : v.rejected}</h2>
-          <p>{v.explanation(result.score, result.threshold)}</p>
-          {result.threshold_provisional && <p className="notice">{t.fingerprint.provisionalExplanation}</p>}
+          <h2 className={shown.verdict ? 'shown' : undefined}>{verdict}</h2>
+          <p className={later()}>{explanation}</p>
+          {result.threshold_provisional && <p className={`notice ${later('match-note')}`}>{t.fingerprint.provisionalExplanation}</p>}
         </div>
-        <p className="match-count">
-          <strong>{shown.done ? result.score : shown.count}</strong>
+        <p className="match-count" aria-hidden="true">
+          <strong ref={counter}>0</strong>
           <span>{result.algorithm === 'opencv-sift' ? v.score : v.pores}</span>
         </p>
       </div>
-      <div className="match-stage" tabIndex={0} role="group" aria-label={m.stage.label} onKeyDown={onKey}
+      {/* Read out once, when the verdict is shown: the count that climbs to it is not spoken. */}
+      <p className="visually-hidden" role="status">{shown.verdict ? `${verdict}. ${explanation}` : ''}</p>
+      <div className={ready ? 'match-stage ready' : 'match-stage'} tabIndex={0} role="group" aria-label={m.stage.label} onKeyDown={onKey}
         onPointerDown={(event) => { if (!stage.current?.finish() && shown.done && !fine()) choose(at(event)) }}
         onPointerMove={(event) => { if (shown.done && fine()) { const index = at(event); if (index !== selected) choose(index) } }}
         onPointerLeave={() => { if (fine() && selected !== -1) choose(-1) }}>
@@ -113,7 +159,7 @@ export function MatchResult({ result, view, image }: { result: VerificationResul
       </div>
       <div className="match-rail" aria-hidden="true">
         <div className="match-track">
-          <div className="match-groove"><i style={{ transform: `scaleX(${(shown.done ? count : shown.count) / scale})` }} /></div>
+          <div className="match-groove"><i ref={fill} /></div>
           <b style={{ insetInlineStart: `${(result.threshold / scale) * 100}%` }} />
         </div>
         <div className="match-ends">
@@ -124,6 +170,8 @@ export function MatchResult({ result, view, image }: { result: VerificationResul
       <p className="match-pair">
         {!shown.done ? '' : selected >= 0 ? m.stage.pair(selected + 1, count, native(0), native(2)) : count > 0 ? m.stage.hint : ''}
       </p>
+      <p>{v.saved}</p>
+      {!result.accepted && <p className={later('match-note')}>{v.retryHint}</p>}
     </div>
   )
 }

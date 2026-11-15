@@ -6,7 +6,7 @@ import {
   LinearFilter, LinearMipmapLinearFilter, Matrix4, Mesh, PerspectiveCamera, RawShaderMaterial, RedFormat, Scene, Texture,
   UnsignedByteType, Vector2, Vector3, WebGLRenderer, type IUniform,
 } from 'three'
-import { COUNT_MS, FADE_MS, SKIP_MS, THREAD_MS, TILT_MS, countAt, easeInOut, timeline, type Timeline } from './match-timeline'
+import { COUNT_MS, SKIP_MS, THREAD_MS, TILT_MS, countAt, easeInOut, timeline, type Timeline } from './match-timeline'
 
 const IMAGE = 1000 // the native side of a capture, in pixels (H7)
 const PLATE_X = 1.14 // each plate's centre, to the left and to the right
@@ -18,7 +18,16 @@ const SEGMENTS = 28 // of one thread
 const FULL = 142 // the pairs for which the threads' weight was tuned
 
 export interface StageColors { canvas: string; surface: string; ink: string; mist: string; mark: string }
-export interface StageState { count: number; verdict: boolean; done: boolean }
+/** What the page shows around the stage: the verdict's words, and the end of the moment. */
+export interface StageState { verdict: boolean; done: boolean }
+export interface StageOptions {
+  reduced: boolean
+  /** The captures start as reliefs, as on a result after an earlier one on the same screen. */
+  tilted: boolean
+  onChange: (state: StageState) => void
+  /** The landed threads, called in the frame that draws them. */
+  onCount: (count: number) => void
+}
 export interface StageInput {
   /** The new capture and the stored one, decoded. */
   fresh: HTMLImageElement
@@ -216,7 +225,8 @@ out vec4 color;
 void main() {
   if (vAt > vDrawn) discard;
   float alpha = uWeight * (1.0 - smoothstep(0.45, 1.0, abs(vSide)));
-  float head = (1.0 - smoothstep(0.0, 0.16, vDrawn - vAt)) * (1.0 - step(1.0, vDrawn));
+  // The bright head settles as the thread lands, instead of going out in one frame at its end.
+  float head = (1.0 - smoothstep(0.0, 0.16, vDrawn - vAt)) * (1.0 - smoothstep(0.95, 1.0, vDrawn));
   alpha *= 1.0 + head;
   alpha = mix(alpha, mix(alpha * 0.22, 1.0 - smoothstep(0.6, 1.0, abs(vSide)), vChosen), uDim);
   color = vec4(mix(uMark, uInk, vChosen * uDim), min(alpha, 1.0));
@@ -227,9 +237,10 @@ precision highp float;
 in vec2 aCorner; in vec4 aPoint; in float aIndex;
 uniform mat4 uCamera; uniform vec2 uView; uniform float uTime, uRelief, uSize, uSelected, uDim;
 out vec2 vCorner; out float vShown, vChosen;
+${EASE}
 void main() {
   vec4 here = uCamera * vec4(aPoint.x, aPoint.y * uRelief, aPoint.z, 1.0);
-  vShown = clamp((uTime - aPoint.w) / 90.0, 0.0, 1.0);
+  vShown = easeOut(clamp((uTime - aPoint.w) / 90.0, 0.0, 1.0));
   vChosen = step(abs(aIndex - uSelected), 0.5);
   here.xy += aCorner * uSize * (0.55 + 0.45 * vShown) * (1.0 + 0.7 * vChosen * uDim) * 2.0 / uView * here.w;
   vCorner = aCorner;
@@ -264,14 +275,14 @@ export class MatchStage {
   private readonly ends: Array<[Vector3, Vector3]> = []
   private readonly observer: ResizeObserver
   private readonly pointSize: number
-  private state: StageState = { count: -1, verdict: false, done: false }
+  private state: StageState = { verdict: false, done: false }
+  private counted = -1
   private time = 0
   private rate = 1
   private running = false
   private selected = -1
   private frame = 0
   private timer = 0
-  private restart = 0
   private before = 0
   private disposed = false
 
@@ -279,10 +290,10 @@ export class MatchStage {
     private readonly canvas: HTMLCanvasElement,
     input: StageInput,
     colors: StageColors,
-    private readonly options: { reduced: boolean; onChange: (state: StageState) => void },
+    private readonly options: StageOptions,
   ) {
     this.renderer = new WebGLRenderer({ canvas, antialias: true, alpha: false })
-    this.moment = timeline(input.pairs, input.threshold)
+    this.moment = timeline(input.pairs, input.threshold, options.tilted)
     const count = input.pairs.length / 4
     // A comparison of hundreds of pairs is drawn lighter, so that the prints stay readable under their marks.
     const dense = Math.sqrt(FULL / Math.max(count, 1))
@@ -376,11 +387,12 @@ export class MatchStage {
     }
 
     this.setColors(colors)
-    canvas.style.transition = `opacity ${FADE_MS}ms ease`
     this.observer = new ResizeObserver(() => this.invalidate())
     this.observer.observe(canvas)
-    if (options.reduced) canvas.style.opacity = '0'
-    else this.paint(performance.now(), true) // the two captures are there at once
+    // The first frame is drawn at once, for the page to fade in: the two captures, or with reduced motion the
+    // finished result.
+    this.time = options.reduced ? this.moment.total : 0
+    this.paint(performance.now(), true)
   }
 
   private keep<T extends { dispose(): void }>(item: T): T {
@@ -410,23 +422,12 @@ export class MatchStage {
     this.invalidate()
   }
 
-  /** Plays the moment from its start. Playing again never cuts: the stage fades out and starts as it fades back in. */
+  /** Plays the moment once, from its start. With reduced motion the result is already drawn, so nothing moves. */
   play(): void {
-    window.clearTimeout(this.restart)
-    const begin = () => {
-      if (this.disposed) return
-      this.time = this.options.reduced ? this.moment.total : 0
-      this.rate = 1
-      this.running = !this.options.reduced
-      this.before = 0
-      this.canvas.style.opacity = ''
-      this.invalidate()
-    }
-    if (!this.options.reduced && this.time === 0 && !this.running) return begin()
-    this.running = false
-    this.canvas.style.opacity = '0'
-    this.report({ count: 0, verdict: false, done: false })
-    this.restart = window.setTimeout(begin, FADE_MS)
+    if (this.options.reduced || this.running || this.time > 0) return
+    this.running = true
+    this.before = 0
+    this.invalidate()
   }
 
   /** A press never has to wait: whatever is left plays out at once, as motion and not as a cut. */
@@ -443,11 +444,12 @@ export class MatchStage {
     this.invalidate()
   }
 
-  /** The pair to draw as chosen, or -1 for none. */
-  select(index: number): void {
+  /** The pair to draw as chosen, or -1 for none. The others dim gradually for the pointer and at once for a key. */
+  select(index: number, instant = false): void {
     if (index === this.selected) return
     this.selected = index
     if (index >= 0) this.shared.uSelected!.value = index
+    if (instant) this.shared.uDim!.value = index >= 0 ? 1 : 0
     this.invalidate()
   }
 
@@ -475,16 +477,20 @@ export class MatchStage {
     this.disposed = true
     cancelAnimationFrame(this.frame)
     window.clearTimeout(this.timer)
-    window.clearTimeout(this.restart)
     this.observer.disconnect()
     for (const item of this.disposables) item.dispose()
     this.renderer.dispose()
   }
 
-  private report(next: StageState): void {
-    if (next.count === this.state.count && next.verdict === this.state.verdict && next.done === this.state.done) return
-    this.state = next
-    this.options.onChange(next)
+  // The count goes to the page in the frame that draws its threads; the verdict and the end change the page once.
+  private report(count: number, verdict: boolean, done: boolean): void {
+    if (count !== this.counted) {
+      this.counted = count
+      this.options.onCount(count)
+    }
+    if (verdict === this.state.verdict && done === this.state.done) return
+    this.state = { verdict, done }
+    this.options.onChange(this.state)
   }
 
   // A hidden window gets no animation frames; a slow timer still carries the moment to its end, so the result is
@@ -512,8 +518,8 @@ export class MatchStage {
     const dim = this.shared.uDim!
     dim.value += (want - dim.value) * (1 - Math.exp(-step / 45))
     if (Math.abs(want - dim.value) < 0.01) dim.value = want
-    this.draw(this.options.reduced ? 1 : easeInOut(this.time / TILT_MS))
-    this.report({ count: countAt(this.moment, this.time), verdict: this.time >= this.moment.verdictAt, done: this.time >= total })
+    this.draw(this.options.reduced || this.options.tilted ? 1 : easeInOut(this.time / TILT_MS))
+    this.report(countAt(this.moment, this.time), this.time >= this.moment.verdictAt, this.time >= total)
     if (this.running || dim.value !== want) this.invalidate()
     else this.before = 0
   }

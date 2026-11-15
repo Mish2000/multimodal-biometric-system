@@ -35,6 +35,8 @@ export function Verification({ finger, enrolled, algorithm, onLeave, onEnrol, on
   const v = f.verification
   const [run, setRun] = useState<Run>(START)
   const [attempt, setAttempt] = useState(0)
+  // H22: once a result has been shown on this screen, the next one starts from the reliefs and skips the tilt.
+  const [earlier, setEarlier] = useState(false)
   const [stopping, setStopping] = useState(false)
   const control = useRef<string | null>(null)
   const heading = useRef<HTMLHeadingElement>(null)
@@ -159,11 +161,7 @@ export function Verification({ finger, enrolled, algorithm, onLeave, onEnrol, on
             ))}
           </ol>
           {result !== null && staged && result.match_view && run.latest ? (
-            <>
-              <MatchResult key={result.attempt_id} result={result} view={result.match_view} image={run.latest.image} />
-              <p>{v.saved}</p>
-              {!result.accepted && <p>{v.retryHint}</p>}
-            </>
+            <MatchResult key={result.attempt_id} result={result} view={result.match_view} image={run.latest.image} tilted={earlier} />
           ) : result !== null ? (
             <>
               <div className={`verification-result ${result.accepted ? 'matched' : 'unmatched'}`} role="status">
@@ -195,7 +193,10 @@ export function Verification({ finger, enrolled, algorithm, onLeave, onEnrol, on
                 {needsEnrolment ? (
                   <button type="button" onClick={onEnrol}>{f.enrolAgain}</button>
                 ) : (
-                  <button type="button" onClick={() => setAttempt((value) => value + 1)}>{result ? v.again : f.tryAgain}</button>
+                  <button type="button" onClick={() => {
+                    if (result) setEarlier(true)
+                    setAttempt((value) => value + 1)
+                  }}>{result ? v.again : f.tryAgain}</button>
                 )}
                 {result?.accepted && <button type="button" className="secondary" onClick={onChangeMethod}>{v.changeMethod}</button>}
                 <button type="button" className="secondary" onClick={onLeave}>{f.back}</button>

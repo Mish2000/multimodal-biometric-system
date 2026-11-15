@@ -1,17 +1,16 @@
 // H22: the times of the 1:1 result's showcase moment, in milliseconds. One thing leads at a time: the two captures
 // tilt and rise, and the threads between the matched pairs start when that is nearly done. Each thread is counted
-// when it lands, and the verdict is shown the moment the count decides it, not when the motion ends.
+// when it lands, and the verdict is shown the moment the count decides it, not when the motion ends. The whole
+// moment stays within H22's 1.2 s, and a result shown again on the same screen skips the tilt.
 
 export const TILT_MS = 600
 export const THREADS_START = 400
 /** The time over which the threads of a full comparison start; fewer pairs take less. */
-export const SPREAD_MS = 450
+export const SPREAD_MS = 420
 /** One thread's own time. */
 export const THREAD_MS = 380
 /** A press plays out whatever is left of the moment within this time. */
 export const SKIP_MS = 150
-/** The stage's fade when the moment plays again, and all that moves with reduced motion. */
-export const FADE_MS = 160
 const FULL = 142 // the pairs of a comfortable match, for which SPREAD_MS was tuned
 
 /** A cubic-bezier curve exactly as CSS computes it. */
@@ -54,19 +53,22 @@ export interface Timeline {
 /**
  * The threads sweep across the new capture from left to right: most start early and the last ones further
  * apart, so the sweep slows into its end. `pairs` holds probe x, y and reference x, y for each pair (H43).
+ * A `tilted` moment starts from the captures' reliefs, as after an earlier result, so its threads start at once.
  */
-export function timeline(pairs: Float32Array, threshold: number): Timeline {
+export function timeline(pairs: Float32Array, threshold: number, tilted = false): Timeline {
+  const first = tilted ? 0 : THREADS_START
+  const least = tilted ? 0 : TILT_MS
   const count = pairs.length / 4
   const order = Array.from({ length: count }, (_, index) => index).sort((a, b) => pairs[a * 4]! - pairs[b * 4]! || a - b)
   const spread = SPREAD_MS * Math.min(1, Math.sqrt(count / FULL))
   const starts = new Float32Array(count)
   order.forEach((pair, rank) => {
-    starts[pair] = THREADS_START + spread * (count > 1 ? rank / (count - 1) : 0) ** 1.5
+    starts[pair] = first + spread * (count > 1 ? rank / (count - 1) : 0) ** 1.5
   })
-  if (count === 0) return { starts, verdictAt: THREADS_START, total: TILT_MS }
+  if (count === 0) return { starts, verdictAt: first, total: least }
   // A match needs more pairs than the threshold, so the pair after it decides; without one, the last pair does.
   const deciding = order[Math.min(Math.max(0, Math.floor(threshold)), count - 1)]!
-  return { starts, verdictAt: starts[deciding]! + COUNT_MS, total: Math.max(TILT_MS, THREADS_START + spread + THREAD_MS) }
+  return { starts, verdictAt: starts[deciding]! + COUNT_MS, total: Math.max(least, first + spread + THREAD_MS) }
 }
 
 /** The threads that have landed by `time`. */

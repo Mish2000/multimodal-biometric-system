@@ -175,6 +175,14 @@ app.whenReady().then(async () => {
       const saved = Number((document.body.innerText.match(/highest of the three scores is ([0-9]+)/) ?? [])[1])
       return canvas.width > 0 && canvas.height > 0 && score === saved &&
         document.querySelector('.match-headline h2').classList.contains('shown')`))
+    // After the motion review: the stage faded in as one, the explanation entered with the verdict, and the
+    // verdict is read out once from its own status line, never the climbing count.
+    check(`${what}: the stage faded in, the explanation entered with the verdict, and only the verdict is read out`, await page(`
+      const status = document.querySelector('.match-result [role=status]')
+      return document.querySelector('.match-stage').classList.contains('ready') &&
+        [...document.querySelectorAll('.match-later')].every((line) => line.classList.contains('shown')) &&
+        status !== null && status.textContent.startsWith(document.querySelector('.match-headline h2').textContent) &&
+        document.querySelector('.match-count').getAttribute('aria-hidden') === 'true'`))
   }
   const checkPoreView = async (method: string, name: string) => {
     await checkStage(method)
@@ -344,6 +352,15 @@ app.whenReady().then(async () => {
       nextScan(captureFile(7, 3))
       await click('Verify again')
       await waitText('Fingerprint matches', 90_000)
+      if (process.env.MBS_CHECK_MATCH_VIEW) {
+        // H22: Escape anywhere on the page plays out the rest of the moment, here one that skips the tilt because
+        // a result was shown before it, and ends in 800 ms on its own.
+        const pressed = Date.now()
+        await page(`document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`)
+        await until(() => page(`return (document.querySelector('.match-pair')?.textContent ?? '') !== ''`), 'the moment to end after Escape', 5_000)
+        const ended = Date.now() - pressed
+        check('Escape on the page plays out the rest of the moment at once', ended < 500, `${ended} ms`)
+      }
       check('the same finger matches the stored templates', await has('The result and its encrypted capture were saved.'))
       nativeTheme.themeSource = 'light'
       await shot('03e-verification-match-light')
@@ -469,8 +486,27 @@ app.whenReady().then(async () => {
       if (process.env.MBS_CHECK_LEARNED) await page(`document.querySelector('input[value="learned-pore"]').click()`)
       else if (process.env.MBS_CHECK_PORE) await page(`document.querySelector('input[value="pore-sift"]').click()`)
       await shot('03l-method-choice-hebrew')
+      // H22 after the motion review: with reduced motion the result is drawn finished, and the lines that explain
+      // it appear with the verdict by their fade alone, without rising or waiting. Chromium's own emulation sets it.
+      const reduce = (on: boolean) => win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia',
+        { features: [{ name: 'prefers-reduced-motion', value: on ? 'reduce' : 'no-preference' }] })
+      if (process.env.MBS_CHECK_MATCH_VIEW) {
+        win.webContents.debugger.attach('1.3')
+        await reduce(true)
+      }
       await click('התחלת האימות')
       await waitText('נמצאה התאמה לטביעת האצבע', 90_000)
+      if (process.env.MBS_CHECK_MATCH_VIEW) {
+        const arrived = Date.now()
+        await until(() => page(`return (document.querySelector('.match-pair')?.textContent ?? '') !== ''`), 'the result with reduced motion', 5_000)
+        const settled = Date.now() - arrived
+        check('with reduced motion the result is drawn finished, and its lines neither rise nor wait', settled < 600 && await page(`
+          const lines = [...document.querySelectorAll('.match-later')]
+          return lines.length > 0 && lines.every((line) => line.classList.contains('shown') && getComputedStyle(line).transitionDelay === '0s')`),
+        `${settled} ms`)
+        await reduce(false)
+        win.webContents.debugger.detach()
+      }
       check('verification runs in Hebrew and right to left', await direction() === 'rtl')
       if (process.env.MBS_CHECK_PORE) check('Pore SIFT result is explained in Hebrew', await has('נקבוביות תואמות') && await has('הסף הזה זמני'))
       await shot('03g-verification-hebrew-light')
