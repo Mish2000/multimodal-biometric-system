@@ -160,9 +160,12 @@ app.whenReady().then(async () => {
   const direction = () => page(`return document.documentElement.dir`)
   // H44: a pore method's result shows its counted pore pairs, one line per point of the deciding score.
   // H22: a 1:1 result on its stage: the moment plays to its end, the verdict's words are shown, the count is the
-  // deciding score, and the arrow keys and the pointer follow single pairs.
-  const stageSettled = () => until(() => page(`return (document.querySelector('.match-pair')?.textContent ?? '') !== '' ||
-    document.querySelector('.match-count strong')?.textContent === '0'`), 'the result moment to end', 15_000)
+  // deciding score, and the arrow keys and the pointer follow single pairs. The count reads 0 before the moment
+  // starts, so the moment has ended only once the verdict is shown and the pair line has its hint, or, for a
+  // comparison without pairs, the count is still 0.
+  const stageSettled = () => until(() => page(`return Boolean(document.querySelector('.match-headline h2.shown')) &&
+    ((document.querySelector('.match-pair')?.textContent ?? '') !== '' ||
+    document.querySelector('.match-count strong')?.textContent === '0')`), 'the result moment to end', 15_000)
   const checkStage = async (what: string) => {
     await stageSettled()
     await pause(400)
@@ -419,19 +422,19 @@ app.whenReady().then(async () => {
         nativeTheme.themeSource = 'light'
         nextScan(captureFile(7, 3))
         await click('Start verification')
-        await waitText('Creating Learned pore descriptor templates', 90_000)
+        await waitText('Creating Pore CNN templates', 90_000)
         await shot('03l-preparing-existing')
         await waitText('Fingerprint matches', 90_000)
-        check('the learned descriptor prepares existing captures and matches its own native templates', await has('Matching pores') && await has('Match above 21'))
+        check('Pore CNN prepares existing captures and matches its own native templates', await has('Matching pores') && await has('Match above 21'))
         await shot('03l-result-light')
         nativeTheme.themeSource = 'dark'
         await shot('03l-result-dark')
         nativeTheme.themeSource = 'light'
-        if (process.env.MBS_CHECK_MATCH_VIEW) await checkPoreView('the learned descriptor', '03q-learned')
+        if (process.env.MBS_CHECK_MATCH_VIEW) await checkPoreView('Pore CNN', '03q-learned')
         nextScan(captureFile(2, 1))
         await click('Verify again')
         await waitText('Fingerprint does not match', 90_000)
-        check('the learned descriptor rejects a different finger', await has('The result and its encrypted capture were saved.'))
+        check('Pore CNN rejects a different finger', await has('The result and its encrypted capture were saved.'))
         await click('Back to the fingers')
         const placements = captureFiles.filter((name) => /_f07_p[123]_.*\.png$/.test(name)).sort()
         if (placements.length !== 3) throw new Error('expected three stored left-index placements')
@@ -439,7 +442,7 @@ app.whenReady().then(async () => {
         fs.writeFileSync(path.join(run, 'scanner.json'), JSON.stringify(steps.slice(0, -1)))
         await click('Enrol this finger again')
         await waitText('How your fingerprint is stored', 90_000)
-        check('a new generic enrolment stores templates for all three methods', await has('Templates stored for: OpenCV SIFT, Pore SIFT, Learned pore descriptor.'))
+        check('a new generic enrolment stores templates for all three methods', await has('Templates stored for: OpenCV SIFT, Pore SIFT, Pore CNN.'))
         await click('The points')
         check('the point and vector demonstration explicitly names OpenCV SIFT', await has('Template demonstration: OpenCV SIFT'))
         await shot('03l-template-label')
@@ -575,7 +578,7 @@ app.whenReady().then(async () => {
           }
           const preparation = () => lastRun().events.filter((event) => event.type === 'preparing_templates')
           await click('Change method')
-          await until(() => page(`return ${poreRadio} && ${learnedRadio}`), 'the identification methods')
+          await until(() => page(`return Boolean(${poreRadio} && ${learnedRadio})`), 'the identification methods')
           check('identification disables the unavailable pore engines', await page(`return ${poreRadio}.disabled && ${learnedRadio}.disabled`))
           fs.writeFileSync(path.join(run, 'enable-pore'), 'yes')
           await until(async () => {
@@ -619,21 +622,21 @@ app.whenReady().then(async () => {
           check('Pore SIFT reuses prepared templates and finds another account anonymously',
             preparation().length === 0 && await page('return document.querySelector(".verification-result").innerText.includes("Another registered user")'))
           await click('Change method')
-          await until(() => page(`return ${learnedRadio} && !${learnedRadio}.disabled`), 'the learned choice')
+          await until(() => page(`return ${learnedRadio} && !${learnedRadio}.disabled`), 'the Pore CNN choice')
           check('the change-method shortcut keeps the previous choice until it is changed', await page(`return ${poreRadio}.checked`))
           await page(`${learnedRadio}.click()`)
           nextScan(captureFile(2, 3))
           await click('Start identification')
           await waitText('A matching fingerprint was found', 90_000)
-          check('the learned descriptor prepares its own gallery and shows its threshold and ranking',
+          check('Pore CNN prepares its own gallery and shows its threshold and ranking',
             lastRun().algorithm === 'learned-pore' && preparation().at(-1)?.completed === 6 &&
-            await has('Learned pore descriptor') && await has('Match above 21') && await has('Matching pores') &&
+            await has('Pore CNN') && await has('Match above 21') && await has('Matching pores') &&
             await page('return document.querySelector(".verification-result").innerText.includes("Another registered user")'))
           await shot('03n-learned-identification-light')
           nextScan(captureFile(4, 1))
           await click('Identify again')
           await waitText('No matching fingerprint was found', 90_000)
-          check('the learned descriptor records a non-match and reuses prepared templates',
+          check('Pore CNN records a non-match and reuses prepared templates',
             preparation().length === 0 && await has('The result and its encrypted capture were saved.'))
         }
         await click('Settings')
@@ -644,14 +647,14 @@ app.whenReady().then(async () => {
         await click('זיהוי טביעת אצבע (1:N)')
         if (process.env.MBS_CHECK_IDENTIFY_METHODS) {
           const radio = 'document.querySelector(\'input[value="learned-pore"]\')'
-          await until(() => page(`return ${radio} && !${radio}.disabled`), 'the learned choice in Hebrew')
+          await until(() => page(`return ${radio} && !${radio}.disabled`), 'the Pore CNN choice in Hebrew')
           await page(`${radio}.click()`)
         }
         await click('התחלת הזיהוי')
         await waitText('נמצאה טביעת אצבע תואמת', 90_000)
         check('1:N is anonymous and right to left in Hebrew', await direction() === 'rtl' && await has('משתמש רשום אחר'))
         if (process.env.MBS_CHECK_IDENTIFY_METHODS) check('the Hebrew result shows the selected method, pore score and threshold',
-          await has('המתאר הנלמד') && await has('נקבוביות תואמות') && await has('התאמה מעל 21'))
+          await has('Pore CNN') && await has('נקבוביות תואמות') && await has('התאמה מעל 21'))
         check('the Hebrew identification heading preserves the 1:N notation', await page(`const notation = document.querySelector('.identification h1 bdi'); return notation?.textContent === '(1:N)' && getComputedStyle(notation).direction === 'ltr'`))
         await shot('03n-result-hebrew-light')
         nativeTheme.themeSource = 'dark'

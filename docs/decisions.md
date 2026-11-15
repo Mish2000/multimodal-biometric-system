@@ -2056,3 +2056,10 @@ passed 37 of 37 without engines and 75 of 75 with the fingerprint engines and th
 where the real stage ran in Electron: it played to its end, showed the verdict, counted the deciding score, and
 followed pairs by the keys and by the pointer, for a match, a non-match and in Hebrew. The pore methods and the face
 and voice flows were not run offscreen for this change. The manual check with the HiScan PRO passed on 2026-11-15.
+
+After the commit, on 2026-11-15, the offscreen check ran what it had left out. With the stored captures of the second
+set, Pore SIFT and Pore CNN in 1:1, their stages included, passed 75 of 75, and the three methods in 1:N passed 84 of
+84; the face and the voice passed 78 of 78. Three steps of the check itself were corrected first: four of its expected
+texts still named Pore CNN by its former name (H46); its wait for the stage took the count of 0 that is shown before
+the moment begins for the moment's end, which a Pore SIFT non-match checked at once exposed; and one 1:N step returned
+a page element, which Electron cannot pass back to the check.
