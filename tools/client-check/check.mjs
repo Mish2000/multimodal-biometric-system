@@ -220,7 +220,10 @@ app.whenReady().then(async () => {
     await click('Create the account')
     await waitText('Hello, dana')
     check('registration signs the new account in, to the home screen', true)
-    const unenrolled = await page(`return document.body.innerText.split('Not enrolled yet').length - 1`)
+    // The greeting comes first; the modalities follow the home screen's own request to the server.
+    const countUnenrolled = () => page(`return document.body.innerText.split('Not enrolled yet').length - 1`)
+    const unenrolled = await until(async () => ((await countUnenrolled()) === 3 ? 3 : false), "the home screen's modalities")
+      .catch(countUnenrolled)
     check('the home screen shows the three modalities, none enrolled', unenrolled === 3, unenrolled)
     const token = serverClient.token
     const leak = await page(`return { storage: localStorage.length + sessionStorage.length, cookie: document.cookie,

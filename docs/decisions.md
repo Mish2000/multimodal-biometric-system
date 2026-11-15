@@ -1934,3 +1934,9 @@ Approved on 2026-11-15 as the third part of the client's dependency refresh; no 
 The type checks, the lint with its 128 rules, the 198 client tests and the build passed, and the built client passed
 its offscreen checks: 68 of 68 with the fingerprint engines and the stored captures of the second set, and 78 of 78
 with the face and voice engines.
+
+The first run on GitHub with Vite 8 (run 43692782610) passed the client's and the scanner's jobs, while the offscreen
+check passed 36 of its 37 checks: on the runner's slower machine it counted the home screen's modalities before the
+home screen's own request to the server had answered, as the greeting comes first. The check now waits up to ten seconds
+for the modalities, as it already waited for the greeting; the client is unchanged, and the check passed 37 of 37 on
+this PC with the change.
