@@ -1881,3 +1881,27 @@ the design work; no decision changed (H23, H26).
 The type checks, the lint, the 198 client tests and the build passed, and the built client passed its offscreen checks
 in Electron 45.2.1: 68 of 68 with the fingerprint engines and the stored captures of the second set, 1:N with a second
 account among them, and 78 of 78 with the face and voice engines.
+
+## 2026-11-15: Vite 8 and the client's tools
+
+Approved on 2026-11-15 as the second part of the client's dependency refresh; no decision changed (H23, H26).
+
+- The client is built with Vite 8.3.5 in place of 7.3.6, electron-vite 6.0.0 and React's plugin 6.1.2, and tested with
+  Vitest 5.0.5 and jsdom 30.1.3; the types of Node are 24.19.2. Each is the newest version published at least 14 days
+  earlier, and npm resolved the packages they bring with the same date (H23).
+- Vite 8 bundles with Rolldown and transforms with Oxc instead of esbuild and Rollup, and React's plugin no longer
+  needs Babel, so the lock lost 90 entries (two versions of esbuild and Rollup, with their programs for every
+  platform, Babel's two React plugins and React Refresh's package) and gained 30 (Rolldown and Lightning CSS with
+  their programs). This PC downloaded 23 packages, 16,120,271 bytes, the largest Rolldown's and Lightning CSS's
+  programs for Windows, 8,914,933 and 3,706,526 bytes.
+- Vite 8 renames `build.rollupOptions` to `build.rolldownOptions`, and the two in `electron.vite.config.ts` now carry
+  the new name. Nothing else changed: React's plugin takes no options here, the recorder's worklet is still imported
+  as a file of its own (`?url&no-inline`, H54), and the offscreen check's development server finds both packages as
+  before.
+- The build gives the same files: the main process's three entries, the preload as CommonJS that loads only
+  `electron`, and the page's script, with its style sheet and the worklet byte for byte the same as Vite 7 made them.
+
+The type checks, the lint, the 198 client tests and the build passed, and the built client passed its offscreen checks:
+68 of 68 with the fingerprint engines and the stored captures of the second set, and 78 of 78 with the face and voice
+engines. The development server's page, as `npm run dev` serves it with React's refresh under the page's Content
+Security Policy, passed the 37 checks that need no engine.

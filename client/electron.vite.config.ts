@@ -6,7 +6,7 @@ import { defineConfig } from 'electron-vite'
 export default defineConfig({
   main: {
     build: {
-      rollupOptions: {
+      rolldownOptions: {
         // The bridge and the window's security are entries of their own, so automated checks can load
         // them without the app's window.
         input: {
@@ -20,7 +20,7 @@ export default defineConfig({
   preload: {
     build: {
       // A sandboxed preload runs as a classic script, so it is built as CommonJS.
-      rollupOptions: { output: { format: 'cjs' } },
+      rolldownOptions: { output: { format: 'cjs' } },
     },
   },
   renderer: {
