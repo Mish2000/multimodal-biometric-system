@@ -1963,3 +1963,62 @@ The type checks, the lint, the 198 client tests and the build passed. The offscr
 passed 37 of 37 without engines, 68 of 68 with the fingerprint engines and the stored captures of the second set, and
 78 of 78 with the face and voice engines, where the voice is recorded through the worklet. The development server's
 page, served by `dev_server.mts`, passed the same 78.
+
+## 2026-11-15: the design direction and its libraries
+
+- **H22** Approved on 2026-11-15. The client gets one design direction, "the sample in the middle". The interface is
+  a quiet light table, and the biometric sample is the one thing that stands out on it: in every flow one stage holds
+  the sample through all the steps, and the steps change the sample (image, template, comparison, result) instead of
+  changing the page. Only the system's own data moves: the points and pores a method found, the matched pairs, the
+  score against its threshold, the ranking of a gallery. Other users stay anonymous in motion too, as plates without
+  an image or a name (H18).
+- Colours, each in the light theme and in the dark one, which is its negative, with ink and paper exchanged (H24):
+
+  | Role | Light | Dark |
+  | --- | --- | --- |
+  | Canvas | `#F4F6FA` | `#111337` |
+  | Surface: the stage, cards | `#FFFFFF` | `#1A1D50` |
+  | Ink: text, ridges, the main button | `#171A4A` | `#F4F6FA` |
+  | Second ink: supporting text | `#555A86` | `#A7AED6` |
+  | Mist: rails, dividers, anonymous users | `#D5DBE8` | `#2C3070` |
+  | Mark: what a method found | `#0C97A6`, as text `#086C77` | `#45D2DE` |
+  | Sensor: a device capturing now | `#D92F25` | `#FF6253` |
+
+  The sensor red has one meaning: a device is capturing the user now. The scanner's own light is red (H37), and the
+  camera and the microphone are marked the same way. It is never an error colour. A non-match is a result, not a
+  failure: it is said in plain ink, in words and by the score's place against the threshold. Contrast ratios (WCAG):
+  text 15.1 in the light theme and 16.6 in the dark one, supporting text 6.1 and 8.3, text in the mark colour 5.7
+  and 9.8.
+- Type: IBM Plex Sans for Latin and IBM Plex Sans Hebrew for Hebrew (H31), one family designed for both scripts,
+  under the SIL Open Font License 1.1. Display headings are Light at 56 to 72 pixels, text is Regular at 16, emphasis
+  and buttons are SemiBold, and numbers use tabular figures. Six font files (Light, Regular and SemiBold of each) are
+  copied into the client from version 1.1.0 of the packages `@ibm/plex-sans` and `@ibm/plex-sans-hebrew`
+  (2024-11-11), with the licence text. The packages themselves are not installed, because both run a telemetry tool
+  when they are installed. The page's Content Security Policy allows only the client's own files, so the fonts ship
+  inside the client (H26).
+- Layout: in a flow, a column of text beside the stage; in a result, the stage takes nearly the full width and the
+  text becomes one heading with the score. The daily screens (sign-in, registration, settings, administration) are
+  one quiet column without a stage.
+- Motion has two paces. The daily screens stay under 300 ms and never stagger. The few showcase moments (the scan,
+  the image turning into a relief with its points, the threads between matched pairs in 1:1, the pass over the
+  gallery in 1:N, the sample changing between modalities) last about one second, play once, and follow these rules:
+  the verdict is shown the moment the count decides it, not when the motion ends; one thing leads at a time; a press
+  plays out at once whatever is left; with reduced motion the result appears with a fade and nothing travels;
+  three-dimensional drawing lives on the stage only, and without WebGL 2 the same data is drawn flat. No
+  three-dimensional model of a face is drawn: the system has no depth data, so it would be invented.
+- Libraries (H23): `three` 0.187.0 (2026-10-30, MIT, no dependencies, no install script) draws the stage and is the
+  one package the running client gains. `@types/three` 0.187.0 gives its types during development and brings six
+  packages of types and their helpers. The lock gained eight entries, 7,812,283 bytes of packages, none with an
+  install script. No animation library is added: the client's React 19.3.1 has view transitions, and with CSS
+  transitions they cover what enters, leaves and stays between steps. The library for the reports' charts is decided
+  with the reports.
+
+The direction replaces the three prototype directions of October 2026, from which none was chosen before the design
+was postponed to the end of the functional build (H35). It was tried first as a prototype of one screen outside the
+repository, the result of a fingerprint 1:1 verification on synthetic prints, whose motion was reviewed, corrected
+and approved on 2026-11-15. The client's screens are rebuilt in this direction one flow at a time, starting with that
+screen. Until then the client keeps its neutral look (H26), and the README keeps its earlier screenshots until
+screenshots of the real client replace them.
+
+After the installation the type checks, the lint, the 198 client tests and the build passed. The built page is
+unchanged, since no screen uses the library yet.
