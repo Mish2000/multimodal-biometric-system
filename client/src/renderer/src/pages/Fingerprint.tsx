@@ -58,14 +58,21 @@ export function Fingerprint() {
     })
   }, [call, t])
   useEffect(load, [load])
-  const loadMethods = useCallback(() => {
-    setMethodError('')
+  // The methods' cards: asked for when the screen opens, and again on a retry or a change of method (H40), which
+  // clears the earlier error at once.
+  const askMethods = useCallback(() => {
     void call<{ methods: FingerprintMethod[] }>('fingerprintMethods').then((answer) => {
-      if (answer.ok) setMethods(answer.data.methods)
-      else setMethodError(errorText(answer, t))
+      if (answer.ok) {
+        setMethods(answer.data.methods)
+        setMethodError('')
+      } else setMethodError(errorText(answer, t))
     })
   }, [call, t])
-  useEffect(loadMethods, [loadMethods])
+  useEffect(askMethods, [askMethods])
+  const loadMethods = useCallback(() => {
+    setMethodError('')
+    askMethods()
+  }, [askMethods])
   const selectedMethod = methods.find((method) => method.code === algorithm)
   useEffect(() => { if (choosingMethod) methodHeading.current?.focus() }, [choosingMethod])
 

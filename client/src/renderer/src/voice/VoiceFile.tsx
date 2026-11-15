@@ -1,7 +1,7 @@
 // H57: an existing recording instead of the microphone, for 1:1 and 1:N only, on a screen of its own (as H53 has it for
 // the face): a visible drop zone, a button that chooses a file, and the rules. One file at a time; the page checks only
 // its size and sends its content alone, never its name, and the server and the engine decide by the content.
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import type { VoiceFile as FileFacts, VoiceSource } from '../../../shared/bridge'
 import { useSession } from '../session'
 
@@ -24,7 +24,6 @@ export function VoiceFile({ busy, onFile }: { busy: boolean; onFile: (recording:
   const [dragging, setDragging] = useState(false)
   const [notice, setNotice] = useState('')
   const input = useRef<HTMLInputElement>(null)
-  const latest = useRef<(chosen: File[]) => void>(() => undefined)
 
   async function take(chosen: File[]) {
     setNotice('')
@@ -40,7 +39,7 @@ export function VoiceFile({ busy, onFile }: { busy: boolean; onFile: (recording:
     }
     onFile(recording)
   }
-  latest.current = (chosen) => void take(chosen)
+  const dropped = useEffectEvent((chosen: File[]) => void take(chosen)) // the latest `take`, for the window's drop
 
   // A file dragged over the window marks the drop zone and is taken when dropped; the browser's own handling (opening
   // the file in the window) is prevented.
@@ -65,7 +64,7 @@ export function VoiceFile({ busy, onFile }: { busy: boolean; onFile: (recording:
       event.preventDefault()
       depth = 0
       setDragging(false)
-      latest.current(Array.from(event.dataTransfer?.files ?? []))
+      dropped(Array.from(event.dataTransfer?.files ?? []))
     }
     window.addEventListener('dragenter', enter)
     window.addEventListener('dragover', over)

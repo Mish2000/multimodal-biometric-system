@@ -4,7 +4,7 @@
 // result, a refused image with its checks, or a failure) whose "again" returns to the choice; a run takes one
 // image. The page checks only a file's size; it sends the file's content alone, never its name, and the server
 // decides by the content.
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useEffectEvent, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router'
 import type { FaceCheck, FaceDetection, FaceMethod, FaceSize, FaceSource, RouteName } from '../../../shared/bridge'
 import { errorText } from '../texts'
@@ -105,7 +105,6 @@ export function FaceTake<T extends { status: string }>({ title, mode, route, min
   const [notice, setNotice] = useState('') // a file the page itself could not use (H51)
   const [dragging, setDragging] = useState(false)
   const input = useRef<HTMLInputElement>(null)
-  const latestFile = useRef<(files: File[]) => void>(() => undefined)
 
   async function check(image: string, source: FaceSource) {
     setNotice('')
@@ -138,7 +137,7 @@ export function FaceTake<T extends { status: string }>({ title, mode, route, min
     }
     await check(image, 'file')
   }
-  latestFile.current = (files) => void takeFile(files)
+  const dropped = useEffectEvent((files: File[]) => void takeFile(files)) // the latest `takeFile`, for the window's drop
 
   // H51, H53: on the file screen, a file dragged over the window marks the drop zone and is taken when dropped;
   // the browser's own handling (opening the file in the window) is prevented. The camera screen takes no file.
@@ -164,7 +163,7 @@ export function FaceTake<T extends { status: string }>({ title, mode, route, min
       event.preventDefault()
       depth = 0
       setDragging(false)
-      latestFile.current(Array.from(event.dataTransfer?.files ?? []))
+      dropped(Array.from(event.dataTransfer?.files ?? []))
     }
     window.addEventListener('dragenter', enter)
     window.addEventListener('dragover', over)

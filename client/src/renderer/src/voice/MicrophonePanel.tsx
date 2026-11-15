@@ -2,7 +2,7 @@
 // current microphone, a selector when more than one can be used, the recording with its timer, and what happened
 // when a microphone was silent, unplugged or refused. Nothing is stored here: a recording goes to the screen
 // that asked for it.
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useState } from 'react'
 import { useSession } from '../session'
 import { openMicrophone, problemOf, record, type MicrophoneInput, type MicrophoneProblem } from './input'
 import { looksSilent, SILENT_SECONDS, type Microphone } from './microphone'
@@ -38,21 +38,21 @@ function MicrophoneView({ microphone, busy, seconds, rate, sentence, onRecorded,
   const [input, setInput] = useState<MicrophoneInput | null>(null)
   const [level, setLevel] = useState(-100)
   const [progress, setProgress] = useState<number | null>(null) // while recording, from 0 to 1
-  const handlers = useRef({ onSilent, onEnded, onProblem })
-  handlers.current = { onSilent, onEnded, onProblem }
+  // The latest handlers, for what the microphone reports after it was opened.
+  const reportSilent = useEffectEvent(() => onSilent())
+  const reportEnded = useEffectEvent(() => onEnded())
+  const reportProblem = useEffectEvent((problem: MicrophoneProblem) => onProblem(problem))
 
-  // The microphone: opened for this view, closed when the view goes or another microphone is chosen.
+  // The microphone: opened for this view, closed when the view goes. Another microphone or rate is another view (its
+  // key), which starts afresh.
   useEffect(() => {
     let active = true
     let opened: MicrophoneInput | null = null
-    setInput(null)
-    setLevel(-100)
-    setProgress(null)
     openMicrophone(microphone.deviceId, rate)
       .then((microphoneInput) => {
         if (!active) return microphoneInput.close()
         opened = microphoneInput
-        microphoneInput.onEnded(() => handlers.current.onEnded())
+        microphoneInput.onEnded(() => reportEnded())
         let peak = 0
         let heard = 0
         let window: Float32Array[] = []
@@ -61,7 +61,7 @@ function MicrophoneView({ microphone, busy, seconds, rate, sentence, onRecorded,
           if (heard < SILENT_SECONDS) {
             for (let i = 0; i < block.length; i += 1) peak = Math.max(peak, Math.abs(block[i]!))
             heard += block.length / microphoneInput.rate
-            if (looksSilent(peak, heard)) handlers.current.onSilent()
+            if (looksSilent(peak, heard)) reportSilent()
           }
           window.push(block)
           const now = performance.now()
@@ -79,7 +79,7 @@ function MicrophoneView({ microphone, busy, seconds, rate, sentence, onRecorded,
         setInput(microphoneInput)
       })
       .catch((error: unknown) => {
-        if (active) handlers.current.onProblem(problemOf(error))
+        if (active) reportProblem(problemOf(error))
       })
     return () => {
       active = false
@@ -184,7 +184,7 @@ export function MicrophonePanel(props: PanelProps) {
         </>
       ) : (
         <MicrophoneView
-          key={current.deviceId}
+          key={`${current.deviceId} ${props.rate}`}
           microphone={current}
           {...props}
           onSilent={() => lost(current, v.silent(current.name))}

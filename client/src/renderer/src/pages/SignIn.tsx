@@ -15,14 +15,15 @@ export function SignIn() {
   const [busy, setBusy] = useState(false)
   const [server, setServer] = useState<'checking' | 'up' | 'down'>('checking')
 
-  const checkServer = useCallback(async () => {
-    setServer('checking')
-    setServer((await call('health')).ok ? 'up' : 'down')
+  // The server is asked once when the screen opens, and again from the notice's button, which shows the check at once.
+  const askServer = useCallback(() => {
+    void call('health').then((answer) => setServer(answer.ok ? 'up' : 'down'))
   }, [call])
-
-  useEffect(() => {
-    void checkServer()
-  }, [checkServer])
+  useEffect(askServer, [askServer])
+  function checkServer() {
+    setServer('checking')
+    askServer()
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault()
@@ -52,7 +53,7 @@ export function SignIn() {
       {server === 'down' && (
         <p className="error" role="alert">
           {t.serverDown.before}
-          <button type="button" className="link" onClick={() => void checkServer()}>
+          <button type="button" className="link" onClick={checkServer}>
             {t.serverDown.action}
           </button>
           {t.serverDown.after}

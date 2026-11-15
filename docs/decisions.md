@@ -1905,3 +1905,32 @@ The type checks, the lint, the 198 client tests and the build passed, and the bu
 68 of 68 with the fingerprint engines and the stored captures of the second set, and 78 of 78 with the face and voice
 engines. The development server's page, as `npm run dev` serves it with React's refresh under the page's Content
 Security Policy, passed the 37 checks that need no engine.
+
+## 2026-11-15: React 19.3.1 and React's two remaining lint rules
+
+Approved on 2026-11-15 as the third part of the client's dependency refresh; no decision changed (H23, H26).
+
+- React and React DOM move from 19.3.0 to 19.3.1, whose one change is in Server Components, which the client does not
+  use, and React Router from 8.4.0 to 8.5.1, which fixes data routers and deprecates its own view transition options
+  in favour of React's; the client uses neither. Each is the newest version published at least 14 days earlier (H23);
+  together they weigh 2,094,468 bytes.
+- The two rules of React's compiler that the client's lint left off on 2026-11-14 are on: no ref is read or written
+  while a screen renders, and no state is set synchronously inside an effect. Their twelve places in ten files now
+  follow the patterns React documents, and the screens do what they did:
+  - The camera's and the microphone's views and the two drop zones for files kept their latest handlers in refs
+    written while rendering; they now call them through `useEffectEvent`, React's way for an effect to reach the
+    latest handler. The session keeps the signed-in account for its requests in a ref updated once each change is
+    committed.
+  - The camera's and the microphone's views reset their state at the start of the effect that opens the device, while
+    each view is already built afresh for another device, by its key. The resets are gone, and the microphone view's
+    key now names the recording rate too, so that a new rate also starts it afresh, as before.
+  - A link that opened the client went through state for an effect to act on; it is now acted on when it arrives. The
+    sign-in screen's first server check, the administration's two lists and the fingerprint methods are asked for
+    without setting state before the answer; the buttons that check or ask again still show it at once. The template
+    screen lets go of its chosen point when another placement's tab is chosen, instead of in an effect.
+- A client test now chooses a point on the template screen and checks that another placement's tab lets go of it while
+  its own tab keeps it; it fails when the tab does not let go.
+
+The type checks, the lint with its 128 rules, the 198 client tests and the build passed, and the built client passed
+its offscreen checks: 68 of 68 with the fingerprint engines and the stored captures of the second set, and 78 of 78
+with the face and voice engines.

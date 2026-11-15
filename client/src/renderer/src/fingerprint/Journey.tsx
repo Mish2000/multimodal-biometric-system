@@ -164,14 +164,19 @@ export function Journey({ saved, captures, finger, onDone }: { saved: SavedEnrol
   const points = useMemo(() => (template ? decodePoints(template.points, template.descriptors) : null), [template])
   const capture = template ? captures[template.placement] : undefined
 
-  useEffect(() => setChosen(undefined), [tab])
+  // Another placement's tab shows that template's points, with none of them chosen.
+  function showTab(i: number) {
+    if (i === tab) return
+    setTab(i)
+    setChosen(undefined)
+  }
   if (!template || !capture || !points) return null
   const vector = chosen !== undefined && chosen >= 0 ? descriptorOf(points, chosen) : null
 
   const tabs = (
     <div className="tabs" role="tablist">
       {saved.templates.map((each, i) => (
-        <button key={each.id} type="button" role="tab" aria-selected={i === tab} className={i === tab ? 'current' : 'secondary'} onClick={() => setTab(i)}>
+        <button key={each.id} type="button" role="tab" aria-selected={i === tab} className={i === tab ? 'current' : 'secondary'} onClick={() => showTab(i)}>
           {f.placementTab(each.placement)}
         </button>
       ))}

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactElement } from 'react'
+import { useEffect, useEffectEvent, type ReactElement } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router'
 import type { Account, OpenedLink } from '../../shared/bridge'
 import { ErrorBoundary } from './ErrorBoundary'
@@ -64,22 +64,18 @@ export function App() {
 function useOpenedLinks(): void {
   const navigate = useNavigate()
   const { chooseLanguage } = useSession()
-  const [opened, setOpened] = useState<OpenedLink | null>(null)
+  const open = useEffectEvent((link: OpenedLink) => {
+    if (link.language !== null) chooseLanguage(link.language, false)
+    navigate('/reset-password')
+  })
 
   useEffect(() => {
     const take = () => {
       void window.mbs.takeLink().then((link) => {
-        if (link !== null) setOpened(link)
+        if (link !== null) open(link)
       })
     }
     take()
     return window.mbs.onLink(take)
   }, [])
-
-  useEffect(() => {
-    if (opened === null) return
-    if (opened.language !== null) chooseLanguage(opened.language, false)
-    setOpened(null)
-    navigate('/reset-password')
-  }, [opened, chooseLanguage, navigate])
 }

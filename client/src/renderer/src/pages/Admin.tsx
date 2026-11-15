@@ -31,15 +31,18 @@ export function Admin() {
   const [audit, setAudit] = useState<AuditRow[] | null>(null)
   const [error, setError] = useState<Parameters<typeof errorText>[0] | null>(null)
 
-  const load = useCallback(async () => {
-    const [list, log] = await Promise.all([
-      call<{ accounts: AccountRow[] }>('accounts'),
-      call<{ entries: AuditRow[] }>('audit'),
-    ])
-    if (list.ok) setAccounts(list.data.accounts)
-    else setError(list)
-    if (log.ok) setAudit(log.data.entries)
-  }, [call])
+  // The two lists, set when both answers are in: when the area opens and after every change.
+  const load = useCallback(
+    () =>
+      Promise.all([call<{ accounts: AccountRow[] }>('accounts'), call<{ entries: AuditRow[] }>('audit')]).then(
+        ([list, log]) => {
+          if (list.ok) setAccounts(list.data.accounts)
+          else setError(list)
+          if (log.ok) setAudit(log.data.entries)
+        },
+      ),
+    [call],
+  )
 
   useEffect(() => {
     void load()

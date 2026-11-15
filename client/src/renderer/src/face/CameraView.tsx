@@ -1,7 +1,7 @@
 // H48: one camera's live view. The picture is mirrored, as people expect of a camera that faces them; a small
 // copy of a frame goes to the server about five times a second, and the face it finds is drawn over the view.
 // The image the user takes is the camera's own frame, unmirrored, as a PNG. Nothing is stored here.
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import type { FaceBox, FaceDetection } from '../../../shared/bridge'
 import { useSession } from '../session'
 import { FLAT_SAMPLES, guidance, looksCovered, lumaSpread, type Camera, type Guidance } from './camera'
@@ -39,17 +39,17 @@ export function CameraView({ camera, busy, minimumWidth, onTaken, onCovered, onE
   const [started, setStarted] = useState(false)
   const [faces, setFaces] = useState<FaceBox[]>([])
   const [live, setLive] = useState<Guidance | 'unavailable' | null>(null)
-  const handlers = useRef({ onCovered, onEnded, onProblem })
-  handlers.current = { onCovered, onEnded, onProblem }
+  // The latest handlers, for what the camera and the live loop report after the camera was opened.
+  const reportCovered = useEffectEvent(() => onCovered())
+  const reportEnded = useEffectEvent(() => onEnded())
+  const reportProblem = useEffectEvent((problem: CameraProblem) => onProblem(problem))
 
-  // The camera: opened for this view, stopped when the view goes or another camera is chosen.
+  // The camera: opened for this view, stopped when the view goes. Another camera is another view (its key), which
+  // starts afresh.
   useEffect(() => {
     let active = true
     let stream: MediaStream | null = null
     const shown = video.current // the element the stream is shown in, released again in the cleanup
-    setStarted(false)
-    setFaces([])
-    setLive(null)
     navigator.mediaDevices
       .getUserMedia({ video: { deviceId: { exact: camera.deviceId }, ...VIDEO }, audio: false })
       .then(async (opened) => {
@@ -60,7 +60,7 @@ export function CameraView({ camera, busy, minimumWidth, onTaken, onCovered, onE
         stream = opened
         const track = opened.getVideoTracks()[0]
         track?.addEventListener('ended', () => {
-          if (active) handlers.current.onEnded()
+          if (active) reportEnded()
         })
         const element = video.current
         if (element === null) return
@@ -69,7 +69,7 @@ export function CameraView({ camera, busy, minimumWidth, onTaken, onCovered, onE
         if (active) setStarted(true)
       })
       .catch((error: unknown) => {
-        if (active) handlers.current.onProblem(problemOf(error))
+        if (active) reportProblem(problemOf(error))
       })
     return () => {
       active = false
@@ -98,7 +98,7 @@ export function CameraView({ camera, busy, minimumWidth, onTaken, onCovered, onE
         if (spreads.length < FLAT_SAMPLES) {
           spreads.push(lumaSpread(context.getImageData(0, 0, small.width, small.height).data))
           if (looksCovered(spreads)) {
-            handlers.current.onCovered()
+            reportCovered()
             return
           }
         }

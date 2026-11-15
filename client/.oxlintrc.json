@@ -1,6 +1,7 @@
 {
   // The client's lint (oxlint 1.90.0, `npm run lint`): every correctness rule of the default plugins and of React's,
-  // with React's hook rules. ESLint is not used: its TypeScript parser does not support TypeScript 7.
+  // with React's hook rules and React Compiler's rules on refs during render and on state set inside an effect.
+  // ESLint is not used: its TypeScript parser does not support TypeScript 7.
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["eslint", "typescript", "unicorn", "oxc", "react"],
   "categories": {
@@ -9,11 +10,8 @@
   "rules": {
     "react/rules-of-hooks": "error",
     "react/exhaustive-deps": "error",
-    // React Compiler's rules on refs read during render and on state set inside an effect: twelve places in ten files,
-    // among them the camera, microphone, fingerprint and sign-in screens, use these patterns and work as written;
-    // changing them changes when those screens render, so they wait for the client's dependency refresh.
-    "react/refs": "off",
-    "react/set-state-in-effect": "off"
+    "react/refs": "error",
+    "react/set-state-in-effect": "error"
   },
   "ignorePatterns": ["out/**"]
 }

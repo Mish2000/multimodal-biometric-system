@@ -846,6 +846,17 @@ describe('fingerprint enrolment (H33)', () => {
     expect(screen.getByText(/OpenCV SIFT finds 3 distinctive points/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Next' }))
     expect(screen.getByText('Move the pointer over the print to choose a point.')).toBeTruthy()
+    // A point chosen on one placement's template is let go when another placement's tab is chosen.
+    const print = document.querySelector<HTMLCanvasElement>('.print canvas')!
+    print.getBoundingClientRect = () =>
+      ({ x: 0, y: 0, left: 0, top: 0, width: 1000, height: 1000, right: 1000, bottom: 1000, toJSON: () => ({}) }) as DOMRect
+    fireEvent.pointerMove(print, { clientX: 400, clientY: 500 })
+    expect(screen.getByText('Point 2 at (400.0, 500.0)')).toBeTruthy()
+    fireEvent.click(screen.getByRole('tab', { name: 'Placement 1' }))
+    expect(screen.getByText('Point 2 at (400.0, 500.0)')).toBeTruthy()
+    fireEvent.click(screen.getByRole('tab', { name: 'Placement 2' }))
+    expect(screen.queryByText(/^Point \d/)).toBeNull()
+    expect(screen.getByText('Move the pointer over the print to choose a point.')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Next' }))
     expect(screen.getByText(/a table of 3 rows \(points\) by 128 columns/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Next' }))

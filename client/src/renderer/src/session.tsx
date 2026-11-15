@@ -1,6 +1,6 @@
 // Who is signed in, as the page knows it, and the language of the screens (H31). The session itself (its
 // token) is kept by the main process.
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Account, ApiResult, Language, RouteName } from '../../shared/bridge'
 import { TEXTS, type Texts } from './texts'
 
@@ -29,8 +29,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   // English until someone chooses otherwise (H31); after sign-out the screens stay in the last language.
   const [screenLanguage, setScreenLanguage] = useState<Language>('en')
   const picked = useRef(false)
+  // The account as last committed: an answer that the session has ended signs out only a signed-in page.
   const current = useRef<Account | null>(null)
-  current.current = account
+  useLayoutEffect(() => {
+    current.current = account
+  }, [account])
 
   const enter = useCallback((next: Account) => {
     picked.current = false
