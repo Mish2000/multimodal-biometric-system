@@ -1861,3 +1861,23 @@ runner's console; `run.py` now prints it in UTF-8. The third run (43642828473) p
 check passed 37 of 37 in about two minutes, while the server's job took about 17. A push or pull request that changes
 only documentation, `docs/` or Markdown files, no longer starts the checks: they would find what they found before.
 Approved on 2026-11-14.
+
+## 2026-11-15: Electron 45
+
+Approved on 2026-11-15 as the first part of the client's dependency refresh, which was set on 2026-11-13 to come before
+the design work; no decision changed (H23, H26).
+
+- The client moves from Electron 44.5.1 to 45.2.1, the newest release published at least 14 days earlier (H23). It
+  brings Chromium 156.0.8078.48 in place of 152, with Node 24.22.0 and V8 15.6 in the main process. The package
+  weighs 210,128 bytes; the program it downloads from Electron's releases the first time it is needed, checked
+  against the checksums the package carries, weighs 158,187,314. Nothing else in the lock changed.
+- Electron 45's breaking changes were read against the client. Sandboxed preload scripts lose the `events`, `timers`
+  and `url` modules and the `Buffer`, `setImmediate` and `clearImmediate` globals, and a request to capture the
+  screen now reaches the permission handler as `display-capture`. The client's preload uses only `contextBridge` and
+  `ipcRenderer`, and the window grants the camera or the microphone alone (H48, H54), so no code changed. The other
+  changes concern workers, extensions, content tracing, files inside ASAR archives, `window.open` and `safeStorage`,
+  which the client does not use.
+
+The type checks, the lint, the 198 client tests and the build passed, and the built client passed its offscreen checks
+in Electron 45.2.1: 68 of 68 with the fingerprint engines and the stored captures of the second set, 1:N with a second
+account among them, and 78 of 78 with the face and voice engines.
