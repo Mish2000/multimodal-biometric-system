@@ -2113,3 +2113,84 @@ runner for that reason (run 43762378926), and passed here. The three are now set
 is painted. The client's 218 tests, the type checks, the lint and the build passed, and the offscreen check passed 37
 of 37 without engines and 79 of 79 with the fingerprint engines. Nothing visible changes beyond that one frame, so no
 manual check was asked for.
+
+## 2026-11-21: every screen in the design system of H22
+
+Approved on 2026-11-21. Every screen of the client takes one design system, built on H22 and first proposed on
+2026-11-17 outside the repository, together with key screens of the fingerprint verification approved as images on
+2026-11-21: its tokens, its type scale and eight components. Each screen keeps its layout and its behaviour; the
+layouts of the approved key screens are built afterwards, one flow at a time.
+
+- Tokens beside H22's colours: `edge` for a control's boundary (`#7D83AA` light, `#6D74B8` dark, 3:1 or more
+  against its ground, where the old line was 1.4:1), `alert` for a problem to act on (`#A0520A` light, `#F2A65A`
+  dark), and `ink-hover`, `on-ink` and `wash` for the states of buttons and rows. The blue accent, the error red, the
+  success green and the strength meter's orange, yellow and green leave the client. Red is the sensor's alone: a
+  device capturing now (H22, H37).
+- Type and space: display 60 px for the verdict of a result (48 px below a 1100 px window), headline 36 for a
+  screen's title, title 24 for a section, heading 18 for a card, a method or a table, text 16 (it was 15), label 15
+  and small 13. A 4 px spacing scale, three radii (6 px, 12 px and a pill), content at most 1120 px wide in 48 px
+  margins (24 px below a 900 px window), and controls 44 px high.
+- Components:
+  - Button: one primary action per screen, in ink; the other actions outlined; going back or cancelling quiet;
+    erasing outlined in alert, always after a confirmation (H34).
+  - Field: the label above the control, the edge boundary, an ink focus line; the password's strength meter in ink
+    bars, with only an invalid password in alert, and its rules marked by a ring or a check.
+  - Notice: information, something done, a problem (alert), a device capturing now (the sensor's red dot) and a
+    step under way (a turning ring). It replaces the tinted message boxes.
+  - Steps: a bar and a word per step, on one line.
+  - MethodCard: each fingerprint method with its accuracy and its speed as figures, its threshold and, where it is
+    provisional, a tag. The figures came out of their sentences; one note under the cards says what they are.
+  - SamplePlate: a capture drawn in ink from its own grey levels, as the 1:1 stage draws it from above, so the dark
+    theme shows its negative; a refused capture is faded. The raw grey image is no longer shown.
+  - ScoreMeter: a score against its threshold. A count's rail runs to four times the threshold or a little beyond
+    the score, a similarity's from 0 to 1. A score at or below its threshold is said in ink; on the 1:1 stage a
+    non-match's threads and points are drawn in ink too.
+  - DataTable: a surface panel with hairlines between rows, numbers at the end, and the deciding comparison and the
+    caller's own row in semibold.
+- What stays: the layouts, the flows and the behaviour; the texts, except the method cards and the short threshold
+  label of the face's and the voice's rails, in both languages; the 1:1 stage and its motion; the camera view and the
+  microphone panel, whose colours alone change (a recording is framed in the sensor's red, a level too loud for the
+  recording is alert).
+- The offscreen check: `run.py --shots` also takes every screenshot in both themes at 1280 x 820 and at the smallest
+  window, 1024 x 680, and lists what runs off the window or is cut. Its fingerprint runs can take synthetic prints
+  through the stand-in scanner, so its screenshots show no person's fingerprint.
+
+The client had 229 tests (11 new, for the components). The type checks, the lint and the build passed, and a review
+of the changed screens against the Web Interface Guidelines added balanced line breaks to headings and
+`touch-action` to buttons. The offscreen check passed 37 of 37 without engines, 79 of 79 with OpenCV SIFT in 1:1 and
+1:N, 82 of 82 with Pore SIFT and Pore CNN in 1:1, 88 of 88 with the three methods in 1:N, and 78 of 78 with the face
+and the voice, the fingerprint runs on synthetic prints; none of its 976 screenshots, in both themes and both window
+sizes, runs off the window or cuts its text.
+
+## 2026-11-22: the design system's motion after its review
+
+Approved on 2026-11-22, after a review of the motion of the design system's styles and components found 12 points;
+all of them were corrected.
+
+- A notice that appears busy shows only after 200 ms. The face's and the voice's checks answer in about 60 to 130 ms,
+  so their notice came and went within that time and the actions below it jumped. Longer work shows its turning ring
+  as before, and a notice that turns busy stays on the screen.
+- Nothing chosen or typed from the keyboard animates: the password's strength meter follows the typing at once, a
+  field's focus and hover change at once, and a method chosen with the arrow keys changes at once, while a method
+  chosen with the pointer keeps its 150 ms.
+- A notice that is part of its screen's content (the message to enrol first, the template's lead, an engine that is
+  unavailable, a provisional threshold under a result) appears with its screen; only a notice that arrives later
+  enters.
+- The plate's develop state, which no screen used, is removed. The scan screen will bring the develop of its key
+  screen, starting once the print is drawn.
+- The pass over a face or voice gallery and the fingerprint 1:N progress fade a layer in, instead of repainting the
+  cells' background on every frame.
+- The chosen method's dot settles from 90 % of its size instead of growing from nothing, and a control's colour
+  changes on CSS's `ease`, as the kept placements' did before.
+- A change of theme repaints every colour at once: for its frame nothing eases, so the controls no longer follow the
+  page 150 ms late.
+- Hover effects need a precise pointer, as the 1:1 stage's do, and with reduced motion the busy ring pulses instead
+  of standing still.
+
+The client has 233 tests (4 new). The type checks, the lint and the build passed. The offscreen check passed 37 of 37
+without engines, 79 of 79 with OpenCV SIFT in 1:1 and 1:N, 82 of 82 with Pore SIFT and Pore CNN in 1:1, 88 of 88
+with the three methods in 1:N, and 78 of 78 with the face and the voice, again with no finding in its 976
+screenshots. A first run with OpenCV SIFT stopped at 40 of 41, when "Try again" right after a cancellation was
+refused because the scanner was still held, as on 2026-11-15; the run again passed. The manual check in the client,
+with the HiScan PRO, the camera and the microphone, in both themes and in Hebrew, passed on 2026-11-22, for this entry
+and the one before.

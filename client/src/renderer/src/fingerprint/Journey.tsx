@@ -3,6 +3,9 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react'
 import type { Check, SavedEnrolment } from '../../../shared/bridge'
 import { useSession } from '../session'
+import { Icon } from '../ui/Icon'
+import { Notice } from '../ui/Notice'
+import { Plate } from '../ui/Plate'
 import {
   decodePoints, descriptorOf, heatmapLines, megabytes, nearest, sealedBytes, SIFT_BINS, SIFT_CELLS, type Points,
 } from './data'
@@ -20,12 +23,15 @@ function cssColor(name: string, fallback: string): string {
   return value || fallback
 }
 
-// A canvas drawn by `draw`, again whenever `deps` change; nothing is drawn where canvases are unavailable.
+const channels = (hex: string) => [1, 3, 5].map((at) => parseInt(hex.trim().slice(at, at + 2), 16))
+
+// A canvas drawn by `draw`, again whenever `deps` change; nothing is drawn where canvases are unavailable. The
+// processor draws it, so it keeps its picture when the graphics card's surfaces are made again (a resized window).
 function useCanvas(draw: (context: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => void, deps: unknown[]) {
   const ref = useRef<HTMLCanvasElement | null>(null)
   useEffect(() => {
     const canvas = ref.current
-    const context = canvas?.getContext?.('2d') ?? null
+    const context = canvas?.getContext?.('2d', { willReadFrequently: true }) ?? null
     if (canvas && context) draw(context, canvas)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps)
@@ -38,10 +44,10 @@ export function Checks({ checks }: { checks: Check[] }) {
     <ul className="checks">
       {checks.map((check) => (
         <li key={check.name} className={check.passed ? 'met' : 'missing'}>
-          <span className="mark" aria-hidden="true">
-            {check.passed ? '✓' : '✗'}
+          <Icon name={check.passed ? 'check' : 'alert'} />
+          <span>
+            <strong>{t.fingerprint.checks[check.name] ?? check.name}</strong> <span className="aside">{check.detail}</span>
           </span>
-          <strong>{t.fingerprint.checks[check.name] ?? check.name}</strong> <span className="aside">{check.detail}</span>
         </li>
       ))}
     </ul>
@@ -54,12 +60,12 @@ function Print({ image, points, chosen, onPick }: { image: string; points?: Poin
       const scale = canvas.width / 1000
       context.clearRect(0, 0, canvas.width, canvas.height)
       if (!points) return
-      context.fillStyle = cssColor('--accent', '#1f5fbf')
+      context.fillStyle = cssColor('--mark', '#0c97a6')
       context.globalAlpha = chosen === undefined ? 0.75 : 0.35
       for (let i = 0; i < points.count; i++) context.fillRect((points.xy[2 * i] ?? 0) * scale - 1, (points.xy[2 * i + 1] ?? 0) * scale - 1, 2, 2)
       if (chosen !== undefined && chosen >= 0) {
         context.globalAlpha = 1
-        context.strokeStyle = cssColor('--error', '#b42318')
+        context.strokeStyle = cssColor('--ink', '#171a4a')
         context.lineWidth = 2
         context.beginPath()
         context.arc((points.xy[2 * chosen] ?? 0) * scale, (points.xy[2 * chosen + 1] ?? 0) * scale, 9, 0, 2 * Math.PI)
@@ -75,9 +81,10 @@ function Print({ image, points, chosen, onPick }: { image: string; points?: Poin
     onPick(nearest(points, (event.clientX - box.left) * scale, (event.clientY - box.top) * scale))
   }
   return (
-    <div className="print" style={{ width: VIEW, height: VIEW }}>
-      <img src={`data:image/png;base64,${image}`} alt="" width={VIEW} height={VIEW} />
-      <canvas ref={overlay} width={VIEW} height={VIEW} onPointerMove={onPick ? pick : undefined} />
+    <div className="print">
+      <Plate image={image} size={VIEW}>
+        <canvas ref={overlay} className="points" width={VIEW} height={VIEW} aria-hidden="true" onPointerMove={onPick ? pick : undefined} />
+      </Plate>
     </div>
   )
 }
@@ -88,7 +95,7 @@ function Compasses({ values }: { values: Uint8Array }) {
     (context, canvas) => {
       const cell = canvas.width / SIFT_CELLS
       context.clearRect(0, 0, canvas.width, canvas.height)
-      context.strokeStyle = cssColor('--line', '#d9dde3')
+      context.strokeStyle = cssColor('--mist', '#d5dbe8')
       for (let i = 0; i <= SIFT_CELLS; i++) {
         context.beginPath()
         context.moveTo(i * cell, 0)
@@ -97,7 +104,7 @@ function Compasses({ values }: { values: Uint8Array }) {
         context.lineTo(canvas.width, i * cell)
         context.stroke()
       }
-      context.strokeStyle = cssColor('--accent', '#1f5fbf')
+      context.strokeStyle = cssColor('--ink', '#171a4a')
       context.lineWidth = 2
       for (let row = 0; row < SIFT_CELLS; row++)
         for (let column = 0; column < SIFT_CELLS; column++) {
@@ -135,11 +142,13 @@ function Heatmap({ points }: { points: Points }) {
   const ref = useCanvas(
     (context, canvas) => {
       const image = context.createImageData(canvas.width, canvas.height)
+      const surface = channels(cssColor('--surface', '#ffffff'))
+      const ink = channels(cssColor('--ink', '#171a4a'))
       for (let line = 0; line < height; line++)
         for (let column = 0; column < 128; column++) {
-          const shade = Math.round(Math.min(255, (values[line * 128 + column] ?? 0) * 1.2))
+          const share = Math.min(1, ((values[line * 128 + column] ?? 0) * 1.2) / 255)
           const at = (line * 128 + column) * 4
-          image.data.set([shade, shade, Math.min(255, shade + 40), 255], at)
+          image.data.set([0, 1, 2].map((c) => surface[c]! + (ink[c]! - surface[c]!) * share).concat(255), at)
         }
       context.putImageData(image, 0, 0)
     },
@@ -189,7 +198,7 @@ export function Journey({ saved, captures, finger, onDone }: { saved: SavedEnrol
       <p className="lead">
         {t.modalities.fingerprint}: <bdi>{f.fingers[finger]}</bdi>
       </p>
-      <p className="notice">{f.journeyLead}</p>
+      <Notice still>{f.journeyLead}</Notice>
       <p>{f.templatesPrepared(['opencv-sift', ...(saved.prepared_methods ?? []).map((method) => method.algorithm)]
         .map((code) => f.methodNames[code] ?? code).join(', '))}</p>
       <ol className="steps">
@@ -204,7 +213,7 @@ export function Journey({ saved, captures, finger, onDone }: { saved: SavedEnrol
       <p className="aside">{f.stepOf(step + 1, STEPS)}</p>
       <div className="step" key={step}>
         <h2>{f.steps[step]}</h2>
-        {step >= 1 && step <= 4 && <p className="notice">{f.demonstratedMethod(f.methodNames[template.algorithm] ?? template.algorithm)}</p>}
+        {step >= 1 && step <= 4 && <Notice still>{f.demonstratedMethod(f.methodNames[template.algorithm] ?? template.algorithm)}</Notice>}
         {step === 0 && (
           <>
             <p>{f.capturesText}</p>
@@ -238,7 +247,7 @@ export function Journey({ saved, captures, finger, onDone }: { saved: SavedEnrol
                     </p>
                     <Compasses values={vector} />
                     <Strip values={vector} />
-                    <button type="button" className="secondary" onClick={() => setNumbers(!numbers)}>
+                    <button type="button" className="secondary small" onClick={() => setNumbers(!numbers)}>
                       {numbers ? f.hideNumbers : f.showNumbers}
                     </button>
                     {numbers && (
@@ -345,11 +354,11 @@ export function Journey({ saved, captures, finger, onDone }: { saved: SavedEnrol
           {f.previous}
         </button>
         {step < STEPS - 1 ? (
-          <button type="button" onClick={() => setStep(step + 1)}>
+          <button type="button" className="primary" onClick={() => setStep(step + 1)}>
             {f.next}
           </button>
         ) : (
-          <button type="button" onClick={onDone}>
+          <button type="button" className="primary" onClick={onDone}>
             {f.done}
           </button>
         )}

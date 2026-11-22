@@ -5,6 +5,11 @@ import { Link } from 'react-router'
 import type { VerificationEvent, VerificationResult, FingerprintAlgorithm } from '../../../shared/bridge'
 import { useSession } from '../session'
 import { errorText } from '../texts'
+import { Notice, type Tone } from '../ui/Notice'
+import { Plate } from '../ui/Plate'
+import { ScoreMeter } from '../ui/ScoreMeter'
+import { Steps } from '../ui/Steps'
+import { Tag } from '../ui/Tag'
 import { Checks, type Captured } from './Journey'
 import { MatchResult } from './MatchResult'
 import { stageSupported } from './stage'
@@ -126,11 +131,12 @@ export function Verification({ finger, enrolled, algorithm, onLeave, onEnrol, on
   const stages: Record<Phase, number> = {
     starting: 0, preparing: -1, place: 0, lift: 0, checking: 1, comparing: 2, saving: 3, verified: 3, failed: -1, cancelled: -1,
   }
+  // The scanner's red dot while it waits for the finger or for its lift; a turning ring while the system works.
+  const tone: Tone = run.phase === 'cancelled' ? 'info' : !stopping && (run.phase === 'place' || run.phase === 'lift') ? 'live' : 'busy'
   const result = run.result
   const scoreLabel = algorithm === 'opencv-sift' ? v.score : v.pores
   // H22: the result on its stage, where the page can draw one; otherwise the same comparison is drawn flat.
   const staged = stageSupported()
-  const scoreMaximum = result ? Math.max(Math.ceil(result.score / 100) * 100, result.threshold * 2, 1) : 1
   const ended = result !== null || run.phase === 'failed' || run.phase === 'cancelled'
   const error = run.error === 'server_unreachable'
     ? v.networkError
@@ -144,62 +150,53 @@ export function Verification({ finger, enrolled, algorithm, onLeave, onEnrol, on
       <p><strong>{f.methodNames[algorithm]}</strong></p>
       {!enrolled ? (
         <>
-          <p className="notice">{v.enrolFirst}</p>
+          <Notice still>{v.enrolFirst}</Notice>
           <div className="actions">
-            <button type="button" onClick={onEnrol}>{f.enrol}</button>
+            <button type="button" className="primary" onClick={onEnrol}>{f.enrol}</button>
             <Link to="/">{v.home}</Link>
-            <button type="button" className="secondary" onClick={onLeave}>{f.back}</button>
+            <button type="button" className="quiet" onClick={onLeave}>{f.back}</button>
           </div>
         </>
       ) : (
         <>
           <p className="aside">{f.methodComparison[algorithm]}</p>
-          <ol className="verification-steps" aria-label={v.title}>
-            {v.stages.map((stage, index) => (
-              <li key={stage} aria-current={!ended && index === stages[run.phase] ? 'step' : undefined}
-                className={result !== null || index < stages[run.phase] ? 'complete' : ''}>{stage}</li>
-            ))}
-          </ol>
+          <Steps label={v.title} steps={v.stages} current={ended ? -1 : stages[run.phase]}
+            reached={(index) => result !== null || index < stages[run.phase]} />
           {result !== null && staged && result.match_view && run.latest ? (
             <MatchResult key={result.attempt_id} result={result} view={result.match_view} image={run.latest.image} tilted={earlier} />
           ) : result !== null ? (
-            <>
-              <div className={`verification-result ${result.accepted ? 'matched' : 'unmatched'}`} role="status">
-                <h2>{result.accepted ? v.accepted : v.rejected}</h2>
-                <p>{v.explanation(result.score, result.threshold)}</p>
-                {result.threshold_provisional && <p className="notice">{f.provisionalExplanation}</p>}
-                <div className="verification-score">
-                  <meter min={0} max={scoreMaximum} value={result.score}
-                    low={result.threshold} high={result.threshold + 1} optimum={scoreMaximum} aria-label={scoreLabel} />
-                  <span className="threshold-marker" style={{ insetInlineStart: `${result.threshold / scoreMaximum * 100}%` }} aria-hidden="true" />
-                </div>
-                <div className="score-axis" aria-hidden="true"><span>0</span><span>{scoreMaximum}</span></div>
-                <div className="score-labels"><strong>{scoreLabel} {result.score}</strong><span>{v.threshold(result.threshold)}</span></div>
-                <p>{v.saved}</p>
-                {!result.accepted && <p>{v.retryHint}</p>}
-              </div>
-            </>
+            <div className="verification-result" role="status">
+              <ScoreMeter score={result.score} threshold={result.threshold} scale="count" label={scoreLabel}
+                thresholdLabel={v.threshold(result.threshold)} accepted={result.accepted}
+                verdict={<h2>{result.accepted ? v.accepted : v.rejected}</h2>}
+                explanation={v.explanation(result.score, result.threshold)} />
+              {result.threshold_provisional && <Notice still>{f.provisionalExplanation}</Notice>}
+              <p>{v.saved}</p>
+              {!result.accepted && <p>{v.retryHint}</p>}
+            </div>
           ) : run.phase === 'failed' ? (
-            <p className="error" role="alert">{error}</p>
+            <Notice tone="alert" role="alert">{error}</Notice>
           ) : (
-            <div className="notice prompt" role="status" aria-live="polite">
-              {run.rejection && <p>{run.rejection}</p>}
-              <strong>{stopping ? v.stopping : prompts[run.phase]}</strong>
+            <div className="prompt" role="status" aria-live="polite">
+              <Notice tone={tone}>
+                {run.rejection && <p>{run.rejection}</p>}
+                <strong>{stopping ? v.stopping : prompts[run.phase]}</strong>
+              </Notice>
             </div>
           )}
           <div className="actions">
             {ended ? (
               <>
                 {needsEnrolment ? (
-                  <button type="button" onClick={onEnrol}>{f.enrolAgain}</button>
+                  <button type="button" className="primary" onClick={onEnrol}>{f.enrolAgain}</button>
                 ) : (
-                  <button type="button" onClick={() => {
+                  <button type="button" className="primary" onClick={() => {
                     if (result) setEarlier(true)
                     setAttempt((value) => value + 1)
                   }}>{result ? v.again : f.tryAgain}</button>
                 )}
                 {result?.accepted && <button type="button" className="secondary" onClick={onChangeMethod}>{v.changeMethod}</button>}
-                <button type="button" className="secondary" onClick={onLeave}>{f.back}</button>
+                <button type="button" className="quiet" onClick={onLeave}>{f.back}</button>
               </>
             ) : (
               <button type="button" className="secondary" disabled={stopping || run.phase === 'saving'} onClick={() => {
@@ -223,11 +220,13 @@ export function Verification({ finger, enrolled, algorithm, onLeave, onEnrol, on
                   </thead>
                   <tbody>
                     {result.comparisons.map((comparison) => (
-                      <tr key={comparison.placement}>
+                      <tr key={comparison.placement} className={comparison.score === result.score ? 'decides' : undefined}>
                         <td>{f.placementTab(comparison.placement)}</td>
                         <td>
-                          <strong>{comparison.score}</strong>
-                          {comparison.score === result.score && <span className="score-note">{v.highest}</span>}
+                          <span className="score-cell">
+                            <span className="number">{comparison.score}</span>
+                            {comparison.score === result.score && <Tag tone="ink">{v.highest}</Tag>}
+                          </span>
                         </td>
                         <td>{!comparison.computed ? v.noFeatures : comparison.accepted ? v.match : v.noMatch}</td>
                       </tr>
@@ -242,7 +241,7 @@ export function Verification({ finger, enrolled, algorithm, onLeave, onEnrol, on
             <details className="verification-details" open={result === null}>
               <summary>{v.details}</summary>
               <div className="beside">
-                <img className="capture" src={`data:image/png;base64,${run.latest.image}`} alt={v.image} width={280} height={280} />
+                <Plate image={run.latest.image} size={280} label={v.image} state={run.rejection ? 'rejected' : 'captured'} />
                 <div><h2>{f.checksTitle}</h2><Checks checks={run.latest.checks} /></div>
               </div>
               {result && <dl>

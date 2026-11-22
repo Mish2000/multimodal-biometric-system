@@ -51,7 +51,7 @@ export function PlayButton({ pcm, rate }: { pcm: Int16Array; rate: number }) {
   const v = t.voice
   const [playing, setPlaying] = useState(false)
   return (
-    <button type="button" className="secondary" disabled={playing || !canPlay()} onClick={() => {
+    <button type="button" className="secondary small" disabled={playing || !canPlay()} onClick={() => {
       setPlaying(true)
       void play(pcm, rate).finally(() => setPlaying(false))
     }}>

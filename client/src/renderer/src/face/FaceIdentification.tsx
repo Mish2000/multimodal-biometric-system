@@ -8,6 +8,7 @@ import { useState } from 'react'
 import type { FaceIdentificationResult, FaceMethod } from '../../../shared/bridge'
 import { GalleryPass, usePass } from '../GalleryPass'
 import { useSession } from '../session'
+import { ScoreMeter } from '../ui/ScoreMeter'
 import { FaceChoice, FaceNotEnrolled, FaceTake, SourceLine } from './FaceTake'
 
 function Title() {
@@ -34,21 +35,22 @@ export function FaceIdentificationView({ result, onAgain, onLeave }: { result: F
   const leader = result.candidates[0]
   return (
     <section className="face-identification">
-      <h1 ref={heading} tabIndex={-1}>{result.accepted ? n.found : n.notFound}</h1>
+      <h1 ref={heading} tabIndex={-1} className="display">{result.accepted ? n.found : n.notFound}</h1>
       {result.accepted && leader && (
         <p><strong>{result.tied_leaders > 1 ? n.tie(result.tied_leaders) : leader.own ? n.you : n.otherUser}</strong></p>
       )}
-      <meter className="face-score" min={0} max={1} value={Math.max(0, result.score)} aria-label={v.scoreLabel} />
-      <p className={result.accepted ? 'ok' : 'error'}>{n.score(result.score, result.threshold)}</p>
+      <ScoreMeter score={result.score} threshold={result.threshold} scale="similarity" label={v.scoreLabel}
+        shown={result.score.toFixed(3)} thresholdLabel={t.matchAbove(result.threshold)} accepted={result.accepted}
+        explanation={n.score(result.score, result.threshold)} />
       <div className="table-wrap">
         <table>
           <caption>{n.ranking(result.candidates.length, result.enrolments)}</caption>
           <thead><tr><th>{n.rank}</th><th>{n.candidate}</th><th>{v.scoreLabel}</th><th>{n.decision}</th></tr></thead>
           <tbody>{result.candidates.map((candidate) => (
             <tr key={candidate.rank} className={candidate.own ? 'own' : undefined}>
-              <td>{candidate.rank}</td>
+              <td className="number">{candidate.rank}</td>
               <td>{candidate.own ? n.you : n.otherUser}</td>
-              <td><bdi dir="ltr">{candidate.score.toFixed(3)}</bdi></td>
+              <td className="number"><bdi dir="ltr">{candidate.score.toFixed(3)}</bdi></td>
               <td>{candidate.accepted ? f.above : f.notAbove}</td>
             </tr>
           ))}</tbody>
@@ -77,8 +79,8 @@ export function FaceIdentificationView({ result, onAgain, onLeave }: { result: F
       <p className="aside">{v.time(result.duration_ms)} {v.saved}</p>
       <SourceLine source={result.source} size={result.size} />
       <div className="actions">
-        <button type="button" onClick={onAgain}>{n.again}</button>
-        <button type="button" className="secondary" onClick={onLeave}>{f.back}</button>
+        <button type="button" className="primary" onClick={onAgain}>{n.again}</button>
+        <button type="button" className="quiet" onClick={onLeave}>{f.back}</button>
       </div>
     </section>
   )

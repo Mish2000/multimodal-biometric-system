@@ -6,6 +6,8 @@ import { useState, type ComponentType } from 'react'
 import type { ApiResult, VoiceCheck, VoiceCheckResult, VoiceEnrolmentAnswer, VoiceMethod, VoicePair, VoiceSaved } from '../../../shared/bridge'
 import { errorText, type Texts } from '../texts'
 import { useSession } from '../session'
+import { Icon } from '../ui/Icon'
+import { Notice } from '../ui/Notice'
 import { MicrophonePanel, type PanelProps, type Recorded } from './MicrophonePanel'
 import { RecordingCard } from './Recording'
 
@@ -36,7 +38,7 @@ export function VoiceChecks({ checks }: { checks: VoiceCheck[] }) {
     <ul className="checks">
       {checks.map((item) => (
         <li key={item.name} className={item.passed ? 'met' : 'missing'}>
-          <span className="mark" aria-hidden="true">{item.passed ? '✓' : '✗'}</span> {checkLine(item, t)}
+          <Icon name={item.passed ? 'check' : 'alert'} /><span>{checkLine(item, t)}</span>
         </li>
       ))}
     </ul>
@@ -50,11 +52,13 @@ export function VoicePairs({ pairs, threshold }: { pairs: VoicePair[]; threshold
     <ul className="checks">
       {pairs.map((pair) => (
         <li key={`${pair.reference}-${pair.probe}`} className={pair.accepted ? 'met' : 'missing'}>
-          <span className="mark" aria-hidden="true">{pair.accepted ? '✓' : '✗'}</span>
-          <strong>{v.pair(pair.probe, pair.reference)}</strong>{' '}
-          <bdi dir="ltr">{pair.score.toFixed(3)}</bdi>{' '}
-          <span className="aside">
-            {pair.accepted ? v.above : v.notAbove} (<bdi dir="ltr">{threshold}</bdi>)
+          <Icon name={pair.accepted ? 'check' : 'alert'} />
+          <span>
+            <strong>{v.pair(pair.probe, pair.reference)}</strong>{' '}
+            <bdi dir="ltr">{pair.score.toFixed(3)}</bdi>{' '}
+            <span className="aside">
+              {pair.accepted ? v.above : v.notAbove} (<bdi dir="ltr">{threshold}</bdi>)
+            </span>
           </span>
         </li>
       ))}
@@ -138,24 +142,30 @@ export function VoiceEnrolment({ method, onSaved, onLeave, Panel = MicrophonePan
       </ol>
       {phase === 'failed' ? (
         <>
-          <p className="error" role="alert">{failure}</p>
+          <Notice tone="alert" role="alert">{failure}</Notice>
           <div className="actions">
-            <button type="button" onClick={restart}>{v.tryAgain}</button>
-            <button type="button" className="secondary" onClick={onLeave}>{v.back}</button>
+            <button type="button" className="primary" onClick={restart}>{v.tryAgain}</button>
+            <button type="button" className="quiet" onClick={onLeave}>{v.back}</button>
           </div>
         </>
       ) : (
         <>
           <Panel busy={phase !== 'live'} seconds={method.recording_seconds} rate={method.sample_rate} sentence={sentence}
             onRecorded={(recorded) => void check(recorded)} />
-          <p className="notice prompt" role="status" aria-live="polite">
-            {phase === 'checking' ? v.checking : phase === 'saving' ? v.saving : shown?.kind === 'kept' ? v.kept(shown.number) : shown?.kind === 'another' ? v.another : ''}
-          </p>
+          <div className="prompt" role="status" aria-live="polite">
+            {phase === 'checking' || phase === 'saving' ? (
+              <Notice tone="busy">{phase === 'checking' ? v.checking : v.saving}</Notice>
+            ) : shown?.kind === 'kept' ? (
+              <Notice tone="done">{v.kept(shown.number)}</Notice>
+            ) : shown?.kind === 'another' ? (
+              <Notice>{v.another}</Notice>
+            ) : null}
+          </div>
           {shown?.kind === 'rejected' && (
-            <div className="rejected">
+            <Notice tone="alert" className="rejected">
               <p>{v.rejected}</p>
               <VoiceChecks checks={shown.checks} />
-            </div>
+            </Notice>
           )}
           <button type="button" className="secondary" onClick={onLeave}>{v.cancel}</button>
         </>

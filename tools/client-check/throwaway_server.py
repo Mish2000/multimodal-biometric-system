@@ -172,7 +172,7 @@ def main() -> None:
                                                    port=config.server_port, log_level="info"))
 
             def watch() -> None:
-                deadline = time.monotonic() + 15 * 60
+                deadline = time.monotonic() + (30 if os.environ.get("MBS_CHECK_SHOTS") else 15) * 60
                 while not stop.exists() and time.monotonic() < deadline:
                     time.sleep(0.5)
                 server.should_exit = True

@@ -3,6 +3,7 @@ import { LANGUAGES, type Language, type Theme } from '../../../shared/bridge'
 import { PasswordForm } from '../PasswordForm'
 import { useSession } from '../session'
 import { errorText, TEXTS } from '../texts'
+import { Notice } from '../ui/Notice'
 
 const THEME_CHOICES: Theme[] = ['light', 'dark', 'system']
 
@@ -62,9 +63,9 @@ export function Settings() {
         <p className="aside">{t.languageNote}</p>
       </section>
       {error && (
-        <p className="error" role="alert">
+        <Notice tone="alert" role="alert">
           {error}
-        </p>
+        </Notice>
       )}
       <section className="setting" aria-labelledby="setting-security">
         <h2 id="setting-security">{t.security}</h2>

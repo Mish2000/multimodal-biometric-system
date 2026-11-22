@@ -4,6 +4,7 @@
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import type { VoiceFile as FileFacts, VoiceSource } from '../../../shared/bridge'
 import { useSession } from '../session'
+import { Notice } from '../ui/Notice'
 
 export const FILE_BYTES = 10 * 1024 * 1024 // H27
 
@@ -83,7 +84,7 @@ export function VoiceFile({ busy, onFile }: { busy: boolean; onFile: (recording:
       <div className={`drop-zone${dragging ? ' dragging' : ''}`}>
         <p><strong>{dragging ? files.drop : files.dropZone}</strong></p>
         <p className="aside">{files.uploadNote}</p>
-        <button type="button" disabled={busy} onClick={() => input.current?.click()}>{files.choose}</button>
+        <button type="button" className="primary" disabled={busy} onClick={() => input.current?.click()}>{files.choose}</button>
         <input ref={input} type="file" accept=".wav,.mp3,.ogg,.opus,audio/wav,audio/mpeg,audio/ogg" hidden data-testid="voice-file"
           onChange={(event) => {
             const chosen = Array.from(event.target.files ?? [])
@@ -91,7 +92,7 @@ export function VoiceFile({ busy, onFile }: { busy: boolean; onFile: (recording:
             void take(chosen)
           }} />
       </div>
-      {notice && <p className="error" role="alert">{notice}</p>}
+      {notice && <Notice tone="alert" role="alert">{notice}</Notice>}
     </>
   )
 }

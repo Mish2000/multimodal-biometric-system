@@ -4,6 +4,10 @@ import { Link } from 'react-router'
 import type { FingerprintAlgorithm, FingerprintMethod, IdentificationEvent, IdentificationResult } from '../../../shared/bridge'
 import { useSession } from '../session'
 import { errorText } from '../texts'
+import { Notice, type Tone } from '../ui/Notice'
+import { Plate } from '../ui/Plate'
+import { ScoreMeter } from '../ui/ScoreMeter'
+import { Steps } from '../ui/Steps'
 import { Checks, type Captured } from './Journey'
 import { MatchView } from './MatchView'
 import { MethodChoices } from './MethodChoices'
@@ -136,7 +140,8 @@ export function Identification({ enrolled, methods, methodError, onReloadMethods
     ?? errorText({ ok: false, status: 0, error: run.error }, t)
   const needsEnrolment = !enrolled || run.error === 'not_enrolled'
   const leader = result?.candidates[0]
-  const maximum = result ? Math.max(Math.ceil(result.score / 100) * 100, result.threshold * 2, 1) : 1
+  // The scanner's red dot while it waits for the finger or for its lift; a turning ring while the system works.
+  const tone: Tone = run.phase === 'cancelled' ? 'info' : !stopping && (run.phase === 'place' || run.phase === 'lift') ? 'live' : 'busy'
 
   return (
     <section className="identification verification">
@@ -145,9 +150,9 @@ export function Identification({ enrolled, methods, methodError, onReloadMethods
       {run.phase !== 'ready' && <p><strong>{methodName}</strong></p>}
       {needsEnrolment ? (
         <>
-          <p className="notice">{i.enrolFirst}</p>
+          <Notice still>{i.enrolFirst}</Notice>
           <div className="actions">
-            <button type="button" onClick={onLeave}>{i.enrol}</button>
+            <button type="button" className="primary" onClick={onLeave}>{i.enrol}</button>
             <Link to="/">{f.verification.home}</Link>
           </div>
         </>
@@ -158,40 +163,34 @@ export function Identification({ enrolled, methods, methodError, onReloadMethods
           <MethodChoices methods={methods} algorithm={algorithm} onChoose={setAlgorithm} error={methodError}
             onRetry={onReloadMethods} purpose="identification" />
           <div className="actions">
-            <button type="button" disabled={!selectedMethod?.available} onClick={() => setAttempt((value) => value + 1)}>{i.begin}</button>
-            <button type="button" className="secondary" onClick={onLeave}>{f.back}</button>
+            <button type="button" className="primary" disabled={!selectedMethod?.available} onClick={() => setAttempt((value) => value + 1)}>{i.begin}</button>
+            <button type="button" className="quiet" onClick={onLeave}>{f.back}</button>
           </div>
         </>
       ) : (
         <>
-          <ol className="verification-steps" aria-label={i.title}>
-            {i.stages.map((name, index) => (
-              <li key={name} aria-current={!ended && stage[run.phase] === index ? 'step' : undefined}
-                className={result !== null || index < stage[run.phase] ? 'complete' : ''}>{name}</li>
-            ))}
-          </ol>
+          <Steps label={i.title} steps={i.stages} current={ended ? -1 : stage[run.phase]}
+            reached={(index) => result !== null || index < stage[run.phase]} />
           {result ? (
-            <div className={`verification-result ${result.accepted ? 'matched' : 'unmatched'}`} role="status">
-              <h2>{result.accepted ? i.found : i.notFound}</h2>
-              <p>{i.decision(result.score, result.threshold)}</p>
-              {result.threshold_provisional && <p className="notice">{f.provisionalExplanation}</p>}
-              {result.accepted && leader && <p><strong>{result.tied_leaders > 1 ? i.tie(result.tied_leaders)
-                : leader.own ? i.yourFinger(f.fingers[leader.finger ?? 0] ?? '') : i.otherUser}</strong></p>}
-              <div className="verification-score">
-                <meter min={0} max={maximum} value={result.score} low={result.threshold}
-                  high={result.threshold + 1} optimum={maximum} aria-label={scoreLabel} />
-                <span className="threshold-marker" style={{ insetInlineStart: `${result.threshold / maximum * 100}%` }} aria-hidden="true" />
-              </div>
-              <div className="score-axis" aria-hidden="true"><span>0</span><span>{maximum}</span></div>
-              <div className="score-labels"><strong>{scoreLabel} {result.score}</strong><span>{f.verification.threshold(result.threshold)}</span></div>
+            <div className="verification-result" role="status">
+              <ScoreMeter score={result.score} threshold={result.threshold} scale="count" label={scoreLabel}
+                thresholdLabel={f.verification.threshold(result.threshold)} accepted={result.accepted}
+                verdict={<h2>{result.accepted ? i.found : i.notFound}</h2>}
+                explanation={i.decision(result.score, result.threshold)}>
+                {result.accepted && leader && <p className="score-leader"><strong>{result.tied_leaders > 1 ? i.tie(result.tied_leaders)
+                  : leader.own ? i.yourFinger(f.fingers[leader.finger ?? 0] ?? '') : i.otherUser}</strong></p>}
+              </ScoreMeter>
+              {result.threshold_provisional && <Notice still>{f.provisionalExplanation}</Notice>}
               <p>{f.verification.saved}</p>
             </div>
           ) : run.phase === 'failed' ? (
-            <p className="error" role="alert">{error}</p>
+            <Notice tone="alert" role="alert">{error}</Notice>
           ) : (
-            <div className="notice prompt" role="status" aria-live="polite">
-              {run.rejection && <p>{run.rejection}</p>}
-              <strong>{stopping ? i.stopping : prompts[run.phase]}</strong>
+            <div className="prompt" role="status" aria-live="polite">
+              <Notice tone={tone}>
+                {run.rejection && <p>{run.rejection}</p>}
+                <strong>{stopping ? i.stopping : prompts[run.phase]}</strong>
+              </Notice>
             </div>
           )}
           {run.phase === 'preparing' && (
@@ -213,13 +212,13 @@ export function Identification({ enrolled, methods, methodError, onReloadMethods
           <div className="actions">
             {ended ? (
               <>
-                <button type="button" onClick={() => setAttempt((value) => value + 1)}>{result ? i.again : f.tryAgain}</button>
+                <button type="button" className="primary" onClick={() => setAttempt((value) => value + 1)}>{result ? i.again : f.tryAgain}</button>
                 {result && <button type="button" className="secondary" onClick={() => {
                   setAttempt(0)
                   setRun({ ...START, phase: 'ready' })
                   onReloadMethods()
                 }}>{f.verification.changeMethod}</button>}
-                <button type="button" className="secondary" onClick={onLeave}>{f.back}</button>
+                <button type="button" className="quiet" onClick={onLeave}>{f.back}</button>
               </>
             ) : (
               <button type="button" className="secondary" disabled={stopping || run.phase === 'saving'} onClick={() => {
@@ -239,10 +238,10 @@ export function Identification({ enrolled, methods, methodError, onReloadMethods
                   <caption>{i.ranking(result.candidates.length, result.enrolments)}</caption>
                   <thead><tr><th>{i.rank}</th><th>{i.candidate}</th><th>{scoreLabel}</th><th>{f.verification.decision}</th></tr></thead>
                   <tbody>{result.candidates.map((candidate) => (
-                    <tr key={candidate.rank}>
-                      <td>{candidate.rank}</td>
+                    <tr key={candidate.rank} className={candidate.own ? 'own' : undefined}>
+                      <td className="number">{candidate.rank}</td>
                       <td>{candidate.own ? i.yourFinger(f.fingers[candidate.finger ?? 0] ?? '') : i.otherUser}</td>
-                      <td><strong>{candidate.score}</strong></td>
+                      <td className="number">{candidate.score}</td>
                       <td>{candidate.accepted ? f.verification.match : f.verification.noMatch}</td>
                     </tr>
                   ))}</tbody>
@@ -262,7 +261,7 @@ export function Identification({ enrolled, methods, methodError, onReloadMethods
             <details className="verification-details" open={result === null}>
               <summary>{f.verification.details}</summary>
               <div className="beside">
-                <img className="capture" src={`data:image/png;base64,${run.latest.image}`} alt={f.verification.image} width={280} height={280} />
+                <Plate image={run.latest.image} size={280} label={f.verification.image} state={run.rejection ? 'rejected' : 'captured'} />
                 <div><h2>{f.checksTitle}</h2><Checks checks={run.latest.checks} /></div>
               </div>
               {result && <dl>

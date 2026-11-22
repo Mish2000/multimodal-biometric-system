@@ -3,6 +3,7 @@ import type { Account } from '../../shared/bridge'
 import { PasswordField } from './PasswordField'
 import { useSession } from './session'
 import { errorText } from './texts'
+import { Notice } from './ui/Notice'
 
 // The password's replacement, shared by the settings' security area (H28) and the one-time password's own
 // screen (H12), with the strength meter on the new password (H30). The server signs the account's other
@@ -53,16 +54,16 @@ export function PasswordForm({ oneTime, onChanged }: { oneTime: boolean; onChang
       <PasswordField label={t.newPassword} value={next} onChange={setNext} autoComplete="new-password" meter />
       <PasswordField label={t.repeatPassword} value={repeat} onChange={setRepeat} autoComplete="new-password" />
       {error && (
-        <p className="error" role="alert">
+        <Notice tone="alert" role="alert">
           {error}
-        </p>
+        </Notice>
       )}
       {done && (
-        <p className="ok" role="status">
+        <Notice tone="done" role="status">
           {t.passwordChanged}
-        </p>
+        </Notice>
       )}
-      <button type="submit" disabled={busy || !current || !next || !repeat}>
+      <button type="submit" className="primary" disabled={busy || !current || !next || !repeat}>
         {busy ? t.saving : oneTime ? t.save : t.changePassword}
       </button>
     </form>

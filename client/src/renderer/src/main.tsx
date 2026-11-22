@@ -3,7 +3,11 @@ import { createRoot } from 'react-dom/client'
 import { HashRouter } from 'react-router'
 import { App } from './App'
 import { SessionProvider } from './session'
+import { holdTransitionsOnThemeChange } from './themeChange'
 import './styles.css'
+
+holdTransitionsOnThemeChange(window.matchMedia('(prefers-color-scheme: dark)'), document.documentElement,
+  (callback) => window.requestAnimationFrame(callback))
 
 createRoot(document.getElementById('root') as HTMLElement).render(
   <StrictMode>

@@ -36,7 +36,7 @@ export function VoiceResult({ saved, kept, rate, onDone }: { saved: VoiceSaved; 
       {saved.not_kept.length > 0 && <p className="aside">{v.notKept(saved.not_kept.join(', '))}</p>}
       <p>{v.stored(saved.samples.length, length)}</p>
       <div className="actions">
-        <button type="button" onClick={onDone}>{v.done}</button>
+        <button type="button" className="primary" onClick={onDone}>{v.done}</button>
       </div>
     </section>
   )

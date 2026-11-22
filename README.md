@@ -12,7 +12,7 @@
   <img alt=".NET Framework 4.8" src="https://img.shields.io/badge/.NET_Framework-4.8-512BD4?logo=dotnet&logoColor=white">
 </p>
 <p align="center">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-351%20server%20%C2%B7%20218%20client%20%C2%B7%2015%20scanner%20%C2%B7%2039%20engines-2EA44F">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-351%20server%20%C2%B7%20233%20client%20%C2%B7%2015%20scanner%20%C2%B7%2039%20engines-2EA44F">
   <img alt="Cryptography" src="https://img.shields.io/badge/crypto-AES--256--GCM%20%C2%B7%20Argon2id%20%C2%B7%20HMAC-7C3AED">
   <a href="https://github.com/Mish2000/multimodal-biometric-system/actions/workflows/checks.yml"><img alt="Checks" src="https://github.com/Mish2000/multimodal-biometric-system/actions/workflows/checks.yml/badge.svg?branch=main"></a>
   <img alt="Progress" src="https://img.shields.io/badge/progress-increment%205%20of%206%20complete-F59E0B">
@@ -207,7 +207,7 @@ ruff check ..              # lint of all the system's Python (ruff.toml)
 cd ../client
 npm ci
 npm run dev                # the app, with the server running
-npm test                   # 218 tests
+npm test                   # 233 tests
 npm run lint               # oxlint (.oxlintrc.json)
 npm run build && cd ..
 python tools/client-check/run.py first   # the built client against a throwaway server, offscreen

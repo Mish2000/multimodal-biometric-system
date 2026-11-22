@@ -6,6 +6,7 @@ import { LanguageSwitch } from '../LanguageSwitch'
 import { PasswordField } from '../PasswordField'
 import { useSession } from '../session'
 import { errorText } from '../texts'
+import { Notice } from '../ui/Notice'
 
 // A user account (H3) with its mobile phone (H29), a password under the rules of H30 with its meter, and
 // the language of this screen as the account's (H31).
@@ -64,11 +65,11 @@ export function Register() {
           hint={t.nationalIdHint}
         />
         {error && (
-          <p className="error" role="alert">
+          <Notice tone="alert" role="alert">
             {error}
-          </p>
+          </Notice>
         )}
-        <button type="submit" disabled={busy || !username || !email || !phone || !password || !nationalId}>
+        <button type="submit" className="primary" disabled={busy || !username || !email || !phone || !password || !nationalId}>
           {busy ? t.creatingAccount : t.createAccount}
         </button>
       </form>

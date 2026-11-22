@@ -27,7 +27,7 @@ export function FaceResult({ saved, onDone }: { saved: FaceSaved; onDone: () => 
       {saved.not_kept.length > 0 && <p className="aside">{f.notKept(saved.not_kept.join(', '))}</p>}
       <p>{f.stored(saved.samples.length, length)}</p>
       <div className="actions">
-        <button type="button" onClick={onDone}>{f.done}</button>
+        <button type="button" className="primary" onClick={onDone}>{f.done}</button>
       </div>
     </section>
   )

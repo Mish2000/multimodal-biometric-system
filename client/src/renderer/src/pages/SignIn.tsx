@@ -6,6 +6,7 @@ import { LanguageSwitch } from '../LanguageSwitch'
 import { PasswordField } from '../PasswordField'
 import { useSession } from '../session'
 import { errorText } from '../texts'
+import { Notice } from '../ui/Notice'
 
 export function SignIn() {
   const { call, signedIn, notice, t, chosenLanguage } = useSession()
@@ -46,28 +47,30 @@ export function SignIn() {
       <h1>{t.appName}</h1>
       <p className="lead">{t.signInLead}</p>
       {notice && (
-        <p className="notice" role="status">
+        <Notice role="status" still>
           {notice}
-        </p>
+        </Notice>
       )}
       {server === 'down' && (
-        <p className="error" role="alert">
-          {t.serverDown.before}
-          <button type="button" className="link" onClick={checkServer}>
-            {t.serverDown.action}
-          </button>
-          {t.serverDown.after}
-        </p>
+        <Notice tone="alert" role="alert">
+          <p>
+            {t.serverDown.before}
+            <button type="button" className="link" onClick={checkServer}>
+              {t.serverDown.action}
+            </button>
+            {t.serverDown.after}
+          </p>
+        </Notice>
       )}
       <form onSubmit={submit} noValidate>
         <Field label={t.login} value={login} onChange={setLogin} autoComplete="username" />
         <PasswordField label={t.password} value={password} onChange={setPassword} autoComplete="current-password" />
         {error && (
-          <p className="error" role="alert">
+          <Notice tone="alert" role="alert">
             {error}
-          </p>
+          </Notice>
         )}
-        <button type="submit" disabled={busy || !login || !password}>
+        <button type="submit" className="primary" disabled={busy || !login || !password}>
           {busy ? t.signingIn : t.signIn}
         </button>
       </form>

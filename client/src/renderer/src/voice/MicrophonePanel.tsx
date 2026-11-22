@@ -4,6 +4,7 @@
 // that asked for it.
 import { useEffect, useEffectEvent, useState } from 'react'
 import { useSession } from '../session'
+import { Notice } from '../ui/Notice'
 import { openMicrophone, problemOf, record, type MicrophoneInput, type MicrophoneProblem } from './input'
 import { looksSilent, SILENT_SECONDS, type Microphone } from './microphone'
 import { useMicrophones } from './useMicrophones'
@@ -117,7 +118,7 @@ function MicrophoneView({ microphone, busy, seconds, rate, sentence, onRecorded,
         <p className="aside">{input === null ? v.starting : v.howLong(seconds)}</p>
       )}
       <div className="actions">
-        <button type="button" disabled={busy || input === null || recording} onClick={() => void start()}>
+        <button type="button" className="primary" disabled={busy || input === null || recording} onClick={() => void start()}>
           {recording ? v.recording : v.record}
         </button>
       </div>
@@ -169,18 +170,18 @@ export function MicrophonePanel(props: PanelProps) {
           </label>
         </div>
       )}
-      {notice && <p className="notice" role="status">{notice}</p>}
+      {notice && <Notice role="status">{notice}</Notice>}
       {choice.microphones === null ? (
         <p className="aside">{v.starting}</p>
       ) : current === null ? (
         <>
-          <p className="error" role="alert">{choice.microphones.length > 0 ? v.allSilent : v.noMicrophone}</p>
-          <button type="button" onClick={retry}>{v.retryMicrophones}</button>
+          <Notice tone="alert" role="alert">{choice.microphones.length > 0 ? v.allSilent : v.noMicrophone}</Notice>
+          <button type="button" className="primary" onClick={retry}>{v.retryMicrophones}</button>
         </>
       ) : problem !== null && problem.microphone === current.key ? (
         <>
-          <p className="error" role="alert">{problem.text}</p>
-          <button type="button" onClick={retry}>{v.retryMicrophones}</button>
+          <Notice tone="alert" role="alert">{problem.text}</Notice>
+          <button type="button" className="primary" onClick={retry}>{v.retryMicrophones}</button>
         </>
       ) : (
         <MicrophoneView

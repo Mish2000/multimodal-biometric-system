@@ -9,6 +9,8 @@ import { useNavigate } from 'react-router'
 import type { FaceCheck, FaceDetection, FaceMethod, FaceSize, FaceSource, RouteName } from '../../../shared/bridge'
 import { errorText } from '../texts'
 import { useSession } from '../session'
+import { Icon } from '../ui/Icon'
+import { Notice } from '../ui/Notice'
 import { CameraPanel } from './CameraPanel'
 import { checkLine } from './FaceEnrolment'
 
@@ -18,10 +20,10 @@ export function FaceNotEnrolled({ title, text, onEnrol }: { title: ReactNode; te
   return (
     <section>
       <h1>{title}</h1>
-      <p className="notice" role="status">{text}</p>
+      <Notice role="status" still>{text}</Notice>
       <div className="actions">
-        <button type="button" onClick={onEnrol}>{t.face.verify.enrolNow}</button>
-        <button type="button" className="secondary" onClick={() => navigate('/')}>{t.face.verify.home}</button>
+        <button type="button" className="primary" onClick={onEnrol}>{t.face.verify.enrolNow}</button>
+        <button type="button" className="quiet" onClick={() => navigate('/')}>{t.face.verify.home}</button>
       </div>
     </section>
   )
@@ -51,9 +53,9 @@ export function FaceChoice({ title, lead, method, notes, live, onLive, onFile, o
         {notes.map((note) => <p key={note} className="aside">{note}</p>)}
       </div>
       <div className="actions">
-        <button type="button" disabled={!method.available} onClick={onLive}>{live}</button>
+        <button type="button" className="primary" disabled={!method.available} onClick={onLive}>{live}</button>
         <button type="button" className="secondary" disabled={!method.available} onClick={onFile}>{f.files.upload}</button>
-        <button type="button" className="secondary" onClick={onLeave}>{f.back}</button>
+        <button type="button" className="quiet" onClick={onLeave}>{f.back}</button>
       </div>
       <p className="aside">{f.files.uploadNote}</p>
     </section>
@@ -182,22 +184,22 @@ export function FaceTake<T extends { status: string }>({ title, mode, route, min
       <section className="face-outcome">
         <h1>{title}</h1>
         {phase === 'failed' ? (
-          <p className="error" role="alert">{failure}</p>
+          <Notice tone="alert" role="alert">{failure}</Notice>
         ) : (
-          <div className="rejected">
+          <Notice tone="alert" className="rejected">
             <h2>{f.rejectedTitle}</h2>
             <ul className="checks">
               {rejected.map((item) => (
                 <li key={item.name} className={item.passed ? 'met' : 'missing'}>
-                  <span className="mark" aria-hidden="true">{item.passed ? '✓' : '✗'}</span> {checkLine(item, t)}
+                  <Icon name={item.passed ? 'check' : 'alert'} /><span>{checkLine(item, t)}</span>
                 </li>
               ))}
             </ul>
-          </div>
+          </Notice>
         )}
         <div className="actions">
-          <button type="button" onClick={onChoice}>{again}</button>
-          <button type="button" className="secondary" onClick={onLeave}>{f.back}</button>
+          <button type="button" className="primary" onClick={onChoice}>{again}</button>
+          <button type="button" className="quiet" onClick={onLeave}>{f.back}</button>
         </div>
       </section>
     )
@@ -214,7 +216,7 @@ export function FaceTake<T extends { status: string }>({ title, mode, route, min
         <div className={`drop-zone${dragging ? ' dragging' : ''}`}>
           <p><strong>{dragging ? f.files.drop : f.files.dropZone}</strong></p>
           <p className="aside">{f.files.uploadNote}</p>
-          <button type="button" disabled={phase !== 'ready'} onClick={() => input.current?.click()}>{f.files.choose}</button>
+          <button type="button" className="primary" disabled={phase !== 'ready'} onClick={() => input.current?.click()}>{f.files.choose}</button>
           <input ref={input} type="file" accept="image/jpeg,image/png" hidden data-testid="face-file"
             onChange={(event) => {
               const files = Array.from(event.target.files ?? [])
@@ -223,8 +225,8 @@ export function FaceTake<T extends { status: string }>({ title, mode, route, min
             }} />
         </div>
       )}
-      {notice && <p className="error" role="alert">{notice}</p>}
-      <p className="notice prompt" role="status" aria-live="polite">{phase === 'checking' ? comparing : ''}</p>
+      {notice && <Notice tone="alert" role="alert">{notice}</Notice>}
+      <div className="prompt" role="status" aria-live="polite">{phase === 'checking' && <Notice tone="busy">{comparing}</Notice>}</div>
       <button type="button" className="secondary" onClick={onChoice}>{f.cancel}</button>
     </section>
   )

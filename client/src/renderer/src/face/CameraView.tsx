@@ -4,6 +4,7 @@
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import type { FaceBox, FaceDetection } from '../../../shared/bridge'
 import { useSession } from '../session'
+import { Notice } from '../ui/Notice'
 import { FLAT_SAMPLES, guidance, looksCovered, lumaSpread, type Camera, type Guidance } from './camera'
 
 const LIVE_WIDTH = 320 // the small copy sent to find the face; YuNet finds faces of a few pixels
@@ -138,8 +139,9 @@ export function CameraView({ camera, busy, minimumWidth, onTaken, onCovered, onE
     const style = getComputedStyle(canvas)
     context.lineWidth = Math.max(2, canvas.width / 320)
     for (const face of faces) {
+      // The found face in the mark's colour once it can be taken, in second ink while it cannot yet (H22).
       context.strokeStyle =
-        live === 'ready' ? style.getPropertyValue('--ok').trim() || '#1a7f37' : style.getPropertyValue('--medium').trim() || '#a16207'
+        live === 'ready' ? style.getPropertyValue('--mark').trim() || '#0c97a6' : style.getPropertyValue('--ink-2').trim() || '#555a86'
       context.fillStyle = context.strokeStyle
       const [x, y, w, h] = face.box
       context.strokeRect(x, y, w, h)
@@ -169,11 +171,11 @@ export function CameraView({ camera, busy, minimumWidth, onTaken, onCovered, onE
         <canvas ref={overlay} aria-hidden="true" />
         {!started && <p className="camera-status">{f.starting}</p>}
       </div>
-      <p className={live === 'ready' ? 'ok guidance' : 'notice guidance'} role="status" aria-live="polite">
-        {live === null ? f.starting : f.guide[live] ?? ''}
-      </p>
+      <div className="guidance" role="status" aria-live="polite">
+        <Notice tone={live === null ? 'busy' : 'live'}>{live === null ? f.starting : f.guide[live] ?? ''}</Notice>
+      </div>
       <div className="actions">
-        <button type="button" disabled={!ready} onClick={take}>
+        <button type="button" className="primary" disabled={!ready} onClick={take}>
           {f.take}
         </button>
       </div>

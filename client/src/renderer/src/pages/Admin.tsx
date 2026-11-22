@@ -3,6 +3,9 @@ import { Field } from '../Field'
 import { PasswordField, RevealInput } from '../PasswordField'
 import { useSession } from '../session'
 import { errorText, type Texts } from '../texts'
+import { Icon } from '../ui/Icon'
+import { Notice } from '../ui/Notice'
+import { Tag } from '../ui/Tag'
 
 interface AccountRow {
   id: string
@@ -52,9 +55,9 @@ export function Admin() {
     <section>
       <h1>{t.administration}</h1>
       {error && (
-        <p className="error" role="alert">
+        <Notice tone="alert" role="alert">
           {errorText(error, t)}
-        </p>
+        </Notice>
       )}
       <h2>{t.accounts}</h2>
       {accounts === null ? (
@@ -136,8 +139,8 @@ function AccountLine({ row, self, changed }: { row: AccountRow; self: boolean; c
         <bdi>{row.username}</bdi>
       </td>
       <td dir="ltr">{row.email}</td>
-      <td>{t.roles[row.role]}</td>
-      <td>{t.statuses[row.status]}</td>
+      <td>{row.role === 'admin' ? <Tag tone="ink">{t.roles[row.role]}</Tag> : t.roles[row.role]}</td>
+      <td>{row.status === 'disabled' ? <Tag>{t.statuses[row.status]}</Tag> : t.statuses[row.status]}</td>
       <td>{when(row.created_at, t)}</td>
       <td>
         {self ? (
@@ -151,20 +154,21 @@ function AccountLine({ row, self, changed }: { row: AccountRow; self: boolean; c
               onChange={setPassword}
               autoComplete="current-password"
             />
-            <button type="submit" disabled={!password}>
+            <button type="submit" className="primary small" disabled={!password}>
               {next === 'disabled' ? t.disable : t.enable}
             </button>
             <button type="button" className="link" onClick={() => setAsking(false)}>
               {t.cancel}
             </button>
             {error && (
-              <span className="error" role="alert">
+              <span className="inline-problem" role="alert">
+                <Icon name="alert" />
                 {error}
               </span>
             )}
           </form>
         ) : (
-          <button type="button" className="secondary" onClick={() => setAsking(true)}>
+          <button type="button" className="secondary small" onClick={() => setAsking(true)}>
             {next === 'disabled' ? t.disableAsk : t.enableAsk}
           </button>
         )}
@@ -204,26 +208,28 @@ function NewAdministrator({ created }: { created(): Promise<void> }) {
     <>
       <h2>{t.newAdministrator}</h2>
       {oneTime && (
-        <p className="ok" role="status">
-          {t.administratorCreated.before}
-          <bdi>{oneTime.username}</bdi>
-          {t.administratorCreated.middle}
-          <code dir="ltr">{oneTime.password}</code>
-          {t.administratorCreated.after}
-        </p>
+        <Notice tone="done" role="status">
+          <p>
+            {t.administratorCreated.before}
+            <bdi>{oneTime.username}</bdi>
+            {t.administratorCreated.middle}
+            <code dir="ltr">{oneTime.password}</code>
+            {t.administratorCreated.after}
+          </p>
+        </Notice>
       )}
       <form className="row" onSubmit={submit} noValidate>
         <Field label={t.username} value={username} onChange={setUsername} autoComplete="off" />
         <Field label={t.email} type="email" value={email} onChange={setEmail} autoComplete="off" dir="ltr" />
         <PasswordField label={t.confirmPassword} value={password} onChange={setPassword} autoComplete="current-password" />
-        <button type="submit" disabled={!username || !email || !password}>
+        <button type="submit" className="primary" disabled={!username || !email || !password}>
           {t.create}
         </button>
       </form>
       {error && (
-        <p className="error" role="alert">
+        <Notice tone="alert" role="alert">
           {error}
-        </p>
+        </Notice>
       )}
     </>
   )

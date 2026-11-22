@@ -7,12 +7,14 @@ import {
   UnsignedByteType, Vector2, Vector3, WebGLRenderer, type IUniform,
 } from 'three'
 import { COUNT_MS, SKIP_MS, THREAD_MS, TILT_MS, countAt, easeInOut, timeline, type Timeline } from './match-timeline'
+import { MAP, domeAt, reliefOf, type Relief } from './relief'
+
+export { decodeCapture } from './relief'
 
 const IMAGE = 1000 // the native side of a capture, in pixels (H7)
 const PLATE_X = 1.14 // each plate's centre, to the left and to the right
 const DOME = 0.11 // the finger's rise above its plate
 const RIDGE = 0.034 // the ridges' depth, in the shading only
-const MAP = 64 // the side of the low relief map
 const GRID = 128 // the plate's cells: enough for the dome, since the ridges need no geometry
 const SEGMENTS = 28 // of one thread
 const FULL = 142 // the pairs for which the threads' weight was tuned
@@ -37,14 +39,6 @@ export interface StageInput {
   threshold: number
 }
 
-/** A capture's PNG, as the server sent it in Base64, decoded for drawing. */
-export async function decodeCapture(base64: string): Promise<HTMLImageElement> {
-  const image = new Image()
-  image.src = `data:image/png;base64,${base64}`
-  await image.decode()
-  return image
-}
-
 let supported: boolean | null = null
 /** Whether this page can draw the stage; without WebGL 2 the result is drawn flat instead. */
 export function stageSupported(): boolean {
@@ -62,81 +56,6 @@ export function stageSupported(): boolean {
 }
 
 const rgb = (hex: string) => new Vector3(...[1, 3, 5].map((at) => parseInt(hex.trim().slice(at, at + 2), 16) / 255) as [number, number, number])
-const smooth = (low: number, high: number, x: number) => {
-  const t = Math.min(1, Math.max(0, (x - low) / (high - low)))
-  return t * t * (3 - 2 * t)
-}
-
-function blur(source: Float32Array, radius: number): Float32Array {
-  let from = source
-  for (const [dx, dy] of [[1, 0], [0, 1]] as const) {
-    const to = new Float32Array(from.length)
-    for (let y = 0; y < MAP; y += 1) {
-      for (let x = 0; x < MAP; x += 1) {
-        let sum = 0
-        for (let k = -radius; k <= radius; k += 1) {
-          const sx = Math.min(MAP - 1, Math.max(0, x + k * dx))
-          const sy = Math.min(MAP - 1, Math.max(0, y + k * dy))
-          sum += from[sy * MAP + sx]!
-        }
-        to[y * MAP + x] = sum / (radius * 2 + 1)
-      }
-    }
-    from = to
-  }
-  return from
-}
-
-interface Relief {
-  /** The grey levels of ink and of the background, 0 to 1, for showing the ridges. */
-  low: number
-  high: number
-  /** How far the finger rises at each cell of the map, 0 to 1. */
-  dome: Float32Array
-}
-
-/** Where the finger lies in a capture, from the image alone: the area whose ridges darken it, rounded into a dome. */
-function reliefOf(image: HTMLImageElement): Relief {
-  const side = MAP * 4
-  const canvas = document.createElement('canvas')
-  canvas.width = canvas.height = side
-  const context = canvas.getContext('2d', { willReadFrequently: true })
-  if (!context) throw new Error('no 2D canvas for the relief')
-  context.drawImage(image, 0, 0, side, side)
-  const pixels = context.getImageData(0, 0, side, side).data
-  const histogram = new Uint32Array(256)
-  for (let at = 0; at < pixels.length; at += 4) histogram[pixels[at]!] = histogram[pixels[at]!]! + 1
-  const level = (share: number) => {
-    let seen = 0
-    for (let value = 0; value < 256; value += 1) {
-      seen += histogram[value]!
-      if (seen >= share * side * side) return value
-    }
-    return 255
-  }
-  const high = level(0.98)
-  const low = Math.min(level(0.02), high - 16)
-  const dark = new Float32Array(MAP * MAP)
-  for (let y = 0; y < side; y += 1) {
-    for (let x = 0; x < side; x += 1) {
-      const ink = Math.min(1, Math.max(0, (high - pixels[(y * side + x) * 4]!) / (high - low)))
-      dark[(y >> 2) * MAP + (x >> 2)] = dark[(y >> 2) * MAP + (x >> 2)]! + ink / 16
-    }
-  }
-  const mask = blur(blur(dark, 2), 2).map((value) => smooth(0.1, 0.3, value))
-  const round = blur(blur(mask, 6), 6)
-  return { low: low / 255, high: high / 255, dome: mask.map((value, at) => value * smooth(0.25, 1, round[at]!)) }
-}
-
-function domeAt(relief: Relief, u: number, v: number): number {
-  const x = Math.min(MAP - 1, Math.max(0, u * MAP - 0.5))
-  const y = Math.min(MAP - 1, Math.max(0, v * MAP - 0.5))
-  const x0 = Math.floor(x), y0 = Math.floor(y), x1 = Math.min(MAP - 1, x0 + 1), y1 = Math.min(MAP - 1, y0 + 1)
-  const top = relief.dome[y0 * MAP + x0]! + (relief.dome[y0 * MAP + x1]! - relief.dome[y0 * MAP + x0]!) * (x - x0)
-  const bottom = relief.dome[y1 * MAP + x0]! + (relief.dome[y1 * MAP + x1]! - relief.dome[y1 * MAP + x0]!) * (x - x0)
-  return top + (bottom - top) * (y - y0)
-}
-
 const PLATE_VERTEX = `
 precision highp float;
 in vec2 aUv;

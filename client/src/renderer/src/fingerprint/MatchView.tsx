@@ -1,19 +1,46 @@
 // H18, H43, H44: the pairs counted by the highest-scoring comparison, in the two native image frames:
 // OpenCV SIFT's RANSAC inliers, or the pore pairs of Pore SIFT and Pore CNN (H46).
-import { useMemo, useState, type PointerEvent } from 'react'
+import { useEffect, useMemo, useState, type PointerEvent } from 'react'
 import type { MatchViewData } from '../../../shared/bridge'
 import { useSession } from '../session'
+import { Notice } from '../ui/Notice'
 import { decodeMatchPairs, nearestMatch } from './match-data'
+import { plateColors, plateImage } from './relief'
 
 const IMAGE_SIZE = 1000
 const REFERENCE_X = 1100
 const VIEW_WIDTH = REFERENCE_X + IMAGE_SIZE
+const PLATE = 800 // the side, in pixels, at which a capture is drawn on its plate for this drawing
+
+/** A capture drawn on its plate in ink (Light Table's sample plate), again when the theme changes; the capture itself
+ * where the page cannot draw. */
+function usePlate(base64: string): string {
+  const [drawn, setDrawn] = useState<{ of: string; url: string } | null>(null)
+  useEffect(() => {
+    let current = true
+    const paint = () => {
+      void plateImage(base64, PLATE, plateColors()).then((url) => {
+        if (current && url !== null) setDrawn({ of: base64, url })
+      }, () => undefined)
+    }
+    paint()
+    const dark = window.matchMedia?.('(prefers-color-scheme: dark)')
+    dark?.addEventListener('change', paint)
+    return () => {
+      current = false
+      dark?.removeEventListener('change', paint)
+    }
+  }, [base64])
+  return drawn?.of === base64 ? drawn.url : `data:image/png;base64,${base64}`
+}
 
 export function MatchView({ view, image, algorithm }: { view: MatchViewData; image: string; algorithm: string }) {
   const { t } = useSession()
   const m = t.fingerprint.matches
   const kind = algorithm === 'opencv-sift' ? m.points : m.pores
   const pairs = useMemo(() => decodeMatchPairs(view.pairs, view.count), [view.pairs, view.count])
+  const probe = usePlate(image)
+  const reference = usePlate(view.reference_image)
   const [selected, setSelected] = useState(0)
   const [showAll, setShowAll] = useState(true)
   const path = useMemo(() => {
@@ -43,7 +70,7 @@ export function MatchView({ view, image, algorithm }: { view: MatchViewData; ima
   return (
     <section className="match-view" aria-label={kind.title}>
       <h2>{kind.title}</h2>
-      {pairs === null ? <p className="notice">{m.unavailable}</p> : (
+      {pairs === null ? <Notice still>{m.unavailable}</Notice> : (
         <>
           <p>{kind.explanation(view.placement, view.count)}</p>
           <p className="match-rule">{kind.rule}</p>
@@ -54,8 +81,8 @@ export function MatchView({ view, image, algorithm }: { view: MatchViewData; ima
             </div>
             <svg className="match-drawing" viewBox={`0 0 ${VIEW_WIDTH} ${IMAGE_SIZE}`} width={VIEW_WIDTH} height={IMAGE_SIZE}
               role="img" aria-label={kind.drawing(view.count)} onPointerMove={pick} onPointerDown={pick}>
-              <image href={`data:image/png;base64,${image}`} x={0} y={0} width={IMAGE_SIZE} height={IMAGE_SIZE} />
-              <image href={`data:image/png;base64,${view.reference_image}`} x={REFERENCE_X} y={0} width={IMAGE_SIZE} height={IMAGE_SIZE} />
+              <image href={probe} x={0} y={0} width={IMAGE_SIZE} height={IMAGE_SIZE} />
+              <image href={reference} x={REFERENCE_X} y={0} width={IMAGE_SIZE} height={IMAGE_SIZE} />
               {showAll && <path className="match-connections" d={path} vectorEffect="non-scaling-stroke" />}
               {chosen !== null && (
                 <g className="match-selected">

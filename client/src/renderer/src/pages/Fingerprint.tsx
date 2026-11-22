@@ -8,6 +8,8 @@ import { Identification } from '../fingerprint/Identification'
 import { MethodChoices } from '../fingerprint/MethodChoices'
 import { errorText, type Texts } from '../texts'
 import { useSession } from '../session'
+import { Notice, type Tone } from '../ui/Notice'
+import { Plate } from '../ui/Plate'
 
 type FingerprintState = { enrolled: boolean; fingers?: number[] }
 
@@ -92,11 +94,11 @@ export function Fingerprint() {
         <MethodChoices methods={methods} algorithm={algorithm} onChoose={setAlgorithm}
           error={methodError} onRetry={loadMethods} />
         <div className="actions">
-          <button type="button" disabled={!selectedMethod?.available} onClick={() => {
+          <button type="button" className="primary" disabled={!selectedMethod?.available} onClick={() => {
             setChoosingMethod(false)
             setVerifying(true)
           }}>{f.verification.begin}</button>
-          <button type="button" className="secondary" onClick={() => setChoosingMethod(false)}>{f.back}</button>
+          <button type="button" className="quiet" onClick={() => setChoosingMethod(false)}>{f.back}</button>
         </div>
       </section>
     )
@@ -158,8 +160,8 @@ export function Fingerprint() {
       {enrolled === null ? (
         message?.kind === 'error' ? (
           <>
-            <p className="error" role="alert">{message.text}</p>
-            <button type="button" onClick={load}>{f.tryAgain}</button>
+            <Notice tone="alert" role="alert">{message.text}</Notice>
+            <button type="button" className="primary" onClick={load}>{f.tryAgain}</button>
           </>
         ) : <p className="aside">{t.loading}</p>
       ) : (
@@ -178,7 +180,8 @@ export function Fingerprint() {
                     onClick={() => choose(position)}
                   >
                     {f.shortFingers[position > 5 ? position - 5 : position]}
-                    {enrolled.includes(position) && <span className="badge">{f.enrolledMark}</span>}
+                    {/* An enrolled finger carries the mark's dot; its word is for assistive technology. */}
+                    {enrolled.includes(position) && <><span className="badge" aria-hidden="true" /><span className="visually-hidden">{f.enrolledMark}</span></>}
                   </button>
                 ))}
               </fieldset>
@@ -196,30 +199,29 @@ export function Fingerprint() {
               {enrolled.includes(chosen) && <p className="aside">{f.replaces}</p>}
               <p className="aside">{f.enrolmentRole}</p>
               {confirming ? (
-                <div className="confirm" role="alertdialog" aria-label={f.deleteEnrolment}>
+                <Notice tone="alert" role="alertdialog" label={f.deleteEnrolment} className="confirm" actions={<>
+                  <button type="button" className="danger" disabled={deleting} onClick={() => void remove(chosen)}>
+                    {deleting ? f.deleting : f.deleteConfirm}
+                  </button>
+                  <button type="button" className="quiet" disabled={deleting} onClick={() => setConfirming(false)}>
+                    {t.cancel}
+                  </button>
+                </>}>
                   <p>{f.deleteAsk(f.fingers[chosen] ?? '')}</p>
-                  <div className="actions">
-                    <button type="button" className="danger" disabled={deleting} onClick={() => void remove(chosen)}>
-                      {deleting ? f.deleting : f.deleteConfirm}
-                    </button>
-                    <button type="button" className="secondary" disabled={deleting} onClick={() => setConfirming(false)}>
-                      {t.cancel}
-                    </button>
-                  </div>
-                </div>
+                </Notice>
               ) : (
                 <div className="actions">
                   {enrolled.includes(chosen) && (
-                    <button type="button" onClick={() => setChoosingMethod(true)}>{f.verification.start}</button>
+                    <button type="button" className="primary" onClick={() => setChoosingMethod(true)}>{f.verification.start}</button>
                   )}
-                  <button type="button" className={enrolled.includes(chosen) ? 'secondary' : ''} onClick={() => setRunning(true)}>
+                  <button type="button" className={enrolled.includes(chosen) ? 'secondary' : 'primary'} onClick={() => setRunning(true)}>
                     {enrolled.includes(chosen) ? f.enrolAgain : f.enrol}
                   </button>
                   {!enrolled.includes(chosen) && (
                     <button type="button" className="secondary" onClick={() => setVerifying(true)}>{f.verification.start}</button>
                   )}
                   {enrolled.includes(chosen) && (
-                    <button type="button" className="secondary" onClick={() => setConfirming(true)}>
+                    <button type="button" className="danger" onClick={() => setConfirming(true)}>
                       {f.deleteEnrolment}
                     </button>
                   )}
@@ -228,14 +230,14 @@ export function Fingerprint() {
             </div>
           )}
           {message !== null && (
-            <p className={message.kind} role={message.kind === 'error' ? 'alert' : 'status'}>
+            <Notice tone={message.kind === 'error' ? 'alert' : 'done'} role={message.kind === 'error' ? 'alert' : 'status'}>
               {message.text}
-            </p>
+            </Notice>
           )}
           <div className="setting identification-entry">
             <h2>{f.identification.entryTitle}</h2>
             <p>{f.identification.entryText}</p>
-            <button type="button" disabled={deleting} onClick={() => setIdentifying(true)}>{f.identification.open} <bdi dir="ltr">(1:N)</bdi></button>
+            <button type="button" className="secondary" disabled={deleting} onClick={() => setIdentifying(true)}><span>{f.identification.open} <bdi dir="ltr">(1:N)</bdi></span></button>
           </div>
         </>
       )}
@@ -251,12 +253,14 @@ interface Run {
   threshold: number
   message: string
   latest: Captured | null
+  /** The latest capture was refused (its quality), so its plate shows it faded. */
+  latestRejected: boolean
   kept: Array<{ placement: number; image: string; checks: Check[]; keypoints: number }>
   pairs: Pair[]
   error: string
 }
 
-const START: Run = { phase: 'starting', placement: 1, placements: 3, minimum: 35, threshold: 57, message: '', latest: null, kept: [], pairs: [], error: '' }
+const START: Run = { phase: 'starting', placement: 1, placements: 3, minimum: 35, threshold: 57, message: '', latest: null, latestRejected: false, kept: [], pairs: [], error: '' }
 
 function Enrolment({ finger, onSaved, onLeave }: { finger: number; onSaved: (saved: SavedEnrolment, captures: Record<number, Captured>) => void; onLeave: () => void }) {
   const { t } = useSession()
@@ -303,6 +307,8 @@ function Enrolment({ finger, onSaved, onLeave }: { finger: number; onSaved: (sav
 
   const prompt =
     run.phase === 'starting' ? f.starting : run.phase === 'lift' ? f.lift : run.phase === 'saving' ? f.saving : run.phase === 'place' ? f.place : ''
+  // The scanner's red dot while it waits for a finger or for its lift; a turning ring while the system works.
+  const tone: Tone = run.phase === 'place' || run.phase === 'lift' ? 'live' : 'busy'
 
   return (
     <section className="enrolment">
@@ -319,24 +325,30 @@ function Enrolment({ finger, onSaved, onLeave }: { finger: number; onSaved: (sav
       </ol>
       {run.phase === 'failed' ? (
         <>
-          <p className="error" role="alert">
+          <Notice tone="alert" role="alert">
             {run.error}
-          </p>
+          </Notice>
           <div className="actions">
-            <button type="button" onClick={() => setAttempt(attempt + 1)}>
+            <button type="button" className="primary" onClick={() => setAttempt(attempt + 1)}>
               {f.tryAgain}
             </button>
-            <button type="button" className="secondary" onClick={onLeave}>
+            <button type="button" className="quiet" onClick={onLeave}>
               {f.back}
             </button>
           </div>
         </>
       ) : (
         <>
-          <p className="notice prompt" role="status" aria-live="polite">
-            {run.message && <span>{run.message} </span>}
-            {prompt && <strong>{prompt}</strong>}
-          </p>
+          <div className="prompt" role="status" aria-live="polite">
+            {(run.message || prompt) && (
+              <Notice tone={tone}>
+                <p>
+                  {run.message && <span>{run.message} </span>}
+                  {prompt && <strong>{prompt}</strong>}
+                </p>
+              </Notice>
+            )}
+          </div>
           <button type="button" className="secondary" onClick={() => window.mbs.cancelEnrolment()}>
             {f.cancel}
           </button>
@@ -344,7 +356,7 @@ function Enrolment({ finger, onSaved, onLeave }: { finger: number; onSaved: (sav
       )}
       {run.latest !== null && (
         <div className="beside">
-          <img className="capture" src={`data:image/png;base64,${run.latest.image}`} alt="" width={280} height={280} />
+          <Plate image={run.latest.image} size={280} state={run.latestRejected ? 'rejected' : 'captured'} />
           <div>
             <h2>{f.checksTitle}</h2>
             <Checks checks={run.latest.checks} />
@@ -357,7 +369,7 @@ function Enrolment({ finger, onSaved, onLeave }: { finger: number; onSaved: (sav
           <ul className="thumbs">
             {run.kept.map((kept) => (
               <li key={kept.placement}>
-                <img src={`data:image/png;base64,${kept.image}`} alt="" width={96} height={96} />
+                <Plate image={kept.image} size={96} />
                 <span>{f.placementTab(kept.placement)}</span>
                 <span className="aside">{f.keypoints(kept.keypoints)}</span>
               </li>
@@ -383,7 +395,7 @@ function next(run: Run, event: EnrolmentEvent, t: Texts): Run {
     case 'place':
       return { ...run, phase: 'place', placement: event.placement }
     case 'rejected':
-      return { ...run, latest: { image: event.image, checks: event.checks }, message: f.rejected(event.score, event.minimum) }
+      return { ...run, latest: { image: event.image, checks: event.checks }, latestRejected: true, message: f.rejected(event.score, event.minimum) }
     case 'kept': {
       const kept = [...run.kept, { placement: event.placement, image: event.image, checks: event.checks, keypoints: event.keypoints }]
       const enough = kept.length >= run.placements
@@ -391,6 +403,7 @@ function next(run: Run, event: EnrolmentEvent, t: Texts): Run {
         ...run,
         kept,
         latest: { image: event.image, checks: event.checks },
+        latestRejected: false,
         pairs: [...run.pairs, ...event.pairs],
         message: f.kept(event.placement),
         phase: enough ? 'saving' : run.phase,

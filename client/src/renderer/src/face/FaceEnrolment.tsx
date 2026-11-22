@@ -5,6 +5,8 @@ import { useState } from 'react'
 import type { ApiResult, FaceCheck, FaceCheckResult, FaceEnrolmentAnswer, FaceMethod, FacePair, FaceSaved } from '../../../shared/bridge'
 import { errorText, type Texts } from '../texts'
 import { useSession } from '../session'
+import { Icon } from '../ui/Icon'
+import { Notice } from '../ui/Notice'
 import { CameraPanel } from './CameraPanel'
 
 export const MOST_TAKEN = 12 // images taken in one enrolment, kept or not (as H33's captures)
@@ -38,13 +40,13 @@ export function FacePairs({ pairs, threshold }: { pairs: FacePair[]; threshold: 
     <ul className="checks">
       {pairs.map((pair) => (
         <li key={`${pair.reference}-${pair.probe}`} className={pair.accepted ? 'met' : 'missing'}>
-          <span className="mark" aria-hidden="true">
-            {pair.accepted ? '✓' : '✗'}
-          </span>
-          <strong>{f.pair(pair.probe, pair.reference)}</strong>{' '}
-          <bdi dir="ltr">{pair.score.toFixed(3)}</bdi>{' '}
-          <span className="aside">
-            {pair.accepted ? f.above : f.notAbove} (<bdi dir="ltr">{threshold}</bdi>)
+          <Icon name={pair.accepted ? 'check' : 'alert'} />
+          <span>
+            <strong>{f.pair(pair.probe, pair.reference)}</strong>{' '}
+            <bdi dir="ltr">{pair.score.toFixed(3)}</bdi>{' '}
+            <span className="aside">
+              {pair.accepted ? f.above : f.notAbove} (<bdi dir="ltr">{threshold}</bdi>)
+            </span>
           </span>
         </li>
       ))}
@@ -119,30 +121,36 @@ export function FaceEnrolment({ method, onSaved, onLeave }: { method: FaceMethod
       </ol>
       {phase === 'failed' ? (
         <>
-          <p className="error" role="alert">{failure}</p>
+          <Notice tone="alert" role="alert">{failure}</Notice>
           <div className="actions">
-            <button type="button" onClick={restart}>{f.tryAgain}</button>
-            <button type="button" className="secondary" onClick={onLeave}>{f.back}</button>
+            <button type="button" className="primary" onClick={restart}>{f.tryAgain}</button>
+            <button type="button" className="quiet" onClick={onLeave}>{f.back}</button>
           </div>
         </>
       ) : (
         <>
           <CameraPanel busy={phase !== 'live'} minimumWidth={method.width_minimum}
             onTaken={(image, capturedAt) => void check(image, capturedAt)} />
-          <p className="notice prompt" role="status" aria-live="polite">
-            {phase === 'checking' ? f.checking : phase === 'saving' ? f.saving : shown?.kind === 'kept' ? f.kept(shown.number) : shown?.kind === 'another' ? f.another : ''}
-          </p>
+          <div className="prompt" role="status" aria-live="polite">
+            {phase === 'checking' || phase === 'saving' ? (
+              <Notice tone="busy">{phase === 'checking' ? f.checking : f.saving}</Notice>
+            ) : shown?.kind === 'kept' ? (
+              <Notice tone="done">{f.kept(shown.number)}</Notice>
+            ) : shown?.kind === 'another' ? (
+              <Notice>{f.another}</Notice>
+            ) : null}
+          </div>
           {shown?.kind === 'rejected' && (
-            <div className="rejected">
+            <Notice tone="alert" className="rejected">
               <p>{f.rejected}</p>
               <ul className="checks">
                 {shown.checks.map((item) => (
                   <li key={item.name} className={item.passed ? 'met' : 'missing'}>
-                    <span className="mark" aria-hidden="true">{item.passed ? '✓' : '✗'}</span> {checkLine(item, t)}
+                    <Icon name={item.passed ? 'check' : 'alert'} /><span>{checkLine(item, t)}</span>
                   </li>
                 ))}
               </ul>
-            </div>
+            </Notice>
           )}
           <button type="button" className="secondary" onClick={onLeave}>{f.cancel}</button>
         </>

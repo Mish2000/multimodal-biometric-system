@@ -18,7 +18,9 @@ function fail(what: string, e: unknown): never {
 }
 process.on('uncaughtException', (e) => fail('uncaught', e))
 process.on('unhandledRejection', (e) => fail('unhandled', e))
-setTimeout(() => fail('watchdog', 'gave up after 420 s'), 420_000).unref()
+// With MBS_CHECK_SHOTS every screenshot is taken four times, so the check takes longer.
+const WATCHDOG_S = process.env.MBS_CHECK_SHOTS ? 1200 : 420
+setTimeout(() => fail('watchdog', `gave up after ${WATCHDOG_S} s`), WATCHDOG_S * 1000).unref()
 
 const [client, run, out, pageUrl] = process.argv.slice(2)
 if (!client || !run || !out) fail('arguments', 'electron check.mts CLIENT_DIR RUN_DIR OUT_DIR [PAGE_URL]')
@@ -51,6 +53,26 @@ interface IdentifyRun {
 }
 
 const pause = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+const layout: { shot: string; theme: string; size: string; problems: string[] }[] = []
+if (process.env.MBS_CHECK_SHOTS) fs.mkdirSync(path.join(out, 'matrix'), { recursive: true })
+// What would look broken in a screenshot: the page running wider than the window, text outside the window, and text
+// cut by its box (an ellipsis included, so that every cut is looked at). Tables and drawings scroll or scale by design.
+const LAYOUT_PROBLEMS = `
+  const problems = []
+  const root = document.documentElement
+  if (root.scrollWidth > innerWidth + 1) problems.push('the page is ' + (root.scrollWidth - innerWidth) + ' px wider than the window')
+  for (const el of document.querySelectorAll('h1, h2, h3, h4, p, button, a, label, legend, li, th, td, strong, span, summary')) {
+    if (el.closest('.visually-hidden, .table-wrap, svg, .match-plates, .camera-view')) continue
+    const style = getComputedStyle(el)
+    if (style.display === 'none' || style.visibility === 'hidden' || style.display === 'contents') continue
+    const box = el.getBoundingClientRect()
+    if (box.width === 0 || box.height === 0) continue
+    const text = (el.textContent ?? '').trim().replace(/\\s+/g, ' ').slice(0, 70)
+    if (box.right > innerWidth + 1 || box.left < -1) problems.push('outside the window: ' + el.tagName.toLowerCase() + ' ' + text)
+    if ((style.overflowX === 'hidden' || style.textOverflow === 'ellipsis') && el.scrollWidth > el.clientWidth + 1)
+      problems.push('cut: ' + el.tagName.toLowerCase() + ' ' + text)
+  }
+  return [...new Set(problems)].slice(0, 30)`
 const results: { name: string; passed: boolean; detail?: unknown }[] = []
 function check(name: string, passed: unknown, detail?: unknown): void {
   results.push({ name, passed: Boolean(passed), ...(detail === undefined ? {} : { detail }) })
@@ -152,9 +174,39 @@ app.whenReady().then(async () => {
     await until(() => page(`return Boolean(${find})`), 'the control ' + name)
     await page(`${find}.click()`)
   }
+  const capture = async (file: string) => {
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        fs.writeFileSync(path.join(out, `${file}.png`), (await win.webContents.capturePage()).toPNG())
+        return
+      } catch (e) {
+        // An offscreen window that was just resized may have no frame to give for a moment.
+        if (attempt >= 4) throw e
+        await pause(400)
+      }
+    }
+  }
+  // MBS_CHECK_SHOTS (the review of a visual change, H22): each screenshot is also taken in both themes at the client's
+  // default window (1280 x 820) and its smallest (1024 x 680), into matrix/, and the page is searched for anything
+  // that runs off the window or is cut; the findings go to layout.json. The theme and the size are put back after.
   const shot = async (name: string) => {
     await pause(500)
-    fs.writeFileSync(path.join(out, `${name}.png`), (await win.webContents.capturePage()).toPNG())
+    await capture(name)
+    if (!process.env.MBS_CHECK_SHOTS) return
+    const theme = nativeTheme.themeSource
+    const [width, height] = win.getContentSize() as [number, number]
+    for (const each of ['light', 'dark'] as const) {
+      nativeTheme.themeSource = each
+      for (const [w, h] of [[1280, 820], [1024, 680]] as const) {
+        win.setContentSize(w, h)
+        await pause(400)
+        layout.push({ shot: name, theme: each, size: `${w}x${h}`, problems: await page(LAYOUT_PROBLEMS) })
+        await capture(path.join('matrix', `${name}--${each}-${w}x${h}`))
+      }
+    }
+    nativeTheme.themeSource = theme
+    win.setContentSize(width, height)
+    await pause(300)
   }
   const loaded = () => new Promise<void>((resolve) => win.webContents.once('did-finish-load', () => resolve()))
   const direction = () => page(`return document.documentElement.dir`)
@@ -295,6 +347,7 @@ app.whenReady().then(async () => {
       const leftHand = `[...document.querySelectorAll('fieldset')].find((f) => f.querySelector('legend')?.textContent === 'Left hand')`
       await until(() => page(`return Boolean(${leftHand})`), 'the hands')
       await page(`${leftHand}.querySelectorAll('button')[1].click()`)
+      await shot('03a-fingers')
       await click('Enrol this finger')
       await waitText('How your fingerprint is stored', 90_000)
       check('three stored placements enrol the finger with the real engines and open the template screen', true)
@@ -564,7 +617,7 @@ app.whenReady().then(async () => {
         // H45: the drawing shows the caller's own highest-ranked print, one line per point of its score.
         const ownDrawing = (rank: number) => page(`
           const row = [...document.querySelectorAll('tbody tr')].find((tr) => tr.innerText.includes('Your left index'))
-          const score = Number(row?.querySelector('strong')?.textContent ?? -1)
+          const score = Number(row?.querySelectorAll('td')[2]?.textContent ?? -1)
           const paths = document.querySelector('.match-connections')?.getAttribute('d') ?? ''
           return document.body.innerText.includes('rank ${rank} in the list') && score >= 0 &&
             (paths.match(/M/g) ?? []).length === score && document.querySelectorAll('.match-drawing image').length === 2
@@ -715,6 +768,7 @@ app.whenReady().then(async () => {
       fs.writeFileSync(path.join(run, 'scanner.json'), JSON.stringify([{ hang: true }]))
       await click('Enrol this finger again')
       await waitText('Place the finger on the scanner and hold it still until it is kept.')
+      await shot('03c-enrolment-waiting')
       check('an enrolment waits for the finger before the reload', !fs.existsSync(closedMark))
       const reloadedDuringEnrolment = loaded()
       const reloadAt = Date.now()
@@ -978,7 +1032,7 @@ app.whenReady().then(async () => {
         heading: document.querySelector('h1').textContent,
         waveforms: document.querySelectorAll('.voice-verification-result svg.waveform').length,
         comparisons: [...document.querySelectorAll('.voice-verification-result .checks li')].map((li) => li.innerText.replace(/\\s+/g, ' ')),
-        score: document.querySelector('.voice-verification-result p.ok, .voice-verification-result p.error').textContent }`)
+        score: document.querySelector('.voice-verification-result .score-explain').textContent }`)
       check('the synthetic voice is verified through the real engine, beside its closest enrolled recording (H55)',
         verified.heading === 'Your voice matches' && verified.waveforms === 2 && verified.comparisons.length === 3, verified)
       await shot('h55-a-voice-verified-light')
@@ -1012,7 +1066,7 @@ app.whenReady().then(async () => {
         play: [...document.querySelectorAll('.voice-identification button')].filter((b) => b.textContent.trim() === 'Play' && !b.disabled).length,
         gallery: document.body.innerText.includes('One voice enrolment, 3 recordings, in this search.'),
         beside: document.body.innerText.includes('Your enrolled recording, rank 1 in the list, beside the new one.'),
-        score: document.querySelector('.voice-identification p.ok, .voice-identification p.error').textContent }`)
+        score: document.querySelector('.voice-identification .score-explain').textContent }`)
       check('the synthetic voice is identified through the real engine, its own enrolment first and beside the new recording (H56)',
         identified.heading === 'A matching voice was found' && identified.rows.length === 1 && identified.rows[0].startsWith('1 Your voice')
           && identified.waveforms === 2 && identified.play === 2 && identified.gallery && identified.beside, identified)
@@ -1051,7 +1105,7 @@ app.whenReady().then(async () => {
         waveforms: document.querySelectorAll('.voice-verification-result svg.waveform').length,
         play: [...document.querySelectorAll('.voice-verification-result button')].filter((b) => b.textContent.trim() === 'Play' && !b.disabled).length,
         source: [...document.querySelectorAll('p.aside')].map((p) => p.textContent).find((text) => text.startsWith('Source:')),
-        score: document.querySelector('.voice-verification-result p.ok, .voice-verification-result p.error')?.textContent }`)
+        score: document.querySelector('.voice-verification-result .score-explain')?.textContent }`)
       check('the synthetic voice from an MP3 file is verified through the real engine, with its source (H57)',
         fileVerified.heading === 'Your voice matches' && fileVerified.waveforms === 2 && fileVerified.play === 2
           && fileVerified.source === 'Source: a recording file, MP3, 44.1 kHz, 2 channels, 10.0 seconds; compared at 16 kHz, one channel.', fileVerified)
@@ -1293,5 +1347,9 @@ app.whenReady().then(async () => {
   const failed = results.filter((r) => !r.passed).length
   console.log(`${results.length - failed} of ${results.length} checks passed`)
   fs.writeFileSync(path.join(out, 'results.json'), JSON.stringify({ page: pageUrl ?? 'built', results, messages }, null, 2))
+  if (process.env.MBS_CHECK_SHOTS) {
+    fs.writeFileSync(path.join(out, 'layout.json'), JSON.stringify(layout, null, 1))
+    console.log(`layout: ${layout.filter((entry) => entry.problems.length > 0).length} of ${layout.length} screenshots with findings`)
+  }
   process.exit(failed ? 1 : 0)
 })

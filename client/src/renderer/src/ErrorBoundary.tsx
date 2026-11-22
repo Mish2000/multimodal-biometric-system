@@ -43,6 +43,7 @@ function ScreenFailed({ retry }: { retry: () => void }) {
       <p>{t.screenFailed.text}</p>
       <button
         type="button"
+        className="primary"
         onClick={() => {
           navigate(landing(account))
           retry()

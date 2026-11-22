@@ -21,7 +21,10 @@ recovery through the outbox, the theme and the language in both directions, the 
 disabling an account and a new administrator. The options add the engines, each found as the server finds it
 (`local/server.toml`): `--captures DIR` with `--identify`, `--pore`, `--learned`, `--match-view` and
 `--identify-methods` for the fingerprint methods, and `--face` and `--voice` for the other modalities; `--page URL`
-checks the development server's page (`dev_server.mts`) instead of the built one.
+checks the development server's page (`dev_server.mts`) instead of the built one. `--shots`, for the review of a
+visual change, also takes every screenshot in both themes at the client's default window (1280 x 820) and its
+smallest (1024 x 680), in `shots-NAME/matrix/`, and lists in `shots-NAME/layout.json` whatever runs off the window or
+is cut. The captures may be synthetic prints, named as ScannerCapture names them.
 
 Everything the check writes goes to the git-ignored `local/client-check/`: `NAME-server.log`, `NAME-check.log`,
 `shots-NAME/` and `run-NAME/`, whose throwaway cluster is removed at the end. The check without options also runs on

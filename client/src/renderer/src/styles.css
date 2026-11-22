@@ -1,7 +1,10 @@
-/* The client's look. The base colours and the typeface are H22's and apply to every screen; the screens
-   themselves are rebuilt in that direction one flow at a time, and until then keep the skeleton's layout (H26).
-   Light or dark follows the window's theme, which the main process sets (H24); the dark theme is the light
-   one's negative, with ink and paper exchanged. */
+/* The client's look: the Light Table design system of H22. Its tokens (colour, type, space, shape, motion) and its
+   components (button, field, method card, steps, notice, sample plate, score meter, data table) apply to every
+   screen; the screens keep their layout until each flow is rebuilt from its approved key screens. Light or dark
+   follows the window's theme, which the main process sets (H24); the dark theme is the light one's negative. Colour
+   means one thing each: mark is what a method found, sensor a device capturing now, alert a problem to act on. A
+   non-match is a result, said in ink. Logical properties throughout, so Hebrew mirrors the layout (H31), while a
+   sample keeps its own left and right (H43). */
 
 /* IBM Plex Sans and IBM Plex Sans Hebrew, SIL Open Font License 1.1 (fonts/OFL.txt). The files ship with the
    client, since the page loads only its own files (H22, H26). */
@@ -12,159 +15,362 @@
 @font-face { font-family: 'IBM Plex Sans Hebrew'; font-weight: 400; font-display: swap; src: url('./fonts/IBMPlexSansHebrew-Regular.woff2') format('woff2'); }
 @font-face { font-family: 'IBM Plex Sans Hebrew'; font-weight: 600; font-display: swap; src: url('./fonts/IBMPlexSansHebrew-SemiBold.woff2') format('woff2'); }
 
+/* Tokens */
+
 :root {
   color-scheme: light dark;
-  /* H22's roles: the canvas, the surface, ink, second ink and mist. */
-  --bg: #f4f6fa;
+  /* The table, a surface on it, ink and second ink, mist for hairlines, and a control's edge (3:1 or more). */
+  --canvas: #f4f6fa;
   --surface: #ffffff;
-  --text: #171a4a;
-  --muted: #555a86;
-  --line: #d5dbe8;
-  /* What a method found, and a device that is capturing now (never an error). */
+  --ink: #171a4a;
+  --ink-2: #555a86;
+  --ink-hover: #2b2f6b;
+  --on-ink: #ffffff;
+  --mist: #d5dbe8;
+  --wash: #eceff6;
+  --edge: #7d83aa;
+  /* What a method found (graphics in mark, words in mark-text), a device capturing now, and a problem to act on. */
   --mark: #0c97a6;
   --mark-text: #086c77;
   --sensor: #d92f25;
-  /* What arrives eases out; what moves while it stays on screen eases in and out. */
+  --alert: #a0520a;
+  --shadow-overlay: 0 12px 32px rgba(23, 26, 74, 0.16);
+  --font: 'IBM Plex Sans', 'IBM Plex Sans Hebrew', 'Segoe UI', system-ui, sans-serif;
+  /* A 4px base. */
+  --space-4: 4px;
+  --space-8: 8px;
+  --space-12: 12px;
+  --space-16: 16px;
+  --space-24: 24px;
+  --space-32: 32px;
+  --space-48: 48px;
+  --space-64: 64px;
+  --radius-6: 6px;
+  --radius-12: 12px;
+  --radius-pill: 9999px;
+  --page-max: 1120px;
+  --page-gutter: 48px;
+  --measure: 62ch;
+  --bar-height: 64px;
+  --control: 44px;
+  --control-small: 36px;
+  /* What answers a press takes 100 to 250 ms. What arrives eases out, what moves while it stays on screen eases in
+     and out, and a colour that changes eases. */
+  --duration-press: 100ms;
+  --duration-fast: 150ms;
+  --duration-enter: 250ms;
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
-  --font: 'IBM Plex Sans', 'IBM Plex Sans Hebrew', 'Segoe UI', system-ui, sans-serif;
-  --accent: #1f5fbf;
-  --accent-text: #ffffff;
-  --error: #b42318;
-  --error-bg: #fdecea;
-  --ok: #1a7f37;
-  --ok-bg: #e9f6ec;
-  --notice-bg: #eaf1fb;
-  --weak: #c2410c;
-  --medium: #a16207;
-  --radius: 8px;
   font-family: var(--font);
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.5;
-  color: var(--text);
-  background: var(--bg);
+  color: var(--ink);
+  background: var(--canvas);
+  -webkit-font-smoothing: antialiased;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #111337;
+    --canvas: #111337;
     --surface: #1a1d50;
-    --text: #f4f6fa;
-    --muted: #a7aed6;
-    --line: #2c3070;
+    --ink: #f4f6fa;
+    --ink-2: #a7aed6;
+    --ink-hover: #d6dbea;
+    --on-ink: #111337;
+    --mist: #2c3070;
+    --wash: #22265e;
+    --edge: #6d74b8;
     --mark: #45d2de;
     --mark-text: #45d2de;
     --sensor: #ff6253;
-    --accent: #6aa5f2;
-    --accent-text: #0d1117;
-    --error: #f2a39b;
-    --error-bg: #3a1f1d;
-    --ok: #86d29a;
-    --ok-bg: #183021;
-    --notice-bg: #1c2a3d;
-    --weak: #fdba74;
-    --medium: #fcd34d;
+    --alert: #f2a65a;
+    --shadow-overlay: 0 12px 32px rgba(0, 0, 0, 0.45);
   }
 }
 
-* {
-  box-sizing: border-box;
+@media (max-width: 900px) {
+  :root { --page-gutter: 24px; }
 }
+
+/* Base */
+
+* { box-sizing: border-box; }
+
+/* A page that grows taller than the window keeps its width, so nothing shifts when the scroll bar appears. */
+html { scrollbar-gutter: stable; }
 
 body {
   margin: 0;
   min-height: 100vh;
-  background: var(--bg);
+  background: var(--canvas);
 }
 
+/* The type scale: a headline names a daily screen, display the action of a flow or the verdict of a result (one per
+   screen), title a section, heading a card, a method or a table. Hebrew is never tracked. */
 h1 {
-  font-size: 1.6rem;
-  margin: 0 0 0.5rem;
+  margin: 0 0 var(--space-8);
+  font-size: 36px;
+  font-weight: 300;
+  line-height: 1.12;
+  letter-spacing: -0.015em;
+}
+
+h1.display,
+h2.display {
+  font-size: 60px;
+  line-height: 1.04;
+  letter-spacing: -0.022em;
 }
 
 h2 {
-  font-size: 1.15rem;
-  margin: 2rem 0 0.75rem;
+  margin: var(--space-48) 0 var(--space-12);
+  font-size: 24px;
+  font-weight: 400;
+  line-height: 1.3;
+}
+
+h3,
+h4 {
+  margin: var(--space-24) 0 var(--space-8);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+/* Headings break into lines of even length, never leaving one word alone on the last. */
+h1,
+h2 { text-wrap: balance; }
+
+:lang(he) h1,
+:lang(he) h2,
+h1:lang(he),
+h2:lang(he) { letter-spacing: 0; }
+
+/* Below 1100 px the display style steps down, so a long verdict stays on one line. */
+@media (max-width: 1100px) {
+  h1.display,
+  h2.display { font-size: 48px; }
 }
 
 a {
-  color: var(--accent);
-}
-
-button {
-  font: inherit;
-  padding: 0.5rem 1.1rem;
-  border: 1px solid var(--accent);
-  border-radius: var(--radius);
-  background: var(--accent);
-  color: var(--accent-text);
-  cursor: pointer;
-}
-
-button:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-button.secondary {
-  background: transparent;
-  color: var(--accent);
-}
-
-button.link {
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--accent);
+  color: var(--ink);
   text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
 }
 
-input {
-  font: inherit;
-  width: 100%;
-  padding: 0.5rem 0.65rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface);
-  color: var(--text);
+@media (hover: hover) and (pointer: fine) {
+  a:hover { text-decoration-thickness: 2px; }
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--ink);
   outline-offset: 2px;
 }
 
 code {
-  font-family: Consolas, monospace;
-  padding: 0.1rem 0.35rem;
-  border-radius: 4px;
-  background: var(--bg);
+  padding: 2px var(--space-8);
+  border-radius: var(--radius-6);
+  background: var(--wash);
+  font-family: Consolas, 'Cascadia Mono', monospace;
+  font-size: 0.95em;
   user-select: all;
 }
 
-/* Forms */
+strong { font-weight: 600; }
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.icon {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Button: every action is a pill. The one thing to do next is primary, in ink; the rest are outlined; going back or
+   cancelling is quiet; erasing is outlined in alert and asks first (H34). A button never wraps its label. */
+
+button,
+a.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-8);
+  min-height: var(--control);
+  padding: 0 var(--space-24);
+  border: 1px solid var(--edge);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  touch-action: manipulation;
+  transition:
+    background-color var(--duration-fast) ease,
+    border-color var(--duration-fast) ease,
+    color var(--duration-fast) ease,
+    transform var(--duration-press) var(--ease-out);
+}
+
+button:active:not(:disabled),
+a.button:active { transform: scale(0.97); }
+
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+button.primary {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--on-ink);
+}
+
+button.quiet {
+  padding-inline: var(--space-16);
+  border-color: transparent;
+  color: var(--ink-2);
+}
+
+button.danger {
+  border-color: var(--alert);
+  color: var(--alert);
+}
+
+button.small,
+a.button.small {
+  min-height: var(--control-small);
+  padding: 0 var(--space-16);
+  font-size: 14px;
+}
+
+/* A button inside running text, such as "check again" or "Sign out": the words of a link. */
+button.link {
+  display: inline;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: inherit;
+  font-size: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  white-space: normal;
+}
+
+button.link:active:not(:disabled) { transform: none; }
+
+@media (hover: hover) and (pointer: fine) {
+  button:hover:not(:disabled),
+  a.button:hover { border-color: var(--ink); }
+  button.primary:hover:not(:disabled) { border-color: var(--ink-hover); background: var(--ink-hover); }
+  button.quiet:hover:not(:disabled) { border-color: transparent; background: var(--wash); color: var(--ink); }
+  button.danger:hover:not(:disabled) { border-color: var(--alert); background: var(--alert); color: var(--on-ink); }
+  button.link:hover:not(:disabled) { text-decoration-thickness: 2px; }
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-8);
+  margin-top: var(--space-32);
+}
+
+/* Field: label above, control, then a hint. The control's boundary is edge, 3:1 against its ground. Its focus and
+   hover change at once: going from field to field is done from the keyboard. */
+
+input:not([type='radio'], [type='checkbox'], [type='range'], [type='file']),
+select {
+  width: 100%;
+  min-height: var(--control);
+  padding: 0 var(--space-16);
+  border: 1px solid var(--edge);
+  border-radius: var(--radius-12);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 16px;
+}
+
+select {
+  width: auto;
+  min-height: var(--control-small);
+  padding: 0 var(--space-12);
+  font-size: 15px;
+}
+
+input::placeholder { color: var(--ink-2); }
+
+@media (hover: hover) and (pointer: fine) {
+  input:not([type='radio'], [type='checkbox'], [type='range'], [type='file']):hover,
+  select:hover { border-color: var(--ink-2); }
+}
+
+input:not([type='radio'], [type='checkbox'], [type='range'], [type='file']):focus,
+select:focus {
+  outline: none;
+  border-color: var(--ink);
+  box-shadow: 0 0 0 1px var(--ink);
+}
+
+input[type='radio'],
+input[type='checkbox'] {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--ink);
+}
+
+input[type='range'] { accent-color: var(--ink); }
 
 .field {
-  margin-bottom: 1rem;
+  display: grid;
+  align-content: start;
+  gap: var(--space-8);
+  margin-bottom: var(--space-24);
 }
 
 .field label {
-  display: block;
-  margin-bottom: 0.3rem;
+  color: var(--ink);
+  font-size: 15px;
   font-weight: 600;
+  line-height: 1.4;
 }
 
 .hint {
-  margin: 0.3rem 0 0;
-  color: var(--muted);
-  font-size: 0.88rem;
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 form.row {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
-  gap: 1rem;
+  gap: var(--space-16);
 }
 
 form.row .field {
@@ -176,258 +382,276 @@ form.inline {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-8);
 }
 
-form.inline input {
-  width: 11rem;
-}
+form.inline .reveal { width: 12rem; }
+form > button[type='submit'] { margin-top: var(--space-8); }
 
+/* A choice among a few options (the theme, the language, a recovery channel): native radios in ink, one per line. */
 .choices {
-  padding: 0.75rem 1rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
+  display: grid;
+  gap: var(--space-4);
+  margin: 0;
+  padding: var(--space-8) var(--space-16);
+  border: 1px solid var(--mist);
+  border-radius: var(--radius-12);
+  background: var(--surface);
 }
 
 .choices label {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.3rem 0;
+  gap: var(--space-12);
+  min-height: var(--control-small);
+  cursor: pointer;
 }
 
-.choices input {
-  width: auto;
-}
+.choices + .field { margin-top: var(--space-24); }
 
-.choices + .field {
-  margin-top: 1rem;
-}
+/* The eye of a password field (H30): at the end of the page's line in either direction, while the password itself is
+   typed left to right, so the input's padding follows the page's direction rather than the input's own. */
+.reveal { position: relative; }
+.reveal input { padding-right: 52px; }
 
-/* The eye of a password field (H30): at the end of the line in either direction, while the password itself
-   is typed left to right, so its padding follows the page's direction rather than the input's. */
-.reveal {
-  position: relative;
-}
-
-.reveal input {
-  padding-right: 2.6rem;
+:root[dir='rtl'] .reveal input {
+  padding-right: var(--space-16);
+  padding-left: 52px;
+  text-align: right;
 }
 
 .reveal .eye {
   position: absolute;
-  top: 50%;
-  right: 0.3rem;
-  display: grid;
-  place-items: center;
-  width: 2rem;
-  height: 2rem;
+  inset-block: 0;
+  inset-inline-end: var(--space-4);
+  width: 36px;
+  min-height: 0;
+  height: 36px;
+  margin-block: auto;
   padding: 0;
-  border: none;
-  border-radius: 6px;
-  background: none;
-  color: var(--muted);
-  transform: translateY(-50%);
+  border: 0;
+  background: transparent;
+  color: var(--ink-2);
 }
 
-.reveal .eye:hover {
-  color: var(--text);
+.reveal .eye:active:not(:disabled) { transform: none; }
+
+@media (hover: hover) and (pointer: fine) {
+  .reveal .eye:hover:not(:disabled) { background: var(--wash); color: var(--ink); }
 }
 
-.reveal svg {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-:root[dir='rtl'] .reveal input {
-  padding-right: 0.65rem;
-  padding-left: 2.6rem;
-}
-
-:root[dir='rtl'] .reveal .eye {
-  right: auto;
-  left: 0.3rem;
-}
-
-form.inline .reveal {
-  width: 12rem;
-}
-
-form.inline .reveal input {
-  width: 100%;
-}
-
-/* The strength meter (H30): four bars for the four levels, then the rules. */
+/* The strength meter (H30): the number of bars and the word carry the level; only an invalid password turns alert.
+   It follows the typing at once, without a transition. */
 .strength {
-  margin-top: 0.4rem;
-  font-size: 0.88rem;
+  display: grid;
+  gap: var(--space-8);
+}
+
+.meter {
+  display: grid;
+  gap: 6px;
 }
 
 .meter .bars {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 4px;
+  gap: var(--space-4);
 }
 
 .meter .bars span {
-  height: 6px;
-  border-radius: 3px;
-  background: var(--line);
+  height: 4px;
+  border-radius: 2px;
+  background: var(--mist);
 }
+
+.meter.invalid .bars span:nth-child(-n + 1) { background: var(--alert); }
+.meter.weak .bars span:nth-child(-n + 2),
+.meter.medium .bars span:nth-child(-n + 3),
+.meter.strong .bars span { background: var(--ink); }
 
 .meter p {
-  margin: 0.3rem 0 0;
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 13px;
 }
 
-.meter.invalid .bars span:nth-child(-n + 1) {
-  background: var(--error);
-}
+.meter strong { color: var(--ink); }
+.meter.invalid strong { color: var(--alert); }
 
-.meter.weak .bars span:nth-child(-n + 2) {
-  background: var(--weak);
-}
-
-.meter.medium .bars span:nth-child(-n + 3) {
-  background: var(--medium);
-}
-
-.meter.strong .bars span {
-  background: var(--ok);
-}
-
-.meter.invalid strong {
-  color: var(--error);
-}
-
-.meter.weak strong {
-  color: var(--weak);
-}
-
-.meter.medium strong {
-  color: var(--medium);
-}
-
-.meter.strong strong {
-  color: var(--ok);
-}
-
+/* The rules: a ring for one not met yet, a check in ink once it is, alert for a required one still missing. */
 .rules {
-  margin: 0.4rem 0 0;
+  display: grid;
+  gap: 2px;
+  margin: 0;
   padding: 0;
+  color: var(--ink-2);
+  font-size: 13px;
   list-style: none;
-  color: var(--muted);
 }
 
 .rules li {
   display: flex;
-  gap: 0.45rem;
+  align-items: center;
+  gap: var(--space-8);
 }
 
-.rules .mark {
-  display: inline-block;
-  width: 1ch;
-  text-align: center;
+.rules .icon {
+  width: 16px;
+  height: 16px;
+  color: var(--edge);
 }
 
-.rules li.met {
-  color: var(--ok);
-}
-
-.rules li.missing {
-  color: var(--error);
-}
+.rules li.met,
+.rules li.met .icon { color: var(--ink); }
+.rules li.missing,
+.rules li.missing .icon { color: var(--alert); }
 
 /* The language switch before sign-in (H31), at the end of the first line. */
 .language-switch {
   display: flex;
   justify-content: flex-end;
-  gap: 0.9rem;
-  margin-bottom: 1.5rem;
+  gap: var(--space-16);
+  margin-bottom: var(--space-32);
+  font-size: 15px;
 }
 
 .language-switch button.current {
+  display: inline;
+  min-height: 0;
   padding: 0;
-  border: none;
-  background: none;
-  color: var(--text);
-  font-weight: 600;
+  border: 0;
+  border-radius: 0;
+  color: var(--ink);
+  font-size: inherit;
   cursor: default;
 }
 
-.visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
+.language-switch button.link {
+  color: var(--ink-2);
+  font-weight: 400;
 }
 
-/* Messages */
+/* Text */
 
 .lead {
-  margin: 0 0 1.5rem;
-  color: var(--muted);
+  max-width: var(--measure);
+  margin: 0 0 var(--space-24);
+  color: var(--ink-2);
 }
 
-.aside {
-  color: var(--muted);
-}
+.aside { color: var(--ink-2); }
+p.aside { font-size: 15px; }
 
 .centered {
   margin-top: 30vh;
   text-align: center;
 }
 
-.error,
-.ok,
-.notice {
-  padding: 0.6rem 0.8rem;
-  border-radius: var(--radius);
-}
-
-.error {
-  color: var(--error);
-  background: var(--error-bg);
-}
-
-.ok {
-  color: var(--ok);
-  background: var(--ok-bg);
-}
+/* Notice: a message inside a flow; the icon and, for an alert, the boundary carry its tone. */
 
 .notice {
-  background: var(--notice-bg);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-12);
+  align-items: start;
+  max-width: var(--measure);
+  margin-block: var(--space-16);
+  padding: var(--space-12) var(--space-16);
+  border: 1px solid var(--mist);
+  border-radius: var(--radius-12);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.5;
+  animation: notice-in var(--duration-enter) var(--ease-out) both;
 }
 
-span.error {
-  padding: 0.2rem 0.5rem;
+/* Part of its screen's own content: it appears with the screen, which has no entrance of its own (Notice.tsx). */
+.notice.still { animation: none; }
+
+.notice-mark {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  color: var(--ink-2);
 }
+
+.notice-body {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.notice-body p { margin: 0; }
+
+/* A notice's own title: the words that name it, not a section of the page. */
+.notice-body h2,
+.notice-body h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+.notice-body .actions { margin-top: var(--space-8); }
+.notice[data-tone='done'] .notice-mark { color: var(--ink); }
+.notice[data-tone='alert'] { border-color: var(--alert); }
+.notice[data-tone='alert'] .notice-mark { color: var(--alert); }
+
+/* A device capturing now: the sensor's own red dot. */
+.live-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--sensor);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--sensor) 18%, transparent);
+}
+
+/* A step under way: a ring that turns. */
+.busy-ring {
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-inline-end-color: transparent;
+  border-radius: 50%;
+  animation: turn 800ms linear infinite;
+}
+
+@keyframes turn { to { transform: rotate(1turn); } }
+@keyframes busy-pulse { from { opacity: 1; } to { opacity: 0.35; } }
+@keyframes notice-in { from { opacity: 0; transform: translateY(4px); } }
+@keyframes fade-in { from { opacity: 0; } }
+
+/* A status line that waits for its words takes no room until it has them, and stays a live region. */
+.prompt:empty { margin: var(--space-16) 0 0; }
+
+/* Tag: a short state beside a value. */
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 var(--space-8);
+  border: 1px solid var(--edge);
+  border-radius: var(--radius-pill);
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.tag[data-tone='ink'] { border-color: var(--ink); color: var(--ink); }
+.tag[data-tone='mark'] { border-color: var(--mark); color: var(--mark-text); }
+.tag[data-tone='alert'] { border-color: var(--alert); color: var(--alert); }
 
 /* The frame after sign-in */
 
-/* The areas of the settings (H24, H28), one under the other, with a line between them. */
-.setting {
-  margin-top: 20px;
-}
-
-.setting + .setting {
-  margin-top: 24px;
-  padding-top: 20px;
-  border-top: 1px solid var(--line);
-}
-
-.setting h2 {
-  margin: 0 0 12px;
-}
-
 .narrow {
-  max-width: 26rem;
+  max-width: 28rem;
   margin: 0 auto;
-  padding: 3rem 1rem;
+  padding: var(--space-64) var(--space-24);
 }
 
 .page .narrow {
@@ -441,214 +665,330 @@ span.error {
   min-height: 100vh;
 }
 
+/* The bar: the system's name, where to go, who is signed in and sign-out, on the surface over a mist hairline. */
 .top {
   display: flex;
   align-items: center;
-  gap: 1.5rem;
-  padding: 0.75rem 1.5rem;
-  border-bottom: 1px solid var(--line);
+  gap: var(--space-32);
+  min-height: var(--bar-height);
+  padding: 0 var(--page-gutter);
+  border-bottom: 1px solid var(--mist);
   background: var(--surface);
+}
+
+.top .brand {
+  font-size: 15px;
+  font-weight: 600;
 }
 
 .top nav {
   display: flex;
-  gap: 1.25rem;
+  gap: var(--space-4);
 }
 
 .top nav a {
-  padding: 0.25rem 0;
-  border-bottom: 2px solid transparent;
-  color: var(--muted);
+  padding: var(--space-4) var(--space-12);
+  border-radius: var(--radius-pill);
+  color: var(--ink-2);
+  font-size: 15px;
   text-decoration: none;
+  transition:
+    background-color var(--duration-fast) ease,
+    color var(--duration-fast) ease;
 }
 
 .top nav a.active {
-  border-bottom-color: var(--accent);
-  color: var(--text);
+  background: var(--wash);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .top nav a:hover { color: var(--ink); }
 }
 
 .who {
   margin-inline-start: auto;
-  color: var(--muted);
+  color: var(--ink-2);
+  font-size: 15px;
+}
+
+.top button.link {
+  font-size: 15px;
 }
 
 .page {
   width: 100%;
-  max-width: 72rem;
+  max-width: calc(var(--page-max) + 2 * var(--page-gutter));
   margin: 0 auto;
-  padding: 2rem 1.5rem;
+  padding: var(--space-48) var(--page-gutter) var(--space-64);
 }
 
+/* The areas of a screen (the settings, a modality's state), one under the other, with a hairline between them. */
+.setting { margin-top: var(--space-24); }
+
+.setting + .setting {
+  margin-top: var(--space-32);
+  padding-top: var(--space-24);
+  border-top: 1px solid var(--mist);
+}
+
+.setting h2 { margin: 0 0 var(--space-12); }
+
+/* Home: a surface per modality. */
 .cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
-  gap: 1rem;
+  gap: var(--space-16);
   padding: 0;
   list-style: none;
 }
 
 .card {
-  padding: 1.1rem 1.25rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
+  display: grid;
+  align-content: start;
+  gap: var(--space-8);
+  padding: var(--space-24);
+  border: 1px solid var(--mist);
+  border-radius: var(--radius-12);
   background: var(--surface);
 }
 
 .card h2 {
-  margin: 0 0 0.4rem;
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.35;
 }
 
-.card p {
-  margin: 0 0 0.4rem;
+.card p { margin: 0; }
+.card a.button { justify-self: start; margin-top: var(--space-8); }
+
+/* Data table: numbers on the end side with tabular figures, one hairline between rows, no stripes; wider than its
+   column, the panel scrolls sideways and the page never does. */
+
+.table-wrap {
+  max-width: 100%;
+  overflow: auto;
+  border: 1px solid var(--mist);
+  border-radius: var(--radius-12);
+  background: var(--surface);
 }
 
 table {
   width: 100%;
   border-collapse: collapse;
-  border: 1px solid var(--line);
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+section > table,
+form + table {
+  border: 1px solid var(--mist);
+  border-radius: var(--radius-12);
   background: var(--surface);
+  border-collapse: separate;
+  border-spacing: 0;
+  overflow: hidden;
 }
 
 th,
 td {
-  padding: 0.55rem 0.75rem;
-  border-bottom: 1px solid var(--line);
+  padding: var(--space-12) var(--space-16);
+  border-bottom: 1px solid var(--mist);
   text-align: start;
   vertical-align: middle;
 }
 
 th {
-  color: var(--muted);
-  font-size: 0.9rem;
+  color: var(--ink-2);
+  font-size: 13px;
   font-weight: 600;
+  white-space: nowrap;
 }
 
-/* Fingerprint enrolment and the stored template (H33), in the same neutral look. */
-a.button {
-  display: inline-block;
-  padding: 0.45rem 1rem;
-  border-radius: var(--radius);
-  background: var(--accent);
-  color: var(--accent-text);
-  text-decoration: none;
+tbody tr:last-child td { border-bottom: 0; }
+
+table caption {
+  padding: var(--space-16) var(--space-16) var(--space-4);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: start;
 }
+
+td.number,
+th.number {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+tr.own td,
+tr.decides td { font-weight: 600; }
+
+/* A score with its tag, such as the comparison that decides. */
+.score-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  tbody tr:hover { background: var(--wash); }
+}
+
+/* A problem beside the control it concerns, inside a table's row. */
+.inline-problem {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  color: var(--alert);
+  font-size: 13px;
+}
+
+.inline-problem .icon { width: 16px; height: 16px; }
+
+/* Lists of checks and comparisons: a check in ink for what passed, alert for what did not. */
+.checks {
+  display: grid;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.checks li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-8);
+}
+
+.checks li > span { min-width: 0; }
+
+.checks .icon {
+  width: 18px;
+  height: 18px;
+  margin-top: 3px;
+  color: var(--ink);
+}
+
+.checks li.missing .icon { color: var(--alert); }
+
+/* Sample plate: the surface a capture lies on, drawn in ink by the page (Plate.tsx). */
+
+.plate {
+  position: relative;
+  flex: none;
+  direction: ltr;
+}
+
+.plate canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.plate[data-state='rejected'] .plate-print { opacity: 0.32; }
+
+.plate-caption {
+  margin: var(--space-8) 0 0;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: center;
+}
+
+/* Fingerprint: the fingers (H33, H34), enrolment and the stored template */
+
+a.button { display: inline-flex; }
 
 .hands {
   display: flex;
   flex-wrap: wrap;
-  gap: 1.5rem;
-  margin: 1.25rem 0;
+  gap: var(--space-24);
+  margin: var(--space-24) 0;
 }
 
 .hand {
   display: flex;
-  gap: 0.5rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 0.75rem 1rem 1rem;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+  margin: 0;
+  padding: var(--space-12) var(--space-16) var(--space-16);
+  border: 1px solid var(--mist);
+  border-radius: var(--radius-12);
   background: var(--surface);
 }
 
 .hand legend {
-  padding: 0 0.35rem;
-  color: var(--muted);
+  padding: 0 var(--space-4);
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 600;
 }
 
+/* A finger: a pill with its name; an enrolled finger carries the mark's dot, the chosen one an ink boundary. */
 button.finger {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  gap: var(--space-8);
   min-width: 5.5rem;
-  gap: 0.15rem;
+  padding: 0 var(--space-16);
+  border-color: var(--mist);
+  font-weight: 400;
 }
 
 button.finger.current {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  border-color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--ink);
+  font-weight: 600;
 }
 
 .badge {
-  font-size: 0.75rem;
-  color: var(--ok);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--mark);
 }
 
-button.finger.current .badge {
-  color: inherit;
-}
+.prompt { margin-block: var(--space-16); }
+.prompt .notice { margin: 0; }
 
-.prompt {
-  font-size: 1.05rem;
-}
-
+/* The placements of an enrolment: a bar each, ink when kept, the current one in second ink. */
 .placements {
   display: flex;
-  gap: 0.5rem;
+  gap: var(--space-8);
+  margin: var(--space-8) 0 var(--space-16);
   padding: 0;
-  margin: 0.25rem 0 1rem;
   list-style: none;
 }
 
 .placements li {
-  width: 2.25rem;
-  height: 0.45rem;
-  border-radius: 1rem;
-  background: var(--line);
-  /* A colour change, which stays with reduced motion too. */
-  transition: background-color 200ms ease;
+  width: 36px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--mist);
+  transition: background-color var(--duration-fast) ease;
 }
 
-.placements li.kept {
-  background: var(--ok);
-}
-
-.placements li.now {
-  background: var(--accent);
-}
+.placements li.kept { background: var(--ink); }
+.placements li.now { background: var(--ink-2); }
 
 .beside {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
-  gap: 1.5rem;
-  margin: 1rem 0;
+  gap: var(--space-24);
+  margin: var(--space-16) 0;
 }
 
-img.capture,
-.thumbs img {
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: #fff;
-}
-
-.checks {
-  padding: 0;
-  margin: 0;
-  list-style: none;
-}
-
-.checks li {
-  margin: 0.2rem 0;
-}
-
-.checks .mark {
-  display: inline-block;
-  width: 1.2rem;
-}
-
-.checks li.met .mark,
-.pairs li.met strong {
-  color: var(--ok);
-}
-
-.checks li.missing .mark,
-.pairs li.missing strong {
-  color: var(--error);
-}
+.beside h2 { margin-top: 0; }
 
 .thumbs {
   display: flex;
   flex-wrap: wrap;
-  gap: 1rem;
+  gap: var(--space-16);
   padding: 0;
   list-style: none;
 }
@@ -656,470 +996,1048 @@ img.capture,
 .thumbs li {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: var(--space-4);
+  font-size: 13px;
 }
 
+.thumbs img {
+  border-radius: var(--radius-12);
+  background: var(--surface);
+}
+
+/* The pair scores of an enrolment: a rail per pair, the mark's fill against the threshold's ink tick. */
 .pairs {
+  display: grid;
+  gap: var(--space-8);
+  max-width: 44rem;
+  margin: var(--space-8) 0;
   padding: 0;
   list-style: none;
-  max-width: 40rem;
 }
 
 .pairs li {
   display: grid;
-  grid-template-columns: 6rem 1fr 3.5rem auto;
+  grid-template-columns: 7rem 1fr 3.5rem auto;
   align-items: center;
-  gap: 0.75rem;
-  margin: 0.4rem 0;
+  gap: var(--space-12);
+  font-size: 15px;
 }
 
 .pairs .bar {
   position: relative;
-  height: 0.6rem;
-  border-radius: 1rem;
-  background: var(--line);
+  height: 6px;
+  border-radius: 3px;
+  background: var(--mist);
 }
 
 .pairs .fill {
   position: absolute;
   inset-block: 0;
   inset-inline-start: 0;
-  border-radius: 1rem;
-  background: var(--accent);
+  border-radius: 3px;
+  background: var(--mark);
 }
 
 .pairs .mark {
   position: absolute;
-  inset-block: -0.25rem;
+  inset-block: -5px;
   width: 2px;
-  background: var(--text);
+  margin-inline-start: -1px;
+  background: var(--ink);
 }
 
+.pairs strong {
+  color: var(--mark-text);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+
+/* A pair below the threshold is a result in ink, like a non-match. */
+.pairs li.missing strong { color: var(--ink); }
+.pairs li.missing .fill { background: var(--ink); }
+
+/* The stored template's six steps: Light Table's steps rail, each step a button. */
 .journey .steps {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem 1rem;
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  gap: var(--space-8);
+  margin: var(--space-24) 0 var(--space-8);
   padding: 0;
-  margin: 1rem 0 0.25rem;
   list-style: none;
-  counter-reset: step;
 }
 
 .journey .steps li {
-  counter-increment: step;
+  display: grid;
+  gap: var(--space-8);
+  min-width: 0;
 }
 
 .journey .steps li::before {
-  content: counter(step) '. ';
-  color: var(--muted);
+  content: '';
+  height: 3px;
+  border-radius: 2px;
+  background: var(--mist);
+  transition: background-color var(--duration-fast) ease;
 }
 
-.journey .steps li.current button {
+.journey .steps li.done::before,
+.journey .steps li.current::before { background: var(--ink); }
+
+.journey .steps button.link {
+  overflow: hidden;
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 400;
+  text-align: start;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.journey .steps li.current button.link {
+  color: var(--ink);
   font-weight: 600;
-  color: var(--text);
 }
 
-.journey .step {
-  animation: step-in 180ms var(--ease-out);
-}
+.journey .step { animation: notice-in 180ms var(--ease-out); }
 
-@keyframes step-in {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-}
-
-@keyframes step-fade {
-  from {
-    opacity: 0;
-  }
-}
-
-/* Reduced motion keeps the step's fade and drops its rise. */
-@media (prefers-reduced-motion: reduce) {
-  .journey .step {
-    animation-name: step-fade;
-  }
-}
-
+/* Tabs between the three placements: pills, the chosen one in ink. */
 .tabs {
   display: flex;
-  gap: 0.5rem;
-  margin: 0.75rem 0;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+  margin: var(--space-12) 0;
 }
 
-.tabs button.current {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
+.tabs button { min-height: var(--control-small); padding: 0 var(--space-16); font-size: 14px; }
+.tabs button.current { border-color: var(--ink); background: var(--ink); color: var(--on-ink); }
 
 .print {
   position: relative;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  overflow: hidden;
-  background: #fff;
+  flex: none;
 }
 
-.print img,
-.print canvas {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
-
-.print canvas {
+.print canvas.points {
+  z-index: 1;
   cursor: crosshair;
 }
 
 .vector {
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
+  gap: var(--space-12);
   max-width: 22rem;
 }
 
 canvas.compasses {
   width: 256px;
   height: 256px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border: 1px solid var(--mist);
+  border-radius: var(--radius-12);
   background: var(--surface);
 }
 
 .strip {
   display: flex;
   height: 1.4rem;
-  border: 1px solid var(--line);
+  overflow: hidden;
+  border: 1px solid var(--mist);
+  border-radius: var(--radius-6);
 }
 
 .strip span {
   flex: 1;
-  background: var(--accent);
+  background: var(--ink);
+}
+
+table.numbers {
+  width: auto;
+  border: 1px solid var(--mist);
+  border-radius: var(--radius-12);
+  background: var(--surface);
 }
 
 table.numbers td {
-  padding: 0.1rem 0.35rem;
+  padding: 2px var(--space-8);
+  border: 0;
   text-align: end;
   font-variant-numeric: tabular-nums;
-  font-size: 0.85rem;
+  font-size: 13px;
 }
 
 canvas.heatmap {
   width: 384px;
   height: 360px;
+  border: 1px solid var(--mist);
+  border-radius: var(--radius-12);
   image-rendering: pixelated;
-  border: 1px solid var(--line);
-  background: #000;
+}
+
+table.row {
+  width: auto;
+  min-width: 28rem;
+  border: 1px solid var(--mist);
+  border-radius: var(--radius-12);
+  background: var(--surface);
+  border-collapse: separate;
+  border-spacing: 0;
+  overflow: hidden;
 }
 
 table.row th {
   width: 8rem;
-  text-align: start;
-  color: var(--muted);
-  font-weight: normal;
+  font-weight: 400;
 }
 
+/* The sealed row, part by part: what each part is says its label, not a colour. */
 .sealed {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  margin: 1rem 0;
+  gap: var(--space-8);
+  margin: var(--space-16) 0;
   font-family: Consolas, 'Cascadia Mono', monospace;
-  font-size: 0.8rem;
+  font-size: 12px;
 }
 
 .sealed .part {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
-  padding: 0.4rem 0.5rem;
-  border-radius: 6px;
-  border: 1px solid var(--line);
+  gap: var(--space-4);
   max-width: 100%;
+  padding: var(--space-8) var(--space-12);
+  border: 1px solid var(--mist);
+  border-radius: var(--radius-6);
+  background: var(--surface);
 }
 
-.sealed .hex {
-  word-break: break-all;
-}
+.sealed .ciphertext { border-style: dashed; }
+.sealed .hex { word-break: break-all; }
 
 .sealed .label {
+  color: var(--ink-2);
   font-family: var(--font);
-  color: var(--muted);
+  font-size: 13px;
 }
-
-.sealed .magic { background: var(--notice-bg); }
-.sealed .version { background: var(--ok-bg); }
-.sealed .salt { background: var(--error-bg); }
-.sealed .nonce { background: var(--notice-bg); }
-.sealed .ciphertext { background: var(--surface); }
-.sealed .tag { background: var(--ok-bg); }
 
 .structure {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: var(--space-12);
 }
 
 .structure .samples {
   display: flex;
   flex-wrap: wrap;
-  gap: 1rem;
+  gap: var(--space-16);
 }
 
 .structure .sample {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: var(--space-8);
 }
 
 .structure .box {
-  padding: 0.35rem 0.75rem;
-  border: 1px solid var(--line);
-  border-radius: 6px;
+  padding: var(--space-8) var(--space-12);
+  border: 1px solid var(--mist);
+  border-radius: var(--radius-6);
   background: var(--surface);
+  font-size: 15px;
 }
 
-.structure .box.filled {
-  border-color: var(--accent);
-}
+.structure .box.filled { border-color: var(--ink); }
 
 .structure .box.pending {
   border-style: dashed;
-  color: var(--muted);
+  color: var(--ink-2);
 }
 
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  margin-top: 1.5rem;
+/* Deleting an enrolment (H34): a confirmation, an alert notice with its destructive button, before anything is
+   erased. */
+.confirm { margin-top: var(--space-16); }
+
+/* Light Table's steps: where a flow stands, on one line. */
+
+.steps-rail {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  gap: var(--space-8);
+  max-width: 36rem;
+  margin: var(--space-24) 0;
+  padding: 0;
+  list-style: none;
 }
 
-/* Deleting a finger's enrolment (H34): a confirmation before anything is erased. */
-.confirm {
-  padding: 0.75rem 1rem;
-  border: 1px solid var(--error);
-  border-radius: var(--radius);
-  background: var(--error-bg);
+.steps-rail li {
+  display: grid;
+  gap: var(--space-8);
+  min-width: 0;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.4;
 }
 
-.confirm p {
-  margin: 0;
+.steps-rail li::before {
+  content: '';
+  height: 3px;
+  border-radius: 2px;
+  background: var(--mist);
+  transition: background-color var(--duration-fast) ease;
 }
 
-.confirm .actions {
-  margin-top: 0.75rem;
+.steps-rail li span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-button.danger {
-  border-color: var(--error);
-  background: var(--error);
-  color: var(--surface);
-}
+.steps-rail li[data-state='done']::before,
+.steps-rail li[data-state='current']::before { background: var(--ink); }
 
-/* H35: the verification's real progress and score, using the existing theme. */
-.verification-steps {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  padding-inline-start: 1.5rem;
-  margin-block: 1.5rem;
-}
-
-.verification-steps li {
-  padding: 0.4rem 1rem;
-  margin-inline-end: 0.8rem;
-  color: var(--muted);
-  border-bottom: 2px solid var(--line);
-}
-
-.verification-steps li[aria-current] {
-  color: var(--text);
-  border-color: var(--accent);
+.steps-rail li[data-state='current'] {
+  color: var(--ink);
   font-weight: 600;
 }
 
-.verification-steps li.complete { border-color: var(--ok); }
+/* Method card: a choice between algorithms, read at a glance: the name, how it works, then the two numbers people
+   choose by. Three in a row from 17rem each. */
 
-.verification-result {
-  padding: 1rem 1.25rem;
-  border: 1px solid var(--line);
-  border-inline-start: 4px solid var(--error);
-  border-radius: var(--radius);
-  background: var(--surface);
+.method-choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  gap: var(--space-16);
+  min-width: 0;
+  margin: var(--space-24) 0 0;
+  padding: 0;
+  border: 0;
 }
 
-.verification-result.matched { border-inline-start-color: var(--ok); }
-.verification-result h2 { margin-top: 0; }
-.verification-result meter { display: block; width: 100%; height: 1.5rem; }
-.verification-score { position: relative; }
-.threshold-marker { position: absolute; top: 0; bottom: 0; border-inline-start: 2px solid var(--text); }
-.score-axis { display: flex; justify-content: space-between; color: var(--muted); font-size: 0.75rem; margin-bottom: 0.5rem; }
-.score-labels { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
-.score-note { display: block; font-size: 0.8rem; color: var(--muted); }
-.verification table caption { text-align: start; font-weight: 600; padding-block: 1.25rem 0.5rem; }
-.verification-details { margin-top: 1.5rem; }
-.verification-details summary { cursor: pointer; padding-block: 0.5rem; }
-.verification-details dd { margin-inline-start: 0; margin-bottom: 0.75rem; }
-
-/* H38: method choices use the existing functional form layout. */
-.method-choices {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
-  margin-block: 1rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
+.method-choices > legend {
+  margin-bottom: var(--space-12);
+  padding: 0;
+  font-size: 15px;
+  font-weight: 600;
 }
 
 .method-choice {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.6rem;
-  flex: 1 1 18rem;
-  min-width: 0;
-  padding: 0.75rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
+  position: relative;
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  gap: var(--space-12);
+  padding: var(--space-24);
+  border: 1px solid var(--mist);
+  border-radius: var(--radius-12);
   background: var(--surface);
   cursor: pointer;
+  transition:
+    border-color var(--duration-fast) ease,
+    box-shadow var(--duration-fast) ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .method-choice:hover { border-color: var(--edge); }
+  .method-choice.unavailable:hover { border-color: var(--mist); }
 }
 
 .method-choice:has(input:checked) {
-  border-color: var(--accent);
+  border-color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+
+.method-choice:has(input:focus-visible) {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
 }
 
 .method-choice input {
-  flex: 0 0 auto;
-  width: auto;
-  margin-top: 0.25rem;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
 }
 
-.method-choice > span {
-  flex: 1;
-  min-width: 0;
+.method-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-12);
 }
+
+/* Method names are Latin and stay left to right inside Hebrew. */
+.method-name {
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.35;
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+.method-radio {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border: 1.5px solid var(--edge);
+  border-radius: 50%;
+  transition: border-color var(--duration-fast) ease;
+}
+
+/* The chosen method's dot settles into its ring from just below its size; nothing appears from nothing. */
+.method-radio::after {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--ink);
+  opacity: 0;
+  transform: scale(0.9);
+  transition:
+    opacity var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.method-choice:has(input:checked) .method-radio { border-color: var(--ink); }
+.method-choice:has(input:checked) .method-radio::after { opacity: 1; transform: none; }
+
+/* A method chosen from the keyboard, with the arrow keys, changes at once; one chosen with the pointer keeps the
+   short change above. */
+.method-choices:has(input:focus-visible) .method-choice,
+.method-choices:has(input:focus-visible) .method-radio,
+.method-choices:has(input:focus-visible) .method-radio::after { transition: none; }
 
 .method-description {
-  display: block;
-  margin-top: 0.4rem;
-  font-size: 0.9rem;
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 15px;
+  line-height: 1.5;
 }
 
-.method-choices > p {
-  flex-basis: 100%;
-  margin-block: 0.25rem;
+.method-figures {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-16);
+  align-self: end;
+  margin: 0;
+  padding-top: var(--space-16);
+  border-top: 1px solid var(--mist);
 }
 
-/* H39: enrolment approval and the other methods' illustrations have separate labels. */
-.method-comparisons { margin-top: 2rem; }
-.method-comparison { border-top: 1px solid var(--line); padding-top: 0.75rem; margin-top: 1.25rem; }
-.method-comparison h4 { margin-block: 0.25rem 0.5rem; }
+.figure {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  margin: 0;
+}
 
-/* H41: the gallery display advances only when actual comparisons finish. */
-.identification-entry { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: 1.25rem; }
-.gallery-progress { margin-block: 1rem; }
-.gallery-progress progress { width: 100%; height: 1rem; accent-color: var(--accent); }
-.gallery-sweep { display: grid; grid-template-columns: repeat(12, 1fr); gap: 0.35rem; margin-top: 0.6rem; }
-.gallery-sweep span { height: 1.25rem; border-radius: var(--radius); background: var(--accent); opacity: 0.12; transition: opacity 150ms ease; }
-.gallery-sweep span.complete { opacity: 0.8; }
+.figure-value {
+  color: var(--ink);
+  font-size: 32px;
+  font-weight: 300;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+  direction: ltr;
+  unicode-bidi: isolate;
+}
 
-/* H43: the two native image frames stay left-to-right so coordinates are identical in either language. */
-.match-view { margin-block: 2rem; }
+.figure-unit {
+  margin-inline-start: 2px;
+  color: var(--ink-2);
+  font-size: 18px;
+}
+
+.figure-label {
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.method-threshold {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-8);
+  margin: 0;
+  font-size: 13px;
+}
+
+.method-choice.unavailable {
+  background: transparent;
+  cursor: default;
+}
+
+.method-choice.unavailable > :not(.method-problem) { opacity: 0.45; }
+
+.method-problem {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-8);
+  margin: 0;
+  color: var(--alert);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.method-problem .icon { width: 16px; height: 16px; margin-top: 1px; }
+
+.method-note {
+  grid-column: 1 / -1;
+  max-width: none;
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.method-choices > .notice,
+.method-choices > div { grid-column: 1 / -1; }
+
+/* A single method's card, where there is nothing to choose (SFace, ECAPA-TDNN). */
+.setting.method-card {
+  max-width: 40rem;
+  padding: var(--space-24);
+  border: 1px solid var(--mist);
+  border-radius: var(--radius-12);
+  background: var(--surface);
+}
+
+.setting.method-card h2 {
+  margin: 0 0 var(--space-8);
+  font-size: 18px;
+  font-weight: 600;
+  direction: ltr;
+  text-align: start;
+}
+
+.setting.method-card p { margin: var(--space-8) 0 0; }
+.setting + .setting.method-card { border-top: 1px solid var(--mist); }
+
+/* Score meter: a score against its threshold. */
+
+.score {
+  display: grid;
+  gap: var(--space-12);
+  max-width: 64rem;
+  margin-block: var(--space-24);
+}
+
+.score-figure {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-12);
+  margin: 0;
+}
+
+.score-value {
+  color: var(--mark-text);
+  font-size: 60px;
+  font-weight: 300;
+  line-height: 1.04;
+  letter-spacing: -0.022em;
+  font-variant-numeric: tabular-nums;
+  unicode-bidi: isolate;
+}
+
+.score-label {
+  color: var(--ink-2);
+  font-size: 15px;
+}
+
+.score-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-16) var(--space-48);
+}
+
+.score-head > :first-child { margin: 0; }
+
+.score-head .score-figure {
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0;
+  text-align: end;
+}
+
+.score-rail {
+  position: relative;
+  height: 6px;
+  margin-block: 6px;
+}
+
+.score-groove {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--mist);
+}
+
+/* The fill is scaled, never resized. */
+.score-groove i {
+  position: absolute;
+  inset: 0;
+  background: var(--mark);
+  transform: scaleX(var(--fill, 0));
+  transform-origin: left;
+}
+
+:root[dir='rtl'] .score-groove i { transform-origin: right; }
+
+.score-rail b {
+  position: absolute;
+  inset-block: -6px;
+  inset-inline-start: calc(var(--at, 0) * 100%);
+  width: 2px;
+  margin-inline-start: -1px;
+  background: var(--ink);
+}
+
+.score-ends {
+  position: relative;
+  height: 20px;
+  color: var(--ink-2);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.score-ends span {
+  position: absolute;
+  inset-inline-start: 0;
+  white-space: nowrap;
+}
+
+/* The threshold's label starts at its tick, and never closer to the rail's start than the 0 allows. */
+.score-ends .score-at {
+  inset-inline-start: max(calc(var(--at, 0) * 100%), 28px);
+  margin-inline-start: -1px;
+  color: var(--ink);
+}
+
+.score-ends .score-max {
+  inset-inline-start: auto;
+  inset-inline-end: 0;
+}
+
+.score-leader { margin: 0; }
+
+.score-explain {
+  max-width: var(--measure);
+  margin: 0;
+  color: var(--ink-2);
+}
+
+/* A score below its threshold is a result too, said in ink: the number and the fill. */
+.score.below .score-value { color: var(--ink); }
+.score.below .score-groove i { background: var(--ink); }
+.score.compact .score-value { font-size: 24px; letter-spacing: 0; }
+.score.compact .score-label { font-size: 13px; }
+
+/* A result with its verdict: the verdict in ink, the found quantity in the mark's colours. */
+.verification-result {
+  margin-block: var(--space-24);
+}
+
+/* The verdict of a result is the screen's display line. */
+.verification-result h2 {
+  margin: 0;
+  font-size: 60px;
+  font-weight: 300;
+  line-height: 1.04;
+  letter-spacing: -0.022em;
+}
+
+@media (max-width: 1100px) {
+  .verification-result h2,
+  .score-value { font-size: 48px; }
+}
+
+:lang(he) .verification-result h2 { letter-spacing: 0; }
+
+.verification-result p { margin: var(--space-8) 0 0; }
+.verification table caption { padding-block: var(--space-16) var(--space-4); }
+
+.verification-details {
+  margin-top: var(--space-32);
+  padding-top: var(--space-16);
+  border-top: 1px solid var(--mist);
+}
+
+.verification-details summary {
+  padding-block: var(--space-8);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.verification-details dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-4) var(--space-16);
+  font-size: 15px;
+}
+
+.verification-details dt { color: var(--ink-2); }
+.verification-details dd { margin: 0; }
+
+/* H39: the other methods' pair scores, under their own labels. */
+.method-comparisons { margin-top: var(--space-32); }
+
+.method-comparison {
+  margin-top: var(--space-24);
+  padding-top: var(--space-16);
+  border-top: 1px solid var(--mist);
+}
+
+.method-comparison h4 { margin-block: var(--space-4) var(--space-8); }
+
+/* H41: the gallery's progress, as its comparisons finish; other users are anonymous mist cells. */
+.identification-entry {
+  margin-top: var(--space-48);
+  padding-top: var(--space-24);
+  border-top: 1px solid var(--mist);
+}
+
+.gallery-progress { margin-block: var(--space-16); }
+
+progress {
+  width: 100%;
+  height: 6px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 3px;
+  appearance: none;
+  background: var(--mist);
+}
+
+progress::-webkit-progress-bar { background: var(--mist); }
+progress::-webkit-progress-value { background: var(--ink); }
+
+.gallery-sweep {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: var(--space-4);
+  margin-top: var(--space-12);
+}
+
+/* A cell is mist; what has been compared or passed is an ink-2 layer over it that fades in, so only the layer's
+   opacity changes. */
+.gallery-sweep span {
+  position: relative;
+  height: 20px;
+  border-radius: var(--radius-6);
+  background: var(--mist);
+}
+
+.gallery-sweep span::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--ink-2);
+  opacity: 0;
+  transition: opacity var(--duration-fast) ease;
+}
+
+.gallery-sweep span.complete::after { opacity: 1; }
+
+/* H50: the pass over a face or voice gallery plays once when the answer arrives; with Windows' animation effects off
+   the page skips it. Each cell's delay is set on the cell (GalleryPass.tsx) and taken by its layer. */
+.gallery-sweep.passing span::after {
+  animation: gallery-pass 200ms ease both;
+  animation-delay: inherit;
+}
+
+@keyframes gallery-pass { from { opacity: 0; } to { opacity: 1; } }
+
+/* H43: the flat match drawing, the two plates left to right in either language so coordinates stay identical. */
+.match-view { margin-block: var(--space-32); }
 .match-view figure { margin: 0; }
-.match-labels { display: grid; grid-template-columns: 1fr 1fr; gap: 4.76%; margin-bottom: 0.5rem; }
-.match-labels span { text-align: center; font-weight: 600; }
-.match-drawing { display: block; width: 100%; height: auto; direction: ltr; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
-.match-connections { fill: none; stroke: var(--accent); stroke-width: 0.7; opacity: 0.22; }
-.match-selected { fill: none; stroke: var(--accent); stroke-width: 2; pointer-events: none; }
-.match-selected .match-halo { stroke: white; stroke-width: 4; opacity: 0.8; }
-.match-selected circle { fill: white; fill-opacity: 0.45; stroke-width: 2; }
-.match-view figcaption { margin-block: 0.5rem; color: var(--muted); font-size: 0.9rem; }
+
+.match-labels {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4.76%;
+  margin-bottom: var(--space-8);
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+.match-labels span { text-align: center; }
+
+.match-drawing {
+  display: block;
+  width: 100%;
+  height: auto;
+  direction: ltr;
+}
+
+.match-connections { fill: none; stroke: var(--mark); stroke-width: 0.8; opacity: 0.5; }
+.match-selected { fill: none; stroke: var(--ink); stroke-width: 2; pointer-events: none; }
+.match-selected .match-halo { stroke: var(--surface); stroke-width: 5; opacity: 0.9; }
+.match-selected circle { fill: var(--surface); fill-opacity: 0.5; stroke-width: 2; }
+
+.match-view figcaption {
+  margin-block: var(--space-8);
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
 /* H44: how the method counts its pairs, so crossing pore lines are read correctly. */
-.match-rule { color: var(--muted); font-size: 0.9rem; }
-.match-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 1.5rem; margin-block: 1rem; }
-.match-toggle { display: flex; align-items: center; gap: 0.5rem; }
-.match-toggle input { width: auto; }
-.match-picker { display: flex; flex: 1 1 17rem; flex-direction: column; gap: 0.4rem; }
-.match-picker input { width: 100%; accent-color: var(--accent); }
+.match-rule { color: var(--ink-2); font-size: 15px; }
 
-/* H48: the camera's live view, mirrored as people expect of a camera that faces them; the found face is drawn
-   over it in the frame's own pixels, so the overlay is mirrored with the picture. */
-.camera { margin-block: 1rem; }
-.camera-view { position: relative; width: min(100%, 640px); aspect-ratio: 16 / 9; background: #000; border-radius: var(--radius); overflow: hidden; }
+.match-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-24);
+  margin-block: var(--space-16);
+}
+
+.match-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.match-picker {
+  display: flex;
+  flex: 1 1 17rem;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.match-picker input { width: 100%; }
+
+/* Face (H48 to H53): the camera's live view, mirrored as people expect of a camera that faces them; the found face is
+   drawn over it in the frame's own pixels, so the overlay is mirrored with the picture. */
+.camera { margin-block: var(--space-16); }
+
+.camera-view {
+  position: relative;
+  width: min(100%, 640px);
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: var(--radius-12);
+  background: #000;
+}
+
 .camera-view video,
-.camera-view canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; transform: scaleX(-1); }
-.camera-status { position: absolute; inset: auto 0 0 0; margin: 0; padding: 0.5rem; color: #fff; text-align: center; }
-.camera-picker { margin-block: 0.75rem; }
-.camera-picker select { width: auto; margin-inline-start: 0.5rem; }
+.camera-view canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transform: scaleX(-1);
+}
+
+.camera-status {
+  position: absolute;
+  inset: auto 0 0 0;
+  margin: 0;
+  padding: var(--space-8);
+  color: #fff;
+  text-align: center;
+}
+
+.camera-picker { margin-block: var(--space-12); }
+
+.camera-picker label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-8);
+  font-weight: 600;
+}
+
 .guidance { width: min(100%, 640px); }
-.faces img { width: 112px; height: 112px; border-radius: var(--radius); }
-.method-card h2 { direction: ltr; text-align: start; }
-.face-enrolment .prompt:empty { padding: 0; margin: 0; border: 0; background: none; }
+.camera .actions { margin-top: var(--space-16); }
+
+.faces img {
+  width: 112px;
+  height: 112px;
+  border-radius: var(--radius-12);
+}
+
 /* H49: the new face beside the closest enrolled one, left to right in either language. */
-.face-pair { display: flex; gap: 1.5rem; margin-block: 1rem; }
-.face-pair figure { margin: 0; text-align: center; }
-.face-pair img { width: 140px; height: 140px; border-radius: var(--radius); }
-.face-score { width: min(100%, 420px); height: 1.25rem; }
-.face-verification .prompt:empty { padding: 0; margin: 0; border: 0; background: none; }
+.face-pair {
+  display: flex;
+  gap: var(--space-24);
+  margin-block: var(--space-16);
+}
 
-/* H50: the pass over the face gallery plays once when the answer arrives, since the search takes milliseconds;
-   the page skips it when Windows' animation effects are off. */
-.gallery-sweep.passing span { animation: gallery-pass 200ms ease-out both; }
-@keyframes gallery-pass { from { opacity: 0.12; } to { opacity: 0.8; } }
-@media (prefers-reduced-motion: reduce) { .gallery-sweep.passing span { animation: none; opacity: 0.8; } }
-.face-identification tr.own td, .voice-identification tr.own td { font-weight: 600; }
+.face-pair figure {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 13px;
+  text-align: center;
+}
 
-/* H53: an existing image has a screen of its own, with a visible drop zone that a dragged file highlights. */
-.drop-zone { display: grid; justify-items: center; gap: 0.5rem; width: min(100%, 640px); margin-block: 0.5rem 1rem; padding: 2.5rem 1.5rem; text-align: center; border: 2px dashed var(--line); border-radius: var(--radius); background: var(--surface); }
+.face-pair img {
+  width: 140px;
+  height: 140px;
+  border-radius: var(--radius-12);
+}
+
+.face-pair figcaption { margin-top: var(--space-8); }
+
+/* H53: an existing image or recording has a screen of its own, with a visible drop zone that a dragged file marks. */
+.drop-zone {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-8);
+  width: min(100%, 640px);
+  margin-block: var(--space-8) var(--space-16);
+  padding: var(--space-48) var(--space-24);
+  border: 1.5px dashed var(--edge);
+  border-radius: var(--radius-12);
+  background: var(--surface);
+  text-align: center;
+  transition:
+    border-color var(--duration-fast) ease,
+    background-color var(--duration-fast) ease;
+}
+
 .drop-zone p { margin: 0; }
-.drop-zone.dragging { border-color: var(--accent); background: var(--notice-bg); }
+.drop-zone button { margin-top: var(--space-8); }
 
-/* H54: the microphone's panel: the sentence to read, the level meter, the timer of a recording, and the kept
-   recordings as waveforms. The meter shows the level as it is, so it has no transition to switch off. */
-.microphone { display: grid; gap: 0.75rem; width: min(100%, 640px); padding: 1rem 1.25rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
-.microphone.recording { border-color: var(--accent); }
+.drop-zone.dragging {
+  border-color: var(--ink);
+  background: var(--wash);
+}
+
+/* Voice (H54 to H57): the microphone's panel, the sentence to read, the level meter, the timer of a recording, and
+   the kept recordings as waveforms. A recording in progress is a device capturing now: the sensor's rim. The meter
+   shows the level as it is, so it has no transition to switch off. */
+.microphone {
+  display: grid;
+  gap: var(--space-12);
+  width: min(100%, 640px);
+  padding: var(--space-16) var(--space-24);
+  border: 1px solid var(--mist);
+  border-radius: var(--radius-12);
+  background: var(--surface);
+  transition: box-shadow var(--duration-fast) ease, border-color var(--duration-fast) ease;
+}
+
+.microphone.recording {
+  border-color: var(--sensor);
+  box-shadow: inset 0 0 0 1px var(--sensor);
+}
+
 .microphone .actions { margin: 0; }
-.sentence { margin: 0; font-size: 1.15rem; line-height: 1.5; }
-.sentence q { quotes: none; font-weight: 600; }
-.level { display: flex; align-items: flex-end; gap: 3px; height: 2.25rem; }
-.level i { flex: 1; height: 100%; border-radius: 2px; background: var(--line); }
-.level i.on { background: var(--ok); }
-.level i.on.loud { background: var(--error); }
-.timer { display: grid; gap: 0.35rem; font-variant-numeric: tabular-nums; }
-.timer .track { display: block; height: 4px; overflow: hidden; border-radius: 2px; background: var(--line); }
-.timer .run { display: block; height: 100%; background: var(--accent); }
-.recordings { display: grid; gap: 0.5rem; width: min(100%, 640px); padding: 0; list-style: none; }
-.recording-row { display: grid; grid-template-columns: 7rem 1fr auto; align-items: center; gap: 0.75rem; }
-.waveform { width: 100%; height: 3rem; color: var(--accent); background: var(--bg); border-radius: var(--radius); }
-.waveform path { stroke: currentColor; stroke-width: 0.7; fill: none; }
-.voice-enrolment .prompt:empty { padding: 0; margin: 0; border: 0; background: none; }
-.voice-verification .prompt:empty, .voice-identification .prompt:empty { padding: 0; margin: 0; border: 0; background: none; }
+
+.sentence {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.5;
+}
+
+.sentence q {
+  quotes: none;
+  font-weight: 600;
+}
+
+.level {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 36px;
+}
+
+.level i {
+  flex: 1;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--mist);
+}
+
+.level i.on { background: var(--ink); }
+.level i.on.loud { background: var(--alert); }
+
+.timer {
+  display: grid;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.timer .track {
+  display: block;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--mist);
+}
+
+.timer .run {
+  display: block;
+  height: 100%;
+  background: var(--sensor);
+}
+
+.recordings {
+  display: grid;
+  gap: var(--space-8);
+  width: min(100%, 640px);
+  padding: 0;
+  list-style: none;
+}
+
+.recording-row {
+  display: grid;
+  grid-template-columns: 7rem 1fr auto;
+  align-items: center;
+  gap: var(--space-12);
+  font-size: 15px;
+}
+
+.waveform {
+  width: 100%;
+  height: 48px;
+  border-radius: var(--radius-6);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.waveform path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 0.7;
+}
 
 /* H22: the result of a fingerprint 1:1 verification on its stage. */
-.match-result { margin-block: 1.5rem 0.5rem; }
+.match-result { margin-block: var(--space-24) var(--space-8); }
 
 .match-headline {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 3rem;
+  gap: var(--space-48);
 }
 
 .match-headline h2 {
-  margin: 0 0 0.75rem;
+  margin: 0 0 var(--space-12);
+  font-size: 60px;
   font-weight: 300;
-  font-size: clamp(2.6rem, 5vw, 4.2rem);
   line-height: 1.04;
   letter-spacing: -0.022em;
 }
 
-/* The verdict arrives with what explains it, as one wave: the heading leads and rises the furthest, the
-   explanation follows 50 ms later and rises less, and the notes (a provisional threshold, the hint after a
-   non-match) follow 40 ms after that. All of it ends within 300 ms. */
+@media (max-width: 1100px) {
+  .match-headline h2 { font-size: 48px; }
+}
+
+/* The verdict arrives with what explains it, as one wave: the heading leads and rises the furthest, the explanation
+   follows 50 ms later and rises less, and the notes (a provisional threshold, the hint after a non-match) follow 40 ms
+   after that. All of it ends within 300 ms. */
 .match-headline h2,
 .match-later {
   opacity: 0;
@@ -1139,29 +2057,52 @@ button.danger {
 }
 
 .match-headline h2.shown,
-.match-later.shown { opacity: 1; transform: none; }
+.match-later.shown {
+  opacity: 1;
+  transform: none;
+}
+
+/* A notice that enters with the verdict takes the verdict's wave, not its own entrance. */
+.notice.match-later { animation: none; }
+
 :root[lang='he'] .match-headline h2 { letter-spacing: 0; }
-.match-headline p { max-width: 62ch; margin: 0.25rem 0 0; color: var(--muted); }
+
+.match-headline p {
+  max-width: var(--measure);
+  margin: var(--space-4) 0 0;
+  color: var(--ink-2);
+}
+
+.match-headline .notice { margin-top: var(--space-12); }
 
 .match-count {
   flex: none;
+  margin: 0 0 var(--space-12);
+  color: var(--ink-2);
+  font-size: 15px;
   text-align: end;
-  font-size: 0.9rem;
 }
 
 .match-count strong {
   display: block;
   color: var(--mark-text);
+  font-size: 60px;
   font-weight: 300;
-  font-size: clamp(2.6rem, 5vw, 4.2rem);
   line-height: 1.04;
   font-variant-numeric: tabular-nums;
 }
 
+@media (max-width: 1100px) {
+  .match-count strong { font-size: 48px; }
+}
+
+.match-result.below .match-count strong { color: var(--ink); }
+.match-result.below .match-groove i { background: var(--ink); }
+
 .match-stage {
   position: relative;
   height: clamp(280px, 46vh, 480px);
-  margin-top: 1rem;
+  margin-top: var(--space-16);
 }
 
 .match-stage canvas {
@@ -1169,11 +2110,11 @@ button.danger {
   inset: 0;
   width: 100%;
   height: 100%;
-  background: var(--bg);
+  background: var(--canvas);
 }
 
-/* The stage enters as one: its first frame and its labels fade in together once the captures are decoded, and
-   the tilt, which hardly moves in its first 150 ms, carries on beneath the fade. */
+/* The stage enters as one: its first frame and its labels fade in together once the captures are decoded, and the
+   tilt, which hardly moves in its first 150 ms, carries on beneath the fade. */
 .match-stage canvas,
 .match-plates {
   opacity: 0;
@@ -1189,20 +2130,24 @@ button.danger {
   inset: auto 0 0;
   display: flex;
   justify-content: space-around;
-  color: var(--muted);
-  font-size: 0.9rem;
+  color: var(--ink-2);
+  font-size: 13px;
   pointer-events: none;
 }
 
-.match-rail { margin-top: 1rem; }
-.match-track { position: relative; height: 6px; }
+.match-rail { margin-top: var(--space-16); }
+
+.match-track {
+  position: relative;
+  height: 6px;
+}
 
 .match-groove {
   position: absolute;
   inset: 0;
   overflow: hidden;
   border-radius: 3px;
-  background: var(--line);
+  background: var(--mist);
 }
 
 /* The fill is scaled, never resized: the stage moves it with the count, in the frames that draw the threads. */
@@ -1215,26 +2160,41 @@ button.danger {
 }
 
 :root[dir='rtl'] .match-groove i { transform-origin: right; }
-.match-track b { position: absolute; inset-block: -5px; width: 2px; background: var(--text); }
+
+.match-track b {
+  position: absolute;
+  inset-block: -6px;
+  width: 2px;
+  background: var(--ink);
+}
 
 .match-ends {
   position: relative;
-  height: 1.4rem;
-  margin-top: 0.4rem;
-  color: var(--muted);
-  font-size: 0.85rem;
+  height: 20px;
+  margin-top: var(--space-8);
+  color: var(--ink-2);
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
 }
 
-.match-ends span { position: absolute; inset-inline-start: 0; white-space: nowrap; }
-.match-ends span + span { color: var(--text); translate: -50% 0; }
+.match-ends span {
+  position: absolute;
+  inset-inline-start: 0;
+  white-space: nowrap;
+}
+
+.match-ends span + span {
+  color: var(--ink);
+  translate: -50% 0;
+}
+
 :root[dir='rtl'] .match-ends span + span { translate: 50% 0; }
 
 .match-pair {
   min-height: 1.5em;
-  margin: 0.4rem 0 1rem;
-  color: var(--muted);
-  font-size: 0.9rem;
+  margin: var(--space-8) 0 var(--space-16);
+  color: var(--ink-2);
+  font-size: 15px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1242,9 +2202,38 @@ button.danger {
   .match-stage { cursor: crosshair; }
 }
 
-/* Reduced motion: the verdict and its lines appear together by their fade alone, without rising or waiting. */
+/* Reduced motion keeps the fades and colour changes and drops movement, scaling and turning; a step under way
+   pulses instead of turning; the verdict and its lines appear together by their fade alone, without rising or
+   waiting. */
 @media (prefers-reduced-motion: reduce) {
+  button:active:not(:disabled),
+  a.button:active { transform: none; }
+
+  .busy-ring { animation: busy-pulse 1.2s ease-in-out infinite alternate; }
+
+  .notice,
+  .journey .step { animation-name: fade-in; }
+
+  .method-radio::after {
+    transform: none;
+    transition: opacity var(--duration-fast) var(--ease-out);
+  }
+
+  .gallery-sweep.passing span::after {
+    animation: none;
+    opacity: 1;
+  }
+
   .match-headline h2,
   .match-later,
-  .match-later.match-note { transform: none; transition-delay: 0ms; }
+  .match-later.match-note {
+    transform: none;
+    transition-delay: 0ms;
+  }
 }
+
+/* A change of theme repaints every colour at once (themeChange.ts): for its frame no colour eases, or the controls
+   that ease theirs would follow the page 150 ms late and the change would show in two stages. */
+:root.theme-changing *,
+:root.theme-changing *::before,
+:root.theme-changing *::after { transition: none !important; }

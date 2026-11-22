@@ -2,6 +2,7 @@ import { useId, useState } from 'react'
 import { checkPassword, STRENGTHS } from '../../shared/password'
 import { useSession } from './session'
 import type { Texts } from './texts'
+import { Icon } from './ui/Icon'
 
 // A password input with the eye that shows or hides what is typed (H30), as large products offer it. The
 // eye sits at the end of the line in either direction; the password itself is always typed left to right.
@@ -49,11 +50,7 @@ export function RevealInput({
         title={shown ? t.hidePassword : t.showPassword}
         onClick={() => setShown(!shown)}
       >
-        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">
-          <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" />
-          <circle cx="12" cy="12" r="3" />
-          {shown && <path d="M4 4l16 16" />}
-        </svg>
+        <Icon name={shown ? 'eye-off' : 'eye'} />
       </button>
     </div>
   )
@@ -87,7 +84,8 @@ export function PasswordField({ label, value, onChange, autoComplete, hint, mete
 }
 
 // The meter's four levels, as the supervisor set them: invalid, weak, medium, strong (H30). It changes with
-// every character typed; under it the three required rules and the two optional ones, each marked.
+// every character typed; under it the three required rules and the two optional ones, each marked: a ring for a rule
+// not met yet, a check once it is, and alert for a required rule still missing once something is typed (H22).
 export function PasswordStrength({ id, password }: { id: string; password: string }) {
   const { t } = useSession()
   const check = checkPassword(password)
@@ -117,9 +115,7 @@ export function PasswordStrength({ id, password }: { id: string; password: strin
       <ul className="rules">
         {rules.map(([rule, met, required]) => (
           <li key={rule} className={met ? 'met' : typed && required ? 'missing' : 'open'}>
-            <span className="mark" aria-hidden="true">
-              {met ? '✓' : required ? '•' : '+'}
-            </span>
+            <Icon name={met ? 'check' : 'ring'} />
             {t.rules[rule]}
             <span className="visually-hidden">, {met ? t.ruleMet : t.ruleMissing}</span>
           </li>

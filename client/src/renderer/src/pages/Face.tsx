@@ -9,6 +9,7 @@ import { FaceResult } from '../face/FaceResult'
 import { FaceVerification } from '../face/FaceVerification'
 import { errorText } from '../texts'
 import { useSession } from '../session'
+import { Notice } from '../ui/Notice'
 
 type FaceState = { enrolled: boolean; enrolled_at?: string }
 
@@ -104,8 +105,8 @@ export function Face() {
       {state === null || method === null ? (
         message?.kind === 'error' ? (
           <>
-            <p className="error" role="alert">{message.text}</p>
-            <button type="button" onClick={load}>{f.tryAgain}</button>
+            <Notice tone="alert" role="alert">{message.text}</Notice>
+            <button type="button" className="primary" onClick={load}>{f.tryAgain}</button>
           </>
         ) : (
           <p className="aside">{t.loading}</p>
@@ -114,25 +115,24 @@ export function Face() {
         <>
           <div className="setting">
             <p><strong>{state.enrolled ? f.enrolledOn(when) : f.notEnrolled}</strong></p>
-            {!method.available && <p className="error" role="alert">{f.unavailable}</p>}
+            {!method.available && <Notice tone="alert" role="alert" still>{f.unavailable}</Notice>}
             {state.enrolled && <p className="aside">{f.replaces}</p>}
             {confirming ? (
-              <div className="confirm" role="alertdialog" aria-label={f.deleteEnrolment}>
+              <Notice tone="alert" role="alertdialog" label={f.deleteEnrolment} className="confirm" actions={<>
+                <button type="button" className="danger" disabled={deleting} onClick={() => void remove()}>
+                  {deleting ? f.deleting : f.deleteConfirm}
+                </button>
+                <button type="button" className="quiet" disabled={deleting} onClick={() => setConfirming(false)}>
+                  {t.cancel}
+                </button>
+              </>}>
                 <p>{f.deleteAsk}</p>
-                <div className="actions">
-                  <button type="button" className="danger" disabled={deleting} onClick={() => void remove()}>
-                    {deleting ? f.deleting : f.deleteConfirm}
-                  </button>
-                  <button type="button" className="secondary" disabled={deleting} onClick={() => setConfirming(false)}>
-                    {t.cancel}
-                  </button>
-                </div>
-              </div>
+              </Notice>
             ) : (
               <div className="actions">
                 {state.enrolled && (
                   <>
-                    <button type="button" disabled={!method.available} onClick={() => {
+                    <button type="button" className="primary" disabled={!method.available} onClick={() => {
                       setMessage(null)
                       setVerifying(true)
                     }}>{f.verify.open}</button>
@@ -142,7 +142,7 @@ export function Face() {
                     }}>{f.identify.open}</button>
                   </>
                 )}
-                <button type="button" className={state.enrolled ? 'secondary' : ''} disabled={!method.available} onClick={() => {
+                <button type="button" className={state.enrolled ? 'secondary' : 'primary'} disabled={!method.available} onClick={() => {
                   setMessage(null)
                   setEnrolling(true)
                 }}>
@@ -161,12 +161,12 @@ export function Face() {
                   </>
                 )}
                 {state.enrolled && (
-                  <button type="button" className="secondary" onClick={() => setConfirming(true)}>{f.deleteEnrolment}</button>
+                  <button type="button" className="danger" onClick={() => setConfirming(true)}>{f.deleteEnrolment}</button>
                 )}
               </div>
             )}
             {message !== null && (
-              <p className={message.kind} role={message.kind === 'error' ? 'alert' : 'status'}>{message.text}</p>
+              <Notice tone={message.kind === 'error' ? 'alert' : 'done'} role={message.kind === 'error' ? 'alert' : 'status'}>{message.text}</Notice>
             )}
           </div>
           <div className="setting method-card">

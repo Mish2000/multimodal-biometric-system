@@ -8,6 +8,9 @@ import { useNavigate } from 'react-router'
 import type { VoiceCheck, VoiceMethod, VoiceSource, VoiceVerificationAnswer, VoiceVerificationResult } from '../../../shared/bridge'
 import { errorText } from '../texts'
 import { useSession } from '../session'
+import { Icon } from '../ui/Icon'
+import { Notice } from '../ui/Notice'
+import { ScoreMeter } from '../ui/ScoreMeter'
 import { MicrophonePanel, type PanelProps, type Recorded } from './MicrophonePanel'
 import { RecordingRow } from './Recording'
 import { VoiceChecks } from './VoiceEnrolment'
@@ -22,10 +25,10 @@ export function VoiceNotEnrolled({ title, text, onEnrol }: { title: ReactNode; t
   return (
     <section>
       <h1>{title}</h1>
-      <p className="notice" role="status">{text}</p>
+      <Notice role="status" still>{text}</Notice>
       <div className="actions">
-        <button type="button" onClick={onEnrol}>{v.enrolNow}</button>
-        <button type="button" className="secondary" onClick={() => navigate('/')}>{v.home}</button>
+        <button type="button" className="primary" onClick={onEnrol}>{v.enrolNow}</button>
+        <button type="button" className="quiet" onClick={() => navigate('/')}>{v.home}</button>
       </div>
     </section>
   )
@@ -42,30 +45,33 @@ export function VoiceVerificationView({ result, probe, rate, onAgain, onLeave }:
   const v = t.voice.verify
   return (
     <section className="voice-verification-result">
-      <h1>{result.accepted ? v.match : v.noMatch}</h1>
+      <h1 className="display">{result.accepted ? v.match : v.noMatch}</h1>
       <ul className="recordings">
         <RecordingRow label={v.newRecording} waveformLabel={v.newRecording} pcm={probe} rate={rate} />
         <RecordingRow label={v.enrolledRecording(result.view.placement)} waveformLabel={v.enrolledRecording(result.view.placement)}
           pcm={pcmOfWav(result.view.reference)} rate={rate} />
       </ul>
-      <meter className="face-score" min={0} max={1} value={Math.max(0, result.score)} aria-label={v.scoreLabel} />
-      <p className={result.accepted ? 'ok' : 'error'}>{v.score(result.score, result.threshold)}</p>
+      <ScoreMeter score={result.score} threshold={result.threshold} scale="similarity" label={v.scoreLabel}
+        shown={result.score.toFixed(3)} thresholdLabel={t.matchAbove(result.threshold)} accepted={result.accepted}
+        explanation={v.score(result.score, result.threshold)} />
       <p className="aside">{v.time(result.duration_ms)} {v.saved}</p>
       <VoiceSourceLine source={result.source} file={result.file} />
       <h2>{v.comparisonsTitle}</h2>
       <ul className="checks">
         {result.comparisons.map((comparison) => (
           <li key={comparison.placement} className={comparison.accepted ? 'met' : 'missing'}>
-            <span className="mark" aria-hidden="true">{comparison.accepted ? '✓' : '✗'}</span>{' '}
-            <strong>{v.enrolledRecording(comparison.placement)}</strong>{' '}
-            <bdi dir="ltr">{comparison.score.toFixed(3)}</bdi>{' '}
-            <span className="aside">{comparison.accepted ? t.voice.above : t.voice.notAbove}</span>
+            <Icon name={comparison.accepted ? 'check' : 'alert'} />
+            <span>
+              <strong>{v.enrolledRecording(comparison.placement)}</strong>{' '}
+              <bdi dir="ltr">{comparison.score.toFixed(3)}</bdi>{' '}
+              <span className="aside">{comparison.accepted ? t.voice.above : t.voice.notAbove}</span>
+            </span>
           </li>
         ))}
       </ul>
       <div className="actions">
-        <button type="button" onClick={onAgain}>{v.again}</button>
-        <button type="button" className="secondary" onClick={onLeave}>{v.back}</button>
+        <button type="button" className="primary" onClick={onAgain}>{v.again}</button>
+        <button type="button" className="quiet" onClick={onLeave}>{v.back}</button>
       </div>
     </section>
   )
@@ -118,9 +124,9 @@ export function VoiceVerification({ method, enrolled, onEnrol, onLeave, Panel = 
             <p className="aside">{v.speed}</p>
           </div>
           <div className="actions">
-            <button type="button" onClick={() => setStage({ kind: 'live', busy: false })}>{v.live}</button>
+            <button type="button" className="primary" onClick={() => setStage({ kind: 'live', busy: false })}>{v.live}</button>
             <button type="button" className="secondary" onClick={() => setStage({ kind: 'file', busy: false })}>{t.voice.files.upload}</button>
-            <button type="button" className="secondary" onClick={onLeave}>{v.back}</button>
+            <button type="button" className="quiet" onClick={onLeave}>{v.back}</button>
           </div>
           <p className="aside">{t.voice.files.uploadNote}</p>
         </>
@@ -130,28 +136,28 @@ export function VoiceVerification({ method, enrolled, onEnrol, onLeave, Panel = 
           <Panel busy={stage.busy} seconds={method.recording_seconds} rate={method.sample_rate}
             sentence={t.voice.sentences[t.voice.sentences.length - 1]!}
             onRecorded={(recorded: Recorded) => void verify(recorded.recording, 'device', recorded.pcm)} />
-          <p className="notice prompt" role="status" aria-live="polite">{stage.busy ? v.comparing : ''}</p>
+          <div className="prompt" role="status" aria-live="polite">{stage.busy && <Notice tone="busy">{v.comparing}</Notice>}</div>
           <button type="button" className="secondary" disabled={stage.busy} onClick={again}>{t.voice.cancel}</button>
         </>
       )}
       {stage.kind === 'file' && (
         <>
           <VoiceFile busy={stage.busy} onFile={(recording) => void verify(recording, 'file')} />
-          <p className="notice prompt" role="status" aria-live="polite">{stage.busy ? v.comparing : ''}</p>
+          <div className="prompt" role="status" aria-live="polite">{stage.busy && <Notice tone="busy">{v.comparing}</Notice>}</div>
           <button type="button" className="secondary" disabled={stage.busy} onClick={again}>{t.voice.cancel}</button>
         </>
       )}
       {stage.kind === 'rejected' && (
-        <div className="rejected">
+        <Notice tone="alert" className="rejected">
           <h2>{v.rejectedTitle}</h2>
           <VoiceChecks checks={stage.checks} />
-        </div>
+        </Notice>
       )}
-      {stage.kind === 'failed' && <p className="error" role="alert">{stage.text}</p>}
+      {stage.kind === 'failed' && <Notice tone="alert" role="alert">{stage.text}</Notice>}
       {(stage.kind === 'rejected' || stage.kind === 'failed') && (
         <div className="actions">
-          <button type="button" onClick={again}>{v.again}</button>
-          <button type="button" className="secondary" onClick={onLeave}>{v.back}</button>
+          <button type="button" className="primary" onClick={again}>{v.again}</button>
+          <button type="button" className="quiet" onClick={onLeave}>{v.back}</button>
         </div>
       )}
     </section>

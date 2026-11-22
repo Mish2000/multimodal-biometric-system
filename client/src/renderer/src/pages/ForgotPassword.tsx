@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 import { Field } from '../Field'
 import { useSession } from '../session'
 import { errorText } from '../texts'
+import { Notice } from '../ui/Notice'
 
 type Channel = 'sms' | 'email'
 
@@ -74,16 +75,16 @@ export function ForgotPassword() {
           />
         )}
         {error && (
-          <p className="error" role="alert">
+          <Notice tone="alert" role="alert">
             {error}
-          </p>
+          </Notice>
         )}
         {sent && (
-          <p className="ok" role="status">
+          <Notice tone="done" role="status">
             {sent === 'sms' ? t.sentBySms : t.sentByEmail}
-          </p>
+          </Notice>
         )}
-        <button type="submit" disabled={busy || !destination}>
+        <button type="submit" className="primary" disabled={busy || !destination}>
           {busy ? t.sending : t.sendLink}
         </button>
       </form>

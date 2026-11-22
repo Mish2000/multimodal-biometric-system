@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 import { PasswordField } from '../PasswordField'
 import { useSession } from '../session'
 import { errorText } from '../texts'
+import { Notice } from '../ui/Notice'
 
 // The screen that a reset link opens (H32): the main process holds the link's token and adds it to these
 // requests. The new password has the meter of registration (H30); after it, the account signs in as usual.
@@ -42,9 +43,9 @@ export function ResetPassword() {
       {state === 'checking' && <p className="aside">{t.checkingLink}</p>}
       {state === 'invalid' && (
         <>
-          <p className="error" role="alert">
+          <Notice tone="alert" role="alert">
             {t.errors.invalid_reset_link}
-          </p>
+          </Notice>
           <p className="aside">
             <Link to="/forgot-password">{t.askNewLink}</Link>
           </p>
@@ -52,9 +53,9 @@ export function ResetPassword() {
       )}
       {state === 'done' && (
         <>
-          <p className="ok" role="status">
+          <Notice tone="done" role="status">
             {t.passwordReset}
-          </p>
+          </Notice>
           <p className="aside">
             <Link to="/sign-in">{t.toSignIn}</Link>
           </p>
@@ -67,11 +68,11 @@ export function ResetPassword() {
             <PasswordField label={t.newPassword} value={password} onChange={setPassword} autoComplete="new-password" meter />
             <PasswordField label={t.repeatPassword} value={repeat} onChange={setRepeat} autoComplete="new-password" />
             {error && (
-              <p className="error" role="alert">
+              <Notice tone="alert" role="alert">
                 {error}
-              </p>
+              </Notice>
             )}
-            <button type="submit" disabled={busy || !password || !repeat}>
+            <button type="submit" className="primary" disabled={busy || !password || !repeat}>
               {busy ? t.saving : t.saveNewPassword}
             </button>
           </form>

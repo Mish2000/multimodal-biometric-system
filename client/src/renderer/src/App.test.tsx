@@ -1592,8 +1592,8 @@ describe('face verification (H49)', () => {
     expect(screen.getByText('Similarity 0.712; a match needs more than 0.363.')).toBeTruthy()
     expect(screen.getByText(/Processing took 0.12 s. The result and its encrypted image were saved./)).toBeTruthy()
     expect(screen.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
-      '✓ Enrolled image 1 0.655 above the threshold', '✓ Enrolled image 2 0.712 above the threshold',
-      '✗ Enrolled image 3 0.301 not above the threshold'])
+      'Enrolled image 1 0.655 above the threshold', 'Enrolled image 2 0.712 above the threshold',
+      'Enrolled image 3 0.301 not above the threshold'])
     fireEvent.click(screen.getByRole('button', { name: 'Verify again' }))
     expect(again).toBe(1)
   })

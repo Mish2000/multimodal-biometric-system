@@ -11,6 +11,8 @@ themes, and the administration. The options add the engines, each found as the s
     --face            the face engine and its models, with Chromium's synthetic camera (H48)
     --voice           the voice engine and its model, with the synthetic recordings of voice_files.py (H54, H57)
     --page URL        the development server's page instead of the built one (dev_server.mts)
+    --shots           every screenshot also in both themes at 1280 x 820 and 1024 x 680 (shots-NAME/matrix/), with
+                      what runs off the window or is cut in shots-NAME/layout.json: the review of a visual change
 
 Everything it writes goes to the git-ignored local/client-check/: NAME-server.log, NAME-check.log, shots-NAME/
 (screenshots, which show the stored captures when --captures is given) and run-NAME/ (the throwaway cluster, removed
@@ -31,7 +33,7 @@ OUT = ROOT / "local" / "client-check"
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 FLAGS = {"identify": "MBS_CHECK_IDENTIFY", "pore": "MBS_CHECK_PORE", "learned": "MBS_CHECK_LEARNED",
          "match_view": "MBS_CHECK_MATCH_VIEW", "identify_methods": "MBS_CHECK_IDENTIFY_METHODS",
-         "face": "MBS_CHECK_FACE", "voice": "MBS_CHECK_VOICE"}
+         "face": "MBS_CHECK_FACE", "voice": "MBS_CHECK_VOICE", "shots": "MBS_CHECK_SHOTS"}
 
 
 def tail(path: Path, lines: int = 40) -> str:
@@ -103,7 +105,8 @@ def main() -> int:
     try:
         with open(check_log, "w", encoding="utf-8") as log:
             status = subprocess.run(command + ([args.page] if args.page else []), env=env, stdout=log,
-                                    stderr=subprocess.STDOUT, timeout=600, creationflags=NO_WINDOW).returncode
+                                    stderr=subprocess.STDOUT, timeout=1300 if args.shots else 600,
+                                    creationflags=NO_WINDOW).returncode
     except subprocess.TimeoutExpired:
         status = 1
     finally:

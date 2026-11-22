@@ -5,16 +5,19 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import type { MatchViewData, VerificationResult } from '../../../shared/bridge'
 import { useSession } from '../session'
+import { Notice } from '../ui/Notice'
+import { ScoreMeter } from '../ui/ScoreMeter'
 import { MatchView } from './MatchView'
 import { decodeMatchPairs } from './match-data'
 import { MatchStage, decodeCapture, type StageColors, type StageState } from './stage'
 
 const WAITING: StageState = { verdict: false, done: false }
 
-function colorsNow(): StageColors {
+/** The stage's colours of the current theme. A non-match is a result said in ink, its threads and points too (H22). */
+function colorsNow(accepted: boolean): StageColors {
   const style = getComputedStyle(document.documentElement)
   const of = (name: string) => style.getPropertyValue(name)
-  return { canvas: of('--bg'), surface: of('--surface'), ink: of('--text'), mist: of('--line'), mark: of('--mark') }
+  return { canvas: of('--canvas'), surface: of('--surface'), ink: of('--ink'), mist: of('--mist'), mark: of(accepted ? '--mark' : '--ink') }
 }
 
 /** The rail's length in pairs: a little beyond the larger of the count and the threshold. */
@@ -47,11 +50,11 @@ export function MatchResult({ result, view, image, tilted = false }: {
     let made: MatchStage | null = null
     let left = false
     const dark = matchMedia('(prefers-color-scheme: dark)')
-    const recolor = () => made?.setColors(colorsNow())
+    const recolor = () => made?.setColors(colorsNow(result.accepted))
     const rail = railOf(pairs.length / 4, result.threshold)
     void Promise.all([decodeCapture(image), decodeCapture(view.reference_image)]).then(([fresh, stored]) => {
       if (left) return
-      made = new MatchStage(element, { fresh, stored, pairs, threshold: result.threshold }, colorsNow(), {
+      made = new MatchStage(element, { fresh, stored, pairs, threshold: result.threshold }, colorsNow(result.accepted), {
         reduced: matchMedia('(prefers-reduced-motion: reduce)').matches,
         tilted,
         onChange: setShown,
@@ -75,7 +78,7 @@ export function MatchResult({ result, view, image, tilted = false }: {
       made?.dispose()
       stage.current = null
     }
-  }, [image, view.reference_image, pairs, result.threshold, tilted])
+  }, [image, view.reference_image, pairs, result.threshold, result.accepted, tilted])
 
   // While the moment plays, a press or Escape anywhere on the page plays out the rest, even before the stage exists.
   useEffect(() => {
@@ -96,9 +99,11 @@ export function MatchResult({ result, view, image, tilted = false }: {
     // Without the stage the same comparison is drawn flat, with the verdict in words at once.
     return (
       <>
-        <div className={`verification-result ${result.accepted ? 'matched' : 'unmatched'}`} role="status">
-          <h2>{result.accepted ? v.accepted : v.rejected}</h2>
-          <p>{v.explanation(result.score, result.threshold)}</p>
+        <div className="verification-result" role="status">
+          <ScoreMeter score={result.score} threshold={result.threshold} scale="count"
+            label={result.algorithm === 'opencv-sift' ? v.score : v.pores} thresholdLabel={v.threshold(result.threshold)}
+            accepted={result.accepted} verdict={<h2>{result.accepted ? v.accepted : v.rejected}</h2>}
+            explanation={v.explanation(result.score, result.threshold)} />
         </div>
         <MatchView view={view} image={image} algorithm={result.algorithm} />
         <p>{v.saved}</p>
@@ -133,12 +138,12 @@ export function MatchResult({ result, view, image, tilted = false }: {
   const later = (part = '') => `match-later${part ? ` ${part}` : ''}${shown.verdict ? ' shown' : ''}`
 
   return (
-    <div className="match-result">
+    <div className={result.accepted ? 'match-result' : 'match-result below'}>
       <div className="match-headline">
         <div>
           <h2 className={shown.verdict ? 'shown' : undefined}>{verdict}</h2>
           <p className={later()}>{explanation}</p>
-          {result.threshold_provisional && <p className={`notice ${later('match-note')}`}>{t.fingerprint.provisionalExplanation}</p>}
+          {result.threshold_provisional && <Notice className={later('match-note')}>{t.fingerprint.provisionalExplanation}</Notice>}
         </div>
         <p className="match-count" aria-hidden="true">
           <strong ref={counter}>0</strong>

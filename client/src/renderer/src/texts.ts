@@ -67,6 +67,7 @@ const en = {
   },
   ruleMet: 'met',
   ruleMissing: 'missing',
+  matchAbove: (threshold: number) => `Match above ${threshold}`,
   // The one-time password's replacement
   choosePassword: 'Choose a new password',
   oneTimeLead: 'The account was created with a one-time password. Before going on, choose your own.',
@@ -111,16 +112,11 @@ const en = {
       'pore-sift': 'Detects sweat pores and stores 128 numbers around each pore. Counts mutual matches between their descriptions.',
       'learned-pore': 'Uses the shared sweat-pore detector. A small convolutional neural network (CNN), trained in this research, turns a 32 × 32 window around each pore into 128 numbers. The method then counts mutual matches.',
     },
-    methodAccuracy: {
-      'opencv-sift': 'SD302 pair comparisons on other scanners, 70.8% / 68.1% true accepts at a 0.1% false-accept target (RxJ / QxJ).',
-      'pore-sift': 'SD302 pair comparisons on other scanners, 77.9% / 78.5% true accepts at a 0.1% false-accept target (RxJ / QxJ).',
-      'learned-pore': 'SD302 pair comparisons on other scanners, 95.1% / 93.4% true accepts at a 0.1% false-accept target (RxJ / QxJ).',
-    },
-    methodSpeed: {
-      'opencv-sift': 'About 0.7 s of processing after capture, including three comparisons, estimated from H10 on this computer.',
-      'pore-sift': 'About 3.2 s of processing after capture, including three comparisons, estimated from H10 on this computer.',
-      'learned-pore': 'About 3.2 s of processing after capture, mostly pore detection, with descriptor comparison on the GPU, estimated from H10 on this computer.',
-    },
+    // Light Table's method card: the two figures people choose by, each with a short label, and one note under the cards.
+    figureAccuracy: (qxj: string) => `true accepts (QxJ ${qxj}%)`,
+    figureSpeed: 'processing after capture',
+    figureUnit: 's',
+    figuresNote: 'True accepts: same-finger pairs accepted at a 0.1% false-accept target, in SD302 pair comparisons on other scanners (RxJ, with QxJ in brackets). Processing: after capture, including three comparisons, estimated from H10 on this computer.',
     methodComparison: {
       'opencv-sift': 'OpenCV SIFT compares the new capture with the three stored templates of this finger. The highest score decides.',
       'pore-sift': 'Pore SIFT compares the new capture with the three stored pore templates of this finger. The highest number of mutually matched pores decides.',
@@ -148,11 +144,12 @@ const en = {
       lead: 'Find the closest enrolled fingerprint from one new capture.',
       explanation: (method: string) => `Place any finger when prompted. ${method} compares it with the three templates of each current finger enrolment belonging to an active account. The highest score for each enrolment determines its rank.`,
       methodChoice: 'Comparison method for identification',
-      methodSpeed: {
-        'opencv-sift': 'H10 single-thread medians on this computer: about 0.25 s for the new template and 0.15 s per stored template. Total search time grows with the gallery.',
-        'pore-sift': 'H10 single-thread medians on this computer: about 3.1 s for the new template and 32 ms per stored template. CPU comparisons run in parallel.',
-        'learned-pore': 'H10 medians on this computer: about 3.2 s for the new template, mostly pore detection, and 0.5 ms per stored template on the GPU.',
+      figureSpeed: {
+        'opencv-sift': 'for the new template, then 0.15 s per stored template',
+        'pore-sift': 'for the new template, then 32 ms per stored template',
+        'learned-pore': 'for the new template, then 0.5 ms per stored template on the GPU',
       },
+      figuresNote: 'True accepts: same-finger pairs accepted at a 0.1% false-accept target, in SD302 pair comparisons on other scanners (RxJ, with QxJ in brackets). Processing: H10 medians on this computer, single-thread for OpenCV SIFT and Pore SIFT, whose CPU comparisons run in parallel; Pore CNN detects pores first and compares on the GPU. The total search time grows with the gallery.',
       privacy: 'Other users appear anonymously. Only your own captured image and your own finger names are shown.',
       enrolFirst: 'Enrol at least one of your fingers before using fingerprint identification.',
       enrol: 'Choose a finger to enrol',
@@ -783,6 +780,7 @@ const he: Texts = {
   },
   ruleMet: 'מתקיים',
   ruleMissing: 'חסר',
+  matchAbove: (threshold) => `התאמה מעל ${threshold}`,
   choosePassword: 'בחירת סיסמה חדשה',
   oneTimeLead: 'החשבון נוצר עם סיסמה חד-פעמית. לפני שממשיכים, בוחרים סיסמה משלך.',
   resetTitle: 'שחזור סיסמה',
@@ -823,16 +821,10 @@ const he: Texts = {
       'pore-sift': 'מאתרת נקבוביות זיעה ושומרת 128 מספרים סביב כל נקבובית. סופרת התאמות הדדיות בין התיאורים שלהן.',
       'learned-pore': 'משתמשת בגלאי נקבוביות הזיעה המשותף. רשת נוירונים קונבולוציונית (CNN) קטנה, שאומנה במחקר, הופכת חלון של 32 × 32 פיקסלים סביב כל נקבובית ל־128 מספרים, והשיטה סופרת התאמות הדדיות.',
     },
-    methodAccuracy: {
-      'opencv-sift': 'בהשוואות זוגות ב־SD302 בסורקים אחרים התקבלו 70.8% / 68.1% מזוגות אותה אצבע, ביעד של 0.1% קבלות שגויות (RxJ / QxJ).',
-      'pore-sift': 'בהשוואות זוגות ב־SD302 בסורקים אחרים התקבלו 77.9% / 78.5% מזוגות אותה אצבע, ביעד של 0.1% קבלות שגויות (RxJ / QxJ).',
-      'learned-pore': 'בהשוואות זוגות ב־SD302 בסורקים אחרים התקבלו 95.1% / 93.4% מזוגות אותה אצבע, ביעד של 0.1% קבלות שגויות (RxJ / QxJ).',
-    },
-    methodSpeed: {
-      'opencv-sift': 'כ־0.7 שניות עיבוד אחרי הסריקה, כולל שלוש השוואות, לפי הערכת H10 במחשב הזה.',
-      'pore-sift': 'כ־3.2 שניות עיבוד אחרי הסריקה, כולל שלוש השוואות, לפי הערכת H10 במחשב הזה.',
-      'learned-pore': 'כ־3.2 שניות עיבוד אחרי הסריקה, בעיקר לאיתור הנקבוביות, עם השוואת המתארים בכרטיס הגרפי, לפי הערכת H10 במחשב הזה.',
-    },
+    figureAccuracy: (qxj) => `קבלות נכונות (ב־QxJ ‏${qxj}%)`,
+    figureSpeed: 'שניות עיבוד אחרי הסריקה',
+    figureUnit: '',
+    figuresNote: 'קבלות נכונות: זוגות של אותה אצבע שהתקבלו ביעד של 0.1% קבלות שגויות, בהשוואות זוגות ב־SD302 בסורקים אחרים (RxJ, ובסוגריים QxJ). זמן העיבוד: אחרי הסריקה, כולל שלוש השוואות, לפי הערכת H10 במחשב הזה.',
     methodComparison: {
       'opencv-sift': 'OpenCV SIFT משווה את הסריקה החדשה לשלוש התבניות השמורות של האצבע הזו. הציון הגבוה ביותר מכריע.',
       'pore-sift': 'Pore SIFT משווה את הסריקה החדשה לשלוש תבניות הנקבוביות השמורות של האצבע הזו. מספר הנקבוביות שהותאמו הדדית הגבוה ביותר מכריע.',
@@ -860,11 +852,12 @@ const he: Texts = {
       lead: 'מציאת טביעת האצבע הרשומה הקרובה ביותר בעזרת סריקה חדשה אחת.',
       explanation: (method) => `מניחים את האצבע שרוצים לזהות כשהמערכת מבקשת. ${method} משווה אותה לשלוש התבניות של כל רישום אצבע נוכחי השייך לחשבון פעיל. הציון הגבוה בכל רישום קובע את מקומו בדירוג.`,
       methodChoice: 'שיטת ההשוואה לזיהוי',
-      methodSpeed: {
-        'opencv-sift': 'חציוני H10 בתהליכון יחיד במחשב הזה: כ־0.25 שניות לתבנית החדשה ו־0.15 שניות לכל תבנית שמורה. זמן החיפוש הכולל גדל עם המאגר.',
-        'pore-sift': 'חציוני H10 בתהליכון יחיד במחשב הזה: כ־3.1 שניות לתבנית החדשה ו־32 מילישניות לכל תבנית שמורה. ההשוואות במעבד רצות במקביל.',
-        'learned-pore': 'חציוני H10 במחשב הזה: כ־3.2 שניות לתבנית החדשה, בעיקר לאיתור הנקבוביות, ו־0.5 מילישניות לכל תבנית שמורה בכרטיס הגרפי.',
+      figureSpeed: {
+        'opencv-sift': 'שניות לתבנית החדשה, ועוד 0.15 שניות לכל תבנית שמורה',
+        'pore-sift': 'שניות לתבנית החדשה, ועוד 32 מילישניות לכל תבנית שמורה',
+        'learned-pore': 'שניות לתבנית החדשה, ועוד 0.5 מילישניות לכל תבנית שמורה בכרטיס הגרפי',
       },
+      figuresNote: 'קבלות נכונות: זוגות של אותה אצבע שהתקבלו ביעד של 0.1% קבלות שגויות, בהשוואות זוגות ב־SD302 בסורקים אחרים (RxJ, ובסוגריים QxJ). זמן העיבוד: חציוני H10 במחשב הזה, בתהליכון יחיד ל־OpenCV SIFT ול־Pore SIFT, שההשוואות שלהן במעבד רצות במקביל; Pore CNN מאתרת קודם את הנקבוביות ומשווה בכרטיס הגרפי. זמן החיפוש הכולל גדל עם המאגר.',
       privacy: 'משתמשים אחרים מוצגים באופן אנונימי. מוצגים רק הצילום החדש שלך ושמות האצבעות הרשומות שלך.',
       enrolFirst: 'צריך לרשום לפחות אצבע אחת שלך לפני שאפשר להשתמש בזיהוי טביעת אצבע.',
       enrol: 'בחירת אצבע לרישום',

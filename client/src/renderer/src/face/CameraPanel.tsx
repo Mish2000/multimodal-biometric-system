@@ -3,6 +3,7 @@
 // Enrolment (H48), verification (H49) and identification (H50) share it.
 import { useState } from 'react'
 import { useSession } from '../session'
+import { Notice } from '../ui/Notice'
 import type { Camera } from './camera'
 import { CameraView, type CameraProblem } from './CameraView'
 import { useCameras } from './useCameras'
@@ -59,20 +60,20 @@ export function CameraPanel({ busy, minimumWidth, onTaken }: Props) {
           </label>
         </div>
       )}
-      {notice && <p className="notice" role="status">{notice}</p>}
+      {notice && <Notice role="status">{notice}</Notice>}
       {choice.cameras === null ? (
         <p className="aside">{f.starting}</p>
       ) : current === null ? (
         <>
-          <p className="error" role="alert">
+          <Notice tone="alert" role="alert">
             {choice.cameras.some((camera) => camera.builtIn) && !choice.cameras.some((camera) => !camera.builtIn) ? f.lidClosed : f.noCamera}
-          </p>
-          <button type="button" onClick={retry}>{f.retryCameras}</button>
+          </Notice>
+          <button type="button" className="primary" onClick={retry}>{f.retryCameras}</button>
         </>
       ) : problem !== null && problem.camera === current.key ? (
         <>
-          <p className="error" role="alert">{problem.text}</p>
-          <button type="button" onClick={retry}>{f.retryCameras}</button>
+          <Notice tone="alert" role="alert">{problem.text}</Notice>
+          <button type="button" className="primary" onClick={retry}>{f.retryCameras}</button>
         </>
       ) : (
         <CameraView
