@@ -8,6 +8,7 @@ import { ChangePassword } from './pages/ChangePassword'
 import { Face } from './pages/Face'
 import { Voice } from './pages/Voice'
 import { Fingerprint } from './pages/Fingerprint'
+import { Fusion } from './pages/Fusion'
 import { ForgotPassword } from './pages/ForgotPassword'
 import { Home } from './pages/Home'
 import { Register } from './pages/Register'
@@ -49,6 +50,7 @@ export function App() {
           <Route path="/fingerprint" element={only('user', <Fingerprint />)} />
           <Route path="/face" element={only('user', <Face />)} />
           <Route path="/voice" element={only('user', <Voice />)} />
+          <Route path="/fusion" element={only('user', <Fusion />)} />
           <Route path="/admin" element={only('admin', <Admin />)} />
           <Route path="/settings" element={only('any', <Settings />)} />
           <Route path="/password" element={account?.must_change_password ? <ChangePassword /> : <Navigate to={home} replace />} />

@@ -36,6 +36,7 @@ export const ROUTES = {
   deleteVoice: ['DELETE', '/api/voice/enrolment'],
   verifyVoice: ['POST', '/api/voice/verifications'], // H55
   identifyVoice: ['POST', '/api/voice/identifications'], // H56
+  fusionMethod: ['GET', '/api/fusion/method'], // H60
 } as const satisfies Record<string, readonly ['GET' | 'POST' | 'DELETE', string]>
 
 export type RouteName = keyof typeof ROUTES
@@ -461,6 +462,68 @@ export interface DisplayState {
   internalDisplay: boolean
 }
 
+// H60: the combined test. Its policy shares the evidence of six orders of magnitude by the weights, and each
+// modality's curve says where it comes from and whether it is provisional.
+export const FUSION_MODALITIES = ['fingerprint', 'face', 'voice'] as const
+export type FusionModality = (typeof FUSION_MODALITIES)[number]
+export interface FusionMethod {
+  policy: {
+    id: number
+    weights: Record<FusionModality, number>
+    budget: number
+    threshold: number
+    calibration: Record<FusionModality, { provisional: boolean; origin: string }>
+  }
+  available: Record<FusionModality, boolean>
+}
+export interface FusionPart {
+  modality: FusionModality
+  algorithm: string
+  score: number
+  threshold: number
+  accepted: boolean // the modality's own decision, alone
+  compared: number
+  evidence: number // log10 of the likelihood ratio, divided by `compared` and capped
+  points: number
+  weight: number
+  provisional: boolean
+  values?: number[] // the face's or the voice's new embedding, for the result's ring
+}
+// The face image and the voice recording the page took for the test, in base64, with when they were taken.
+export interface FusionSamples {
+  face?: { image: string; captured_at: string }
+  voice?: { recording: string; captured_at: string }
+}
+export interface FusionResult {
+  attempt_id: string
+  at: string
+  mode: 'verify' | 'identify'
+  finger?: number
+  score: number
+  threshold: number
+  accepted: boolean
+  evidence: number
+  duration_ms: number
+  policy: number
+  parts: FusionPart[]
+  people?: number
+  tied_leaders?: number
+  leader?: { own: boolean; finger?: number }
+  candidates?: Array<{ rank: number; own: boolean; score: number; accepted: boolean; finger?: number;
+    points: Partial<Record<FusionModality, number>> }>
+}
+export type FusionEvent =
+  | { type: 'started'; mode: 'verify' | 'identify'; modalities: FusionModality[]; weights: Record<FusionModality, number>;
+    threshold: number; quality_minimum: number; finger?: number; people?: number }
+  | { type: 'checking_sample'; modality: FusionModality }
+  | { type: 'sample_rejected'; modality: FusionModality; checks: Check[] }
+  | { type: 'place'; capture: number; maximum: number }
+  | { type: 'checking' | 'lift' | 'comparing' | 'searching' | 'saving' }
+  | { type: 'rejected'; image: string; checks: Check[]; score: number | null; minimum: number }
+  | { type: 'captured'; image: string; checks: Check[] }
+  | ({ type: 'verified' | 'identified' } & FusionResult)
+  | { type: 'failed'; error: string }
+
 export interface MbsBridge {
   call<T = unknown>(route: RouteName, body?: unknown, id?: string): Promise<ApiResult<T>>
   // H48: the built-in screen's state now, and whenever it changes (the lid opened or closed).
@@ -483,4 +546,8 @@ export interface MbsBridge {
   identifyFingerprint(runId: string, algorithm?: FingerprintAlgorithm, captureFrom?: string): Promise<ApiResult<null>>
   cancelIdentification(runId: string): void
   onIdentification(runId: string, listener: (event: IdentificationEvent) => void): () => void
+  // H60: a combined test, 1:1 with the finger to place or 1:N without one; its events name their run.
+  fuse(mode: 'verify' | 'identify', runId: string, finger: number | null, samples: FusionSamples): Promise<ApiResult<null>>
+  cancelFusion(runId: string): void
+  onFusion(runId: string, listener: (event: FusionEvent) => void): () => void
 }

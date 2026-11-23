@@ -61,6 +61,9 @@ class Bridge implements MbsBridge {
   identifyFingerprint = async (): Promise<ApiResult<null>> => ({ ok: true, data: null })
   cancelIdentification = () => undefined
   onIdentification = () => () => undefined
+  fuse = async (): Promise<ApiResult<null>> => ({ ok: true, data: null })
+  cancelFusion = () => undefined
+  onFusion = () => () => undefined
 }
 
 function open(path: string, account: Account | null) {

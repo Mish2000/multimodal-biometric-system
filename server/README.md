@@ -21,7 +21,7 @@ $python = '<conda envs>\multimodal-server\python.exe'
 & $python -m mbs create-admin --username <name> --email <address>   # prints a one-time password
 & $python -m mbs serve        # the API on 127.0.0.1; starts and stops PostgreSQL with it
 & $python -m mbs db status    # or start / stop
-& $python -m pytest           # 356 tests against a throwaway cluster (four need MBS_LIVE_CAPTURES)
+& $python -m pytest           # 364 tests against a throwaway cluster (four need MBS_LIVE_CAPTURES)
 & $python -m mypy             # type checks of mbs/ and tests/ (pyproject.toml)
 & '<conda envs>\multimodal-server\Library\bin\ruff.exe' check ..   # lint of all the system's Python (../ruff.toml)
 ```

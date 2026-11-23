@@ -279,8 +279,8 @@ app.whenReady().then(async () => {
       return { require: typeof require, process: typeof process, bridge: Object.keys(window.mbs).sort(),
                opened: opened === null ? 'denied' : 'opened', direct, unknown: unknown.error, camera, microphone, both, displays }`)
     check('the page has no Node.js', probe.require === 'undefined' && probe.process === 'undefined', probe)
-    check('the bridge offers only its fifteen named functions (H41, H48)', JSON.stringify(probe.bridge) ===
-      '["call","cancelEnrolment","cancelIdentification","cancelVerification","displays","enrolFingerprint","identifyFingerprint","onDisplays","onEnrolment","onIdentification","onLink","onVerification","setTheme","takeLink","verifyFingerprint"]', probe.bridge)
+    check('the bridge offers only its eighteen named functions (H41, H48, H60)', JSON.stringify(probe.bridge) ===
+      '["call","cancelEnrolment","cancelFusion","cancelIdentification","cancelVerification","displays","enrolFingerprint","fuse","identifyFingerprint","onDisplays","onEnrolment","onFusion","onIdentification","onLink","onVerification","setTheme","takeLink","verifyFingerprint"]', probe.bridge)
     check('the page cannot reach the server directly (CSP)', probe.direct === 'blocked', probe.direct)
     check('the bridge refuses a route outside its list', probe.unknown === 'unknown_route', probe.unknown)
     check('the page cannot open windows', probe.opened === 'denied' && BrowserWindow.getAllWindows().length === 1)
@@ -333,6 +333,15 @@ app.whenReady().then(async () => {
     check('the session token stays in the main process', typeof token === 'string' && token.length > 20 &&
       leak.storage === 0 && leak.cookie === '' && !leak.found, leak)
     await shot('03-home')
+
+    // H60: the combined test's card and page; with nothing enrolled it asks for a finger and one more modality first.
+    await page(`[...document.querySelectorAll('.card')].find((c) => c.querySelector('h2')?.textContent === 'Combined test').querySelector('a').click()`)
+    await waitText('The combined test needs an enrolled finger and at least one more modality')
+    const weights = await page(`return [...document.querySelectorAll('.points-list__weight b')].map((b) => b.textContent).join(',')`)
+    check('the combined test shows each modality’s points and asks for its enrolments first (H60)', weights === '55,25,20', weights)
+    await shot('03f-fusion')
+    await click('Back home')
+    await waitText('Hello, dana')
 
     // 3b. Fingerprint enrolment (H33), when the throwaway server has the real engines and stored captures
     // (MBS_CHECK_CAPTURES): only the scanner is replaced, by one that hands over three placements of a finger.

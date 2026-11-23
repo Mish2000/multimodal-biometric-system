@@ -87,5 +87,19 @@ export function registerBridge(serverUrl: string): ServerClient {
   ipcMain.on('mbs:identify-cancel', (event, runId: unknown) => {
     if (fromTopFrame(event)) server.cancelIdentification(runId)
   })
+  // H60: a combined test, with its own per-run events and the same window lifecycle.
+  ipcMain.handle('mbs:fuse', (event, mode: unknown, runId: unknown, finger: unknown, samples: unknown) => {
+    if (!fromTopFrame(event)) return { ok: false, status: 0, error: 'unknown_route' }
+    const page = event.sender
+    return stream(
+      page,
+      () => server.cancelFusion(runId),
+      (fusionEvent) => page.send('mbs:fusion', runId, fusionEvent),
+      (emit) => server.fuse(mode, runId, finger, samples, emit),
+    )
+  })
+  ipcMain.on('mbs:fuse-cancel', (event, runId: unknown) => {
+    if (fromTopFrame(event)) server.cancelFusion(runId)
+  })
   return server
 }

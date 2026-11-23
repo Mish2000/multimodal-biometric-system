@@ -306,6 +306,11 @@ async def identify(service: fp.FingerprintService, databases: Databases, keys: K
         service.scanner_lock.release()
 
 
+async def _quality(service: fp.FingerprintService, header: dict, png: bytes) -> tuple[int | None, list[dict]]:
+    """NFIQ 2 on a capture of a search, interruptible like its comparisons."""
+    return await _engine_call(service.quality, partial(fp.capture_quality, service, header, png))
+
+
 async def _extract(service: fp.FingerprintService, algorithm: str, png: bytes, pores: bytes | None = None) -> bytes:
     engine = fp.engine_for(service, algorithm)
     assert engine is not None  # the search checks its method's engine before it starts
@@ -409,22 +414,11 @@ async def _identify(service, databases, keys, subject, run, algorithm, capture_f
         yield {"type": "captured", "image": fp.base64_text(png), "checks": [],
                "reused": {"attempt_id": str(reused.attempt_id), "at": reused.at.isoformat()}}
     else:
-        for capture in range(1, fp.MOST_CAPTURES + 1):
-            yield {"type": "place", "capture": capture, "maximum": fp.MOST_CAPTURES}
-            header, png = await fp.acquire_finger(service, run)
-            at, started = datetime.now(UTC), time.perf_counter()
-            yield {"type": "checking"}
-            score, checks = await _engine_call(service.quality, partial(fp.capture_quality, service, header, png))
-            image = fp.base64_text(png)
-            if checks[-1]["passed"]:
-                break
-            yield {"type": "rejected", "image": image, "checks": checks, "score": score, "minimum": service.quality_minimum}
-            if capture == fp.MOST_CAPTURES:
-                raise IdentificationError("too_many_captures")
-            yield {"type": "lift"}
-            await fp.acquire(service, "lift", run)
+        capture = fp.NewCapture()
+        async for event in fp.capture_new(service, run, capture, IdentificationError, partial(_quality, service)):
+            yield event
+        png, at, started = capture.png, capture.at, capture.started
         captured_at, capture_attempt_id = at, None
-        yield {"type": "captured", "image": image, "checks": checks}
     yield {"type": "extracting"}
     probe_pores = await _detect(service, png) if algorithm == fp.LEARNED_PORE else None
     probe = await _extract(service, algorithm, png, probe_pores)

@@ -12,7 +12,7 @@
   <img alt=".NET Framework 4.8" src="https://img.shields.io/badge/.NET_Framework-4.8-512BD4?logo=dotnet&logoColor=white">
 </p>
 <p align="center">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-356%20server%20%C2%B7%20239%20client%20%C2%B7%2015%20scanner%20%C2%B7%2039%20engines-2EA44F">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-364%20server%20%C2%B7%20247%20client%20%C2%B7%2015%20scanner%20%C2%B7%2039%20engines-2EA44F">
   <img alt="Cryptography" src="https://img.shields.io/badge/crypto-AES--256--GCM%20%C2%B7%20Argon2id%20%C2%B7%20HMAC-7C3AED">
   <a href="https://github.com/Mish2000/multimodal-biometric-system/actions/workflows/checks.yml"><img alt="Checks" src="https://github.com/Mish2000/multimodal-biometric-system/actions/workflows/checks.yml/badge.svg?branch=main"></a>
   <img alt="Progress" src="https://img.shields.io/badge/progress-increment%205%20of%206%20complete-F59E0B">
@@ -75,7 +75,7 @@ Every print, face, account and score in them is synthetic.
 
 **🔬 Fingerprint methods from the research**<br>
 Keypoints and sweat pores at a native 1000 ppi, matched by three methods from the research.
-Their fusion follows in increment 6.
+A combined test fuses the fingerprint with the face and the voice into one score out of 100.
 
 </td>
 <td width="33%" valign="top">
@@ -104,7 +104,7 @@ checked 1000 ppi images.
 <td valign="top">
 
 **📜 Every decision on record**<br>
-Each design choice is numbered (H1 to H59), dated, and cited in the code and the commits.
+Each design choice is numbered (H1 to H60), dated, and cited in the code and the commits.
 
 </td>
 <td valign="top">
@@ -121,7 +121,7 @@ have tests of their own.
 
 | | Capture | Method | Template | Decision |
 | --- | --- | --- | --- | --- |
-| 👆 **Fingerprint** | Biometrika HiScan PRO, native 1000 ppi | OpenCV SIFT · Pore SIFT · Pore CNN (fusion follows in increment 6) | local descriptors, sealed | score above the method's threshold |
+| 👆 **Fingerprint** | Biometrika HiScan PRO, native 1000 ppi | OpenCV SIFT · Pore SIFT · Pore CNN | local descriptors, sealed | score above the method's threshold |
 | 🙂 **Face** | the built-in camera or a USB camera, chosen by the client | YuNet detection + SFace | 128-value embedding in pgvector | cosine similarity above 0.363 |
 | 🎙️ **Voice** | the PC's microphones, chosen by the client, or a WAV, MP3 or OGG file for 1:1 and 1:N, 16 kHz mono | SpeechBrain ECAPA-TDNN | 192-value embedding in pgvector | cosine similarity above 0.25 |
 
@@ -199,7 +199,7 @@ conda activate multimodal-server
 cd server
 python -m mbs setup        # key file, local settings, cluster and databases
 python -m mbs serve        # the API on 127.0.0.1:55433
-python -m pytest           # 356 tests, including four local checks with MBS_LIVE_CAPTURES
+python -m pytest           # 364 tests, including four local checks with MBS_LIVE_CAPTURES
 python -m mypy             # type checks of the server and its tests
 ruff check ..              # lint of all the system's Python (ruff.toml)
 
@@ -207,7 +207,7 @@ ruff check ..              # lint of all the system's Python (ruff.toml)
 cd ../client
 npm ci
 npm run dev                # the app, with the server running
-npm test                   # 239 tests
+npm test                   # 247 tests
 npm run lint               # oxlint (.oxlintrc.json)
 npm run build && cd ..
 python tools/client-check/run.py first   # the built client against a throwaway server, offscreen

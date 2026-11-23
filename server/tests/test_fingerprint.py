@@ -350,8 +350,8 @@ def test_the_algorithms_hold_h16s_thresholds(databases):
     with Session(databases.biometric) as db:
         rows = {a.code: (a.modality, a.threshold, a.threshold_provisional) for a in db.scalars(select(Algorithm))}
     assert rows == {"opencv-sift": ("fingerprint", 57, False), "pore-sift": ("fingerprint", 37, True),
-                    "learned-pore": ("fingerprint", 21, True), "fusion": ("fingerprint", None, True),
-                    "sface": ("face", 0.363, False), "ecapa-voxceleb": ("voice", 0.25, False)}  # H48, H54
+                    "learned-pore": ("fingerprint", 21, True),
+                    "sface": ("face", 0.363, False), "ecapa-voxceleb": ("voice", 0.25, False)}  # H48, H54, H60
 
 
 def test_three_are_chosen_by_their_lowest_pair_score():

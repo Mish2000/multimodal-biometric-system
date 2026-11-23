@@ -2,7 +2,7 @@
 
 Approved on 2026-10-20 (H11–H20 in `docs/decisions.md`),
 from the draft of 2026-10-19 as revised on 2026-10-20, and amended with his
-approval since (H24 to H59). Every decision is cited by its ID; a change needs
+approval since (H24 to H60). Every decision is cited by its ID; a change needs
 the researcher's approval and a new entry in the decision record.
 
 ## 1. Purpose and scope
@@ -185,9 +185,9 @@ flow of 2026-10-18).
   enrolments it replaced with their findings and templates (H34).
 - **Algorithms:** from the research, unchanged, through the pinned link
   (H10): OpenCV SIFT, Pore SIFT and Pore CNN (its second
-  training, H6); fusions with the research's weights or with user weights that
-  sum to 100 (H6). Pore SIFT and Pore CNN share one pore
-  detection per capture, as in H10.
+  training, H6). Pore SIFT and Pore CNN share one pore detection per
+  capture, as in H10. H60 replaces H6's fusion of the three methods by the
+  combined test of every modality (5.4).
 - **Verification (1:1, H15):** the user picks one of the enrolled fingers;
   the new capture is compared with its three templates, and the highest score
   decides. Implemented with OpenCV SIFT (H35), including the quality gate of
@@ -275,8 +275,7 @@ flow of 2026-10-18).
   least as often as one comparison, for the same finger and for different
   fingers alike.
 
-  Fusion thresholds are set by the same rule from H10's saved scores when
-  fusion is built (increment 6). Calibration with other people is not part of
+  The combined test decides by its own rule (5.4, H60). Calibration with other people is not part of
   the build: if the supervisor asks for accuracy on the HiScan PRO, it is a
   separate step (about 10 people for a claim at FAR 1 % and about 20 at FAR
   0.1 %, as estimated on 2026-10-18), after which the thresholds change in
@@ -409,6 +408,38 @@ flow of 2026-10-18).
 Model files are downloaded only with the researcher's approval and pinned by
 SHA-256.
 
+### 5.4 The combined test (H60)
+
+- **What it is:** one test over every modality the user enrolled, in 1:1 and
+  in 1:N, ending in one score out of 100 of how strongly the evidence points
+  to the user. It needs a fingerprint enrolment and at least one more
+  modality. The face and the voice come from the PC's devices only, taken for
+  the test at most 10 minutes earlier and checked by their own routes before
+  the scanner starts; the scan comes last, and the server compares, fuses and
+  saves the whole test in that one request.
+- **Evidence:** each modality compares as it does alone (OpenCV SIFT, SFace,
+  ECAPA-TDNN) and its best score becomes the log10 of its likelihood ratio.
+  The fingerprint's curve, ln LR = -5.5696 + 2.1718 ln(1 + pairs), was fitted
+  on SD302's plain vs plain development pairs; the face's and the voice's are
+  provisional, ln LR = k (s - t), neutral at the model's threshold, with k
+  from the published accuracy (38.8 for SFace, 46.4 for ECAPA-TDNN). The best
+  of k comparisons counts its ratio divided by k.
+- **Points and decision:** the weights 55, 25 and 20 share six orders of
+  magnitude: each modality's evidence is capped at 0.06 x its weight, and it
+  earns weight x (1 + evidence / cap) / 2 points, half of its weight when it
+  says nothing either way. The score is their sum, 50 + 50 x the total
+  evidence / 6, accepted above 75, a combined ratio above 1,000. With the
+  fingerprint saying nothing, the camera and the microphone reach at most
+  72.5.
+- **1:N:** the active users enrolled in every modality of the test are ranked
+  by their combined score; only the user's own finger is named (H18).
+- **Stored:** each comparison is an attempt of its own with its sealed sample
+  and its own decision, pointing to the combined test, which records its
+  score, threshold, decision, total evidence, duration and policy version
+  (section 7). The policy (weights, shared evidence, threshold, calibration
+  with its origins) is a versioned table; its administration comes with the
+  thresholds' settings (H16).
+
 ## 6. User experience (H6)
 
 | Screen | Content |
@@ -419,7 +450,7 @@ SHA-256.
 | Home | three modality cards, fingerprint first, with each one's enrolment status |
 | Settings (H24) | the theme: light, dark, or Windows' setting (the default), saved per account and applied at once; sign-in and registration follow Windows' setting. The language, English or Hebrew, saved per account (H31). Under security, the password's change (H28); a screen of its own only for replacing a one-time password (H12) |
 | Modality | enrol, verify (1:1), identify (1:N); before enrolment, verify and identify lead to the message of section 5; an enrolled finger can be enrolled again or its enrolment deleted, after a confirmation (H34) |
-| Algorithm choice | one card per algorithm: accuracy, speed, what its template holds and how two templates are compared (H2), in two or three sentences with a small drawing, and whether its threshold is provisional; OpenCV SIFT first, then Pore CNN, Pore SIFT and the fusions (H18); face and voice have one model each, shown on its card without a choice |
+| Algorithm choice | one card per algorithm: accuracy, speed, what its template holds and how two templates are compared (H2), in two or three sentences with a small drawing, and whether its threshold is provisional; OpenCV SIFT first, then Pore CNN and Pore SIFT (H18); face and voice have one model each, shown on its card without a choice |
 | Fingerprint capture | scanner status, finger and placement guide, "lift the finger" between placements, the captured print and its checks with its NFIQ 2 score (H33), the pair scores of the kept placements |
 | Stored template (H33) | after an enrolment, once: the captures with their checks, OpenCV SIFT's points, one point's 128 numbers in SIFT's 4 x 4 x 8 layout, the whole template as a picture, its row with the sealed value's parts, and the pair scores against the threshold; sent from the server's memory before sealing, kept by the page only while the screen is open |
 | Face capture | live camera view with the detected face box and what to do next; the camera chosen by the client, with a selector when more than one can be used; after an enrolment, the three aligned faces and their pair scores (H48) |
@@ -678,3 +709,7 @@ themes during that work.
   same capture again, from the earlier attempt's sealed probe, for ten
   minutes from the capture; each such attempt keeps its own sealed copy and
   names the attempt that took the capture (5.1, 7).
+- **H60** The combined test of every enrolled modality: likelihood ratios
+  capped by the weights 55, 25 and 20, one score out of 100, accepted above
+  75 (a combined ratio above 1,000); it replaces H6's fusion of the
+  fingerprint methods (5.1, 5.4, 6, 7).

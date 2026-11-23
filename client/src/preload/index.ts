@@ -51,6 +51,15 @@ const bridge: MbsBridge = {
     ipcRenderer.on('mbs:identification', pass)
     return () => { ipcRenderer.removeListener('mbs:identification', pass) }
   },
+  fuse: (mode, runId, finger, samples) => ipcRenderer.invoke('mbs:fuse', mode, runId, finger, samples),
+  cancelFusion: (runId) => ipcRenderer.send('mbs:fuse-cancel', runId),
+  onFusion: (runId, listener) => {
+    const pass = (_event: unknown, receivedId: string, fusionEvent: Parameters<typeof listener>[0]) => {
+      if (receivedId === runId) listener(fusionEvent)
+    }
+    ipcRenderer.on('mbs:fusion', pass)
+    return () => { ipcRenderer.removeListener('mbs:fusion', pass) }
+  },
 }
 
 contextBridge.exposeInMainWorld('mbs', bridge)

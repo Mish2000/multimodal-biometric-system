@@ -172,22 +172,19 @@ class Algorithm(BiometricBase):
     __tablename__ = "algorithm"
     __table_args__ = (
         CheckConstraint("modality IN ('fingerprint', 'face', 'voice')", name="algorithm_modality"),
-        CheckConstraint("threshold IS NOT NULL OR code = 'fusion'", name="algorithm_threshold"),
     )
 
     code: Mapped[str] = mapped_column(String(32), primary_key=True)
     modality: Mapped[str] = mapped_column(String(12))
     version: Mapped[str] = mapped_column(String(64))
-    threshold: Mapped[float | None] = mapped_column(Double)
+    threshold: Mapped[float] = mapped_column(Double)
     threshold_provisional: Mapped[bool] = mapped_column(Boolean)
     threshold_origin: Mapped[str] = mapped_column(String(120))
     threshold_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 def threshold_of(algorithm: Algorithm) -> float:
-    """The threshold a method decides by: every method has one, fusion excepted (algorithm_threshold, H16)."""
-    if algorithm.threshold is None:
-        raise ValueError(f"{algorithm.code} has no threshold")
+    """The threshold a method decides by (H16); since H60 every method has one."""
     return algorithm.threshold
 
 
@@ -276,12 +273,8 @@ class Attempt(BiometricBase):
                         " OR (mode = 'identify' AND enrolment_id IS NULL AND gallery_size IS NOT NULL AND gallery_size >= 0)", name="attempt_target"),
         CheckConstraint("duration_ms >= 0", name="attempt_duration"),
         CheckConstraint("accepted = (score > threshold)", name="attempt_decision"),
-        CheckConstraint("(algorithm = 'fusion' AND weight_opencv_sift BETWEEN 0 AND 100"
-                        " AND weight_learned_pore BETWEEN 0 AND 100 AND weight_pore_sift BETWEEN 0 AND 100"
-                        " AND weight_opencv_sift + weight_learned_pore + weight_pore_sift = 100"
-                        " AND num_nonnulls(weight_opencv_sift, weight_learned_pore, weight_pore_sift) = 3)"
-                        " OR (algorithm <> 'fusion' AND num_nonnulls(weight_opencv_sift, weight_learned_pore, weight_pore_sift) = 0)",
-                        name="attempt_weights"),
+        # H60: a comparison that is part of a combined test carries the evidence it gave, and only such a one.
+        CheckConstraint("(fused_attempt_id IS NULL) = (evidence IS NULL)", name="attempt_fused"),
         # H59: only a fingerprint attempt compares an earlier attempt's capture again, never its own.
         CheckConstraint("capture_attempt_id IS NULL OR (modality = 'fingerprint' AND capture_attempt_id <> id)",
                         name="attempt_capture"),
@@ -294,9 +287,6 @@ class Attempt(BiometricBase):
     modality: Mapped[str] = mapped_column(String(12))
     mode: Mapped[str] = mapped_column(String(8))
     algorithm: Mapped[str] = mapped_column(ForeignKey("algorithm.code"))
-    weight_opencv_sift: Mapped[int | None] = mapped_column(SmallInteger)
-    weight_learned_pore: Mapped[int | None] = mapped_column(SmallInteger)
-    weight_pore_sift: Mapped[int | None] = mapped_column(SmallInteger)
     enrolment_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("enrolment.id", ondelete="CASCADE"), index=True)
     top_enrolment_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("enrolment.id", ondelete="SET NULL"), index=True)
     gallery_size: Mapped[int | None] = mapped_column(Integer)
@@ -309,3 +299,65 @@ class Attempt(BiometricBase):
     # H59: the attempt that took this attempt's capture, when the capture was compared again with another method;
     # null for a new capture. The attempt keeps its own sealed copy, so deleting that one only empties the link.
     capture_attempt_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("attempt.id", ondelete="SET NULL"))
+    # H60: the combined test this comparison is part of, erased with it, and the evidence (log10 of the likelihood
+    # ratio, capped) it gave there; both null for a comparison of its own.
+    fused_attempt_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("fused_attempt.id", ondelete="CASCADE"),
+                                                               index=True)
+    evidence: Mapped[float | None] = mapped_column(Double)
+
+
+class FusionPolicy(BiometricBase):
+    """H60: one version of the combined test's policy: the weights, the evidence they share, the threshold of the
+    score, and each modality's calibration with its origin. A version is never changed; a new one is a new row, and
+    each combined test records the version it used."""
+
+    __tablename__ = "fusion_policy"
+    __table_args__ = (
+        CheckConstraint("weight_fingerprint BETWEEN 0 AND 100 AND weight_face BETWEEN 0 AND 100"
+                        " AND weight_voice BETWEEN 0 AND 100 AND weight_fingerprint + weight_face + weight_voice = 100",
+                        name="fusion_policy_weights"),
+        CheckConstraint("budget > 0 AND threshold > 0 AND threshold < 100", name="fusion_policy_values"),
+    )
+
+    id: Mapped[int] = mapped_column(SmallInteger, primary_key=True, autoincrement=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    weight_fingerprint: Mapped[int] = mapped_column(SmallInteger)
+    weight_face: Mapped[int] = mapped_column(SmallInteger)
+    weight_voice: Mapped[int] = mapped_column(SmallInteger)
+    budget: Mapped[float] = mapped_column(Double)
+    threshold: Mapped[float] = mapped_column(Double)
+    calibration: Mapped[dict] = mapped_column(JSONB)
+    origin: Mapped[str] = mapped_column(String(200))
+
+
+class FusedAttempt(BiometricBase):
+    """H60: a combined test, 1:1 or 1:N, whose comparisons are attempts of their own that point to it. A 1:1 test names
+    the enrolments it compared, and deleting any of them erases the test with its comparisons, as H35 does for an
+    attempt; a 1:N test names none, so it stays (H41)."""
+
+    __tablename__ = "fused_attempt"
+    __table_args__ = (
+        CheckConstraint("mode IN ('verify', 'identify')", name="fused_attempt_mode"),
+        CheckConstraint("(mode = 'verify' AND fingerprint_enrolment_id IS NOT NULL AND gallery_size IS NULL)"
+                        " OR (mode = 'identify' AND num_nonnulls(fingerprint_enrolment_id, face_enrolment_id,"
+                        " voice_enrolment_id) = 0 AND gallery_size >= 1)", name="fused_attempt_target"),
+        CheckConstraint("accepted = (score > threshold)", name="fused_attempt_decision"),
+        CheckConstraint("duration_ms >= 0", name="fused_attempt_duration"),
+        Index("ix_fused_attempt_subject_at", "subject_id", "at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    subject_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("subject.id"))
+    mode: Mapped[str] = mapped_column(String(8))
+    policy_id: Mapped[int] = mapped_column(ForeignKey("fusion_policy.id"))
+    fingerprint_enrolment_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("enrolment.id", ondelete="CASCADE"), index=True)
+    face_enrolment_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("enrolment.id", ondelete="CASCADE"), index=True)
+    voice_enrolment_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("enrolment.id", ondelete="CASCADE"), index=True)
+    gallery_size: Mapped[int | None] = mapped_column(Integer)  # 1:N: the people compared
+    score: Mapped[float] = mapped_column(Double)  # the points out of 100
+    threshold: Mapped[float] = mapped_column(Double)
+    accepted: Mapped[bool] = mapped_column(Boolean)
+    evidence: Mapped[float] = mapped_column(Double)  # log10 of the combined likelihood ratio
+    duration_ms: Mapped[int] = mapped_column(Integer)

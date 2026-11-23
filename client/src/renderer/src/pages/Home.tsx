@@ -61,6 +61,12 @@ export function Home() {
               )}
             </li>
           ))}
+          {/* H60: the combined test of every enrolled modality. */}
+          <li className="card fusion-card">
+            <h2>{t.fusion.name}</h2>
+            <p>{t.fusion.homeText}</p>
+            <Link className="button" to="/fusion">{t.fusion.open}</Link>
+          </li>
         </ul>
       )}
     </section>

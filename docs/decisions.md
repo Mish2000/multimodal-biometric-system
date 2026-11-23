@@ -2232,3 +2232,56 @@ build 79 of 79 with OpenCV SIFT in 1:1 and 1:N, 84 of 84 with Pore SIFT and Pore
 three methods in 1:N, with no finding in their screenshots. A first run of the 1:N methods stopped at 58 of 59
 because the check's own record of each search did not pass the earlier attempt on. The manual check in the
 client with the HiScan PRO passed on 2026-11-23, in 1:1 and in 1:N.
+
+## 2026-11-23: the combined test of every enrolled modality
+
+- **H60** Approved on 2026-11-23, at the supervisor's request of 2026-11-22: one test over every modality the user
+  enrolled, in 1:1 and in 1:N, ending in one score out of 100 of how strongly the evidence points to the user.
+  Replaces H6's fusion of the three fingerprint methods, which was never built: its weight columns and its
+  `fusion` method are removed (migration `biometric_0008`).
+  - Each modality compares as it does alone, with its best comparison: OpenCV SIFT for the fingerprint, SFace for
+    the face, ECAPA-TDNN for the voice. The pore methods stay out until they are calibrated on the HiScan PRO.
+  - Each score becomes evidence, the log10 of its likelihood ratio (how many times more likely the score is for
+    the same person than for another; Nandakumar et al., IEEE TPAMI 2008). The fingerprint's curve, ln LR =
+    -5.5696 + 2.1718 ln(1 + pairs), was fitted by prior-weighted logistic regression on SD302's plain vs plain
+    development pairs (626 same-finger, 61,974 different-person); on the test half none of 64,251
+    different-person pairs reaches a ratio of 1,000, and in H10 the highest different-finger pair (17 pairs)
+    gives 2. The face's and the voice's curves are provisional until other people's samples exist: ln LR =
+    k (s - t), neutral at the model's threshold (0.363, 0.25), with k from the published accuracy under the
+    equal-variance normal model (SFace 99.60 % on LFW at 0.363 in OpenCV's tutorial, k = 38.8; ECAPA-TDNN EER
+    0.80 % on VoxCeleb1-O on its model card, 0.25 taken as its point, k = 46.4).
+  - The best of k comparisons counts its ratio divided by k, so taking the best adds no evidence.
+  - Weights 55 (fingerprint), 25 (face) and 20 (voice) share six orders of magnitude: each modality's evidence
+    is capped at 0.06 x its weight (x2,000, x32 and x16). A modality earns weight x (1 + evidence / cap) / 2
+    points, half of its weight when it says nothing either way; the score is their sum, 50 + 50 x the total
+    evidence / 6. A test is accepted above 75, which is a combined ratio above 1,000: when the curves are
+    calibrated and the modalities independent, at most one impostor test in 1,000 passes. With the fingerprint
+    saying nothing either way, the camera and the microphone together reach at most 72.5, so no test passes
+    without the fingerprint's support: a photo and a
+    recording of the user with another finger are refused unless that finger gives 29 pairs or more, which none
+    of H10's 405 different-finger pairs did (0.28 % of SD302's different-person pairs).
+  - A test needs a fingerprint enrolment and at least one more modality, and takes every modality the user
+    enrolled; the face and the voice come from the PC's devices only, taken for the test at most 10 minutes
+    earlier and checked before the scanner starts. The scan comes last; the test is compared, fused and saved
+    in that one request.
+  - 1:N searches the active users enrolled in every modality of the test, ranks them by their combined score
+    and names only the user's own finger (H18); equal leaders are marked.
+  - Each comparison is saved as an attempt of its own, with its sealed sample and its own decision, pointing to
+    the combined test with the evidence it gave; the test records its score, threshold, decision, total
+    evidence, duration and the policy version it used. A versioned policy table holds the weights, the shared
+    evidence, the threshold and each calibration with its origin; changing it from the administration area
+    comes with the thresholds' settings (H16). Deleting a compared modality erases the 1:1 tests that used it
+    with every comparison (as H35); 1:N tests stay with their links emptied (as H41).
+  - Amends H6 (fusion of the fingerprint methods with user weights), H16 (fusion thresholds from H10's saved
+    scores) and H18 (fusions in the method choice). The key screens were designed and approved as images before
+    any code, the face's and the voice's first designed screens.
+
+Checks: the server's 364 tests with the live captures (8 new in test_fusion.py: the policy's arithmetic, its card,
+an accepted test with its sealed comparisons, another finger with the same face and voice refused, a refused face
+before the scanner, the modalities and samples a test needs, deletion, and 1:N over the people enrolled in every
+modality), ruff and mypy; the client's 247 tests (8 new), type checks, lint and build; the offscreen check
+without engines 38 of 38 (the combined test's page in both themes and both window sizes, 84 screenshots
+without layout findings), the fingerprint with OpenCV SIFT 80 of 80, and the face and the voice 79 of 79.
+The manual check on the HiScan PRO, the camera and the microphone passed on 2026-11-23: a combined 1:1 test, a
+placement of the fingertip only, another finger that is not enrolled with the same face and voice, which was refused,
+and 1:N.

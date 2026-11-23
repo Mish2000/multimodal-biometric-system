@@ -21,8 +21,9 @@ import logging
 import math
 import struct
 import threading
+import time
 import uuid
-from collections.abc import AsyncGenerator, Mapping, Sequence
+from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping, Sequence
 from contextlib import aclosing
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -330,6 +331,40 @@ def capture_quality(service: FingerprintService, header: dict, png: bytes) -> tu
                      f"NFIQ 2 score {score if score is not None else 'not computed'} "
                      f"(at least {service.quality_minimum})", score=score)
     return score, [*header.get("checks", []), quality]
+
+
+@dataclass
+class NewCapture:
+    """The capture that `capture_new` kept: its PNG, its checks, when it was taken, and the clock its attempt's
+    duration starts from (H35)."""
+    png: bytes = b""
+    checks: list[dict] = field(default_factory=list)
+    at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    started: float = 0.0
+
+
+async def capture_new(service: FingerprintService, run: ScannerRun, capture: NewCapture,
+                      refused: Callable[[str], Exception],
+                      quality: Callable[[dict, bytes], Awaitable[tuple[int | None, list[dict]]]]) -> AsyncGenerator[dict, None]:
+    """H35, H41, H60: the finger is placed and its capture checked by NFIQ 2; a refused capture is lifted and placed
+    again, at most MOST_CAPTURES times. Verification, identification and the combined test share it; `quality` runs
+    the check as the caller runs its engines."""
+    for number in range(1, MOST_CAPTURES + 1):
+        yield {"type": "place", "capture": number, "maximum": MOST_CAPTURES}
+        header, png = await acquire_finger(service, run)
+        capture.at, capture.started = datetime.now(UTC), time.perf_counter()
+        yield {"type": "checking"}
+        score, checks = await quality(header, png)
+        capture.png, capture.checks = png, checks
+        if checks[-1]["passed"]:
+            yield {"type": "captured", "image": base64_text(png), "checks": checks}
+            return
+        yield {"type": "rejected", "image": base64_text(png), "checks": checks, "score": score,
+               "minimum": service.quality_minimum}
+        if number == MOST_CAPTURES:
+            raise refused("too_many_captures")
+        yield {"type": "lift"}
+        await acquire(service, "lift", run)
 
 
 async def _enrol(service, databases, keys, subject, finger, run) -> AsyncGenerator[dict, None]:

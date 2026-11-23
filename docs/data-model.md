@@ -215,9 +215,6 @@ erDiagram
         varchar modality
         varchar mode "verify or identify"
         varchar algorithm FK
-        smallint weight_opencv_sift
-        smallint weight_learned_pore
-        smallint weight_pore_sift
         uuid enrolment_id FK "1:1"
         uuid top_enrolment_id FK "1:N"
         integer gallery_size
@@ -227,6 +224,34 @@ erDiagram
         integer duration_ms
         varchar source "device or file"
         bytea probe "sealed"
+        uuid capture_attempt_id FK "H59"
+        uuid fused_attempt_id FK "H60"
+        double evidence "H60"
+    }
+    fusion_policy {
+        smallint id PK
+        smallint weight_fingerprint
+        smallint weight_face
+        smallint weight_voice
+        double budget
+        double threshold
+        jsonb calibration
+    }
+    fused_attempt {
+        uuid id PK
+        timestamptz at
+        uuid subject_id FK
+        varchar mode "verify or identify"
+        smallint policy_id FK
+        uuid fingerprint_enrolment_id FK "1:1"
+        uuid face_enrolment_id FK "1:1"
+        uuid voice_enrolment_id FK "1:1"
+        integer gallery_size "1:N, people"
+        double score "out of 100"
+        double threshold
+        boolean accepted
+        double evidence
+        integer duration_ms
     }
 ```
 
@@ -240,10 +265,10 @@ erDiagram
 
 | Column | Type | Rules |
 | --- | --- | --- |
-| `code` | `varchar(32)` | primary key: `opencv-sift`, `pore-sift`, `learned-pore`, `fusion`, `sface`, `ecapa-voxceleb` |
+| `code` | `varchar(32)` | primary key: `opencv-sift`, `pore-sift`, `learned-pore`, `sface`, `ecapa-voxceleb` |
 | `modality` | `varchar(12)` | `fingerprint`, `face` or `voice` |
 | `version` | `varchar(64)` | what makes its templates: the pinned research commit for fingerprints (H10), the model file's SHA-256 for face and voice |
-| `threshold` | `double precision` | a comparison is accepted when its score is above it; null only for fusion until increment 6 |
+| `threshold` | `double precision` | a comparison is accepted when its score is above it; never null since H60 removed H6's `fusion` method |
 | `threshold_provisional` | `boolean` | true while the value is not from a measured FAR |
 | `threshold_origin` | `varchar(120)` | where the value comes from, shown with it |
 | `threshold_changed_at` | `timestamptz` | null until an administrator changes the value; who changed it is in the audit log |
@@ -255,7 +280,6 @@ The first rows (the fingerprint ones exist since H33, SFace's since H48 and ECAP
 | `opencv-sift` | 57 | no | SD302 plain vs plain, FAR 0.1 % (RxJ) |
 | `pore-sift` | 37 | yes | the highest H10 different-finger score |
 | `learned-pore` | 21 | yes | the highest H10 different-finger score |
-| `fusion` | set in increment 6 | yes | H16's rule, from H10's saved scores |
 | `sface` | 0.363 | no | OpenCV's SFace sample, cosine similarity |
 | `ecapa-voxceleb` | 0.25 | no | SpeechBrain's verification threshold |
 
@@ -310,8 +334,8 @@ of a fingerprint enrolment can read 1, 2 and 4.
 | `embedding` | `vector` | faces and voices: the embedding, unsealed because pgvector cannot search sealed vectors (H14); 128 values for SFace (read from the model, H48) and 192 for ECAPA-TDNN |
 
 Exactly one of `data` and `embedding` is set; one template per sample and
-algorithm (unique). Fusion makes no template of its own: it combines the
-scores of the three fingerprint methods. The server opens the templates a
+algorithm (unique). The combined test (H60) makes no template of its own: it
+combines the scores of the modalities' own comparisons. The server opens the templates a
 request needs and sends them to the engine, which keeps nothing (H13). A
 face or voice 1:N orders the current templates of the active accounts'
 subjects by pgvector's cosine distance; at this size an exact search needs
@@ -328,7 +352,6 @@ table.
 | `modality` | `varchar(12)` | `fingerprint`, `face` or `voice` |
 | `mode` | `varchar(8)` | `verify` (1:1) or `identify` (1:N) |
 | `algorithm` | `varchar(32)` | references `algorithm.code` |
-| `weight_opencv_sift`, `weight_learned_pore`, `weight_pore_sift` | `smallint` | fusion only: the weights used, summing to 100 (H6) |
 | `enrolment_id` | `uuid` | 1:1 only: references the enrolment compared with; deleted with that enrolment (`ON DELETE CASCADE`, H35) |
 | `top_enrolment_id` | `uuid` | 1:N only: references the top candidate's enrolment, and so its subject. Indexed, set to null when that enrolment is deleted (H41) |
 | `gallery_size` | `integer` | 1:N only: the number of templates searched |
@@ -347,8 +370,8 @@ subject identifiers into usernames through the identity links.
 Fingerprint verification stores one row for every completed comparison,
 including a non-match (H35). Quality rejection, cancellation or a technical
 failure produces no comparison row. H35, H38 and H39 use `mode = verify`,
-`algorithm = opencv-sift`, `pore-sift` or `learned-pore`, and `source = device`; the fusion
-weights and identification fields are null. A check enforces that `accepted`
+`algorithm = opencv-sift`, `pore-sift` or `learned-pore`, and `source = device`; the
+identification fields are null. A check enforces that `accepted`
 equals `score > threshold`, and another keeps a fingerprint source to `device`.
 Deleting a finger erases the attempts and probes of its current and replaced
 enrolments. Re-enrolment retains the old enrolment and its attempts.
@@ -406,6 +429,26 @@ UUID ordering, and the client marks the tie. Migration `biometric_0004`
 changes the leading-enrolment foreign key to `ON DELETE SET NULL`, keeping
 identification attempts, scores and sealed probes when that enrolment is
 deleted, including attempts made by other users.
+
+### `fusion_policy` and `fused_attempt`: the combined test (H60, migration `biometric_0008`)
+
+| Table | Column | Rules |
+| --- | --- | --- |
+| `fusion_policy` | `id` | a version, never changed; the current policy is the highest. The first: weights 55, 25 and 20 (summing to 100, checked), `budget` 6 (orders of magnitude of evidence, shared by the weights), `threshold` 75 (points out of 100), `calibration` each modality's curve with its origin and whether it is provisional, `origin` |
+| `fused_attempt` | `mode`, `policy_id` | 1:1 or 1:N, and the policy version it used |
+| | `fingerprint_enrolment_id`, `face_enrolment_id`, `voice_enrolment_id` | 1:1 only: the enrolments compared, `ON DELETE CASCADE`, so deleting any of them erases the test; 1:N names none (checked) |
+| | `gallery_size` | 1:N only: the people compared, those enrolled in every modality of the test |
+| | `score`, `threshold`, `accepted`, `evidence`, `duration_ms` | the points out of 100 and the decision (`accepted` equals `score > threshold`, checked), the total log10 likelihood ratio, the time from the capture's receipt |
+
+Each comparison of a combined test is an `attempt` row of its own modality and
+mode, with its sealed sample, its own threshold and decision, and
+`fused_attempt_id` (`ON DELETE CASCADE`) with the `evidence` it gave; a check
+keeps both null for a comparison of its own. A 1:1 test's comparisons name the
+enrolments they compared, as verification does; a 1:N test's name the
+leader's enrolment in each modality and the templates searched, as
+identification does. Deleting a modality erases the 1:1 tests that used it
+with every comparison; 1:N tests stay with their links emptied. H6's weight
+columns and its `fusion` method were removed, never used by an attempt.
 
 ## Many findings for one person
 

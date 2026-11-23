@@ -3,10 +3,11 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { StrictMode } from 'react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import type { Account, ApiResult, DisplayState, FaceIdentificationResult, FaceVerificationResult, EnrolmentEvent, Language, MbsBridge, OpenedLink, RouteName, Theme, VerificationEvent, FingerprintAlgorithm, IdentificationEvent, VoiceEnrolmentAnswer, VoiceIdentificationResult, VoiceMethod, VoiceSaved, VoiceVerificationResult } from '../../shared/bridge'
+import type { Account, ApiResult, DisplayState, FaceIdentificationResult, FaceVerificationResult, EnrolmentEvent, Language, MbsBridge, OpenedLink, RouteName, Theme, VerificationEvent, FingerprintAlgorithm, FusionEvent, FusionSamples, IdentificationEvent, VoiceEnrolmentAnswer, VoiceIdentificationResult, VoiceMethod, VoiceSaved, VoiceVerificationResult } from '../../shared/bridge'
 import { App } from './App'
 import { FaceIdentificationView } from './face/FaceIdentification'
 import { FaceVerificationView } from './face/FaceVerification'
+import { Fusion } from './pages/Fusion'
 import { SessionProvider } from './session'
 import type { PanelProps } from './voice/MicrophonePanel'
 import { VoiceEnrolment, type KeptRecording } from './voice/VoiceEnrolment'
@@ -71,6 +72,31 @@ class FakeServer implements MbsBridge {
   voiceIdentifications = 0 // H56
   voiceIdentifyErrors: string[] = [] // the errors the next identifications answer with
   voiceSent: Array<{ recording: string; source: string }> = [] // H57
+
+  // H60: the events the next combined test sends, and the tests asked for.
+  fusion: FusionEvent[] = []
+  fusions: Array<{ mode: 'verify' | 'identify'; runId: string; finger: number | null; samples: FusionSamples }> = []
+  fusionCancels: string[] = []
+  private fusionListeners = new Map<string, (event: FusionEvent) => void>()
+
+  fuse = async (mode: 'verify' | 'identify', runId: string, finger: number | null, samples: FusionSamples): Promise<ApiResult<null>> => {
+    this.fusions.push({ mode, runId, finger, samples })
+    for (const event of this.fusion) {
+      await Promise.resolve()
+      this.fusionListeners.get(runId)?.(event)
+    }
+    return { ok: true, data: null }
+  }
+
+  cancelFusion = (runId: string): void => {
+    this.fusionCancels.push(runId)
+    this.fusionListeners.get(runId)?.({ type: 'failed', error: 'cancelled' })
+  }
+
+  onFusion = (runId: string, listener: (event: FusionEvent) => void): (() => void) => {
+    this.fusionListeners.set(runId, listener)
+    return () => { this.fusionListeners.delete(runId) }
+  }
 
   displays = async (): Promise<DisplayState> => ({ internalDisplay: false })
 
@@ -270,6 +296,8 @@ class FakeServer implements MbsBridge {
       }
       case 'voiceMethod':
         return ok({ ...VOICE_METHOD, available: this.voiceAvailable })
+      case 'fusionMethod':
+        return ok(FUSION_METHOD)
       case 'checkVoice': {
         this.voiceChecked.push(body.recording ?? '')
         const quiet = body.recording === 'quiet'
@@ -441,6 +469,26 @@ const FACE_IDENTIFIED: FaceIdentificationResult = {
     { rank: 3, own: false, score: 0.034, accepted: false }],
   source: 'device', size: { decoded: [1280, 720], stored: [1280, 720] },
   view: { rank: 1, placement: 2, probe: 'AAAA', reference: 'AAAA' },
+}
+
+// H60: the first policy, as the server's card gives it.
+const FUSION_METHOD = {
+  policy: { id: 1, weights: { fingerprint: 55, face: 25, voice: 20 }, budget: 6, threshold: 75,
+    calibration: { fingerprint: { provisional: false, origin: 'SD302' }, face: { provisional: true, origin: 'LFW' },
+      voice: { provisional: true, origin: 'VoxCeleb1' } } },
+  available: { fingerprint: true, face: true, voice: true },
+}
+
+// A test of finger 7 and the voice whose fingerprint gave 30 pairs, below its own threshold: the voice carried it.
+const FUSED: FusionEvent = {
+  type: 'verified', attempt_id: '7c9e6679-7425-40de-944b-e07fc1f90ae7', at: '2026-11-23T12:00:00+00:00', mode: 'verify',
+  finger: 7, score: 76.4, threshold: 75, accepted: true, evidence: 3.17, duration_ms: 920, policy: 1,
+  parts: [
+    { modality: 'fingerprint', algorithm: 'opencv-sift', score: 30, threshold: 57, accepted: false, compared: 3,
+      evidence: 0.343, points: 30.4, weight: 55, provisional: false },
+    { modality: 'voice', algorithm: 'ecapa-voxceleb', score: 0.75, threshold: 0.25, accepted: true, compared: 3,
+      evidence: 1.2, points: 20, weight: 20, provisional: true, values: [0.1, -0.2, 0.3, 0.05] },
+  ],
 }
 
 let server: FakeServer
@@ -2395,5 +2443,93 @@ describe('voice recordings from files (H57)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'העלאת הקלטה קיימת' }))
     expect(screen.getByText('אפשר לגרור לכאן הקלטה, או לבחור קובץ.')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'בחירת קובץ הקלטה' })).toBeTruthy()
+  })
+})
+
+describe('the combined test (H60)', () => {
+  let queue: string[] = []
+  function FakePanel({ busy, sentence, onRecorded }: PanelProps) {
+    return (
+      <div>
+        <p data-testid="sentence">{sentence}</p>
+        <button type="button" disabled={busy} onClick={() => onRecorded({ recording: queue.shift() ?? 'voice', capturedAt: new Date().toISOString(), pcm: new Int16Array(800) })}>
+          Fake recording
+        </button>
+      </div>
+    )
+  }
+
+  function testHere(language: Language = 'en') {
+    server.current = server.add('dana', 'user', { language })
+    render(<MemoryRouter><SessionProvider><Fusion Panel={FakePanel} /></SessionProvider></MemoryRouter>)
+  }
+
+  it('is a card on the home screen', async () => {
+    server.add('dana', 'user')
+    open('/sign-in')
+    await signIn('dana', 'dana password 1')
+    fireEvent.click(await screen.findByRole('link', { name: 'Open the combined test' }))
+    expect(await screen.findByRole('heading', { name: 'Combined test' })).toBeTruthy()
+  })
+
+  it('shows each modality’s points and asks for a finger and one more modality first', async () => {
+    server.fingers = [7]
+    testHere()
+    expect(await screen.findByText('The combined test needs an enrolled finger and at least one more modality, the face or the voice.')).toBeTruthy()
+    expect(screen.getAllByText('points').length).toBe(3)
+    expect(screen.getByText('55') && screen.getByText('25') && screen.getByText('20')).toBeTruthy()
+    expect(screen.getAllByText('provisional scale').length).toBe(2)
+    expect(screen.getByRole('button', { name: 'Enrol my face' }) && screen.getByRole('button', { name: 'Enrol my voice' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Verify me (1:1)' })).toBeNull()
+  })
+
+  it('takes the voice, then scans the chosen finger and shows what each modality gave', async () => {
+    server.fingers = [2, 7]
+    server.voice = { enrolled: true, enrolled_at: '2026-11-11T12:00:00+00:00' }
+    server.fusion = [{ type: 'place', capture: 1, maximum: 12 }, { type: 'captured', image: 'AAAA', checks: [] },
+      { type: 'comparing' }, { type: 'saving' }, FUSED]
+    testHere()
+    fireEvent.click(await screen.findByRole('radio', { name: 'left index' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Verify me (1:1)' }))
+    expect(await screen.findByRole('heading', { name: 'Read the sentence aloud' })).toBeTruthy()
+    queue = ['take-1']
+    fireEvent.click(screen.getByRole('button', { name: 'Fake recording' }))
+    expect(await screen.findByRole('heading', { name: 'Identity confirmed' })).toBeTruthy()
+    expect(server.voiceChecked).toEqual(['take-1'])
+    expect(server.fusions).toHaveLength(1)
+    const [sent] = server.fusions
+    expect(sent!.mode).toBe('verify')
+    expect(sent!.finger).toBe(7)
+    expect(sent!.samples.voice?.recording).toBe('take-1')
+    expect(sent!.samples.face).toBeUndefined()
+    expect(screen.getByText('76.4')).toBeTruthy()
+    expect(screen.getByText('The fingerprint alone would not have matched: the face and the voice carried it.')).toBeTruthy()
+    expect(screen.getByText(/30 matching points; alone no match \(above 57\)/)).toBeTruthy()
+    expect(screen.getByText(/similarity 0.75; alone a match \(above 0.25\)/)).toBeTruthy()
+  })
+
+  it('keeps the voice step when its recording is refused, and goes back to it when the server refuses it', async () => {
+    server.fingers = [7]
+    server.voice = { enrolled: true, enrolled_at: '2026-11-11T12:00:00+00:00' }
+    server.fusion = [{ type: 'sample_rejected', modality: 'voice', checks: [] }]
+    testHere()
+    fireEvent.click(await screen.findByRole('button', { name: 'Verify me (1:1)' }))
+    queue = ['quiet']
+    fireEvent.click(await screen.findByRole('button', { name: 'Fake recording' }))
+    expect(await screen.findByText('This recording cannot be used. Record again.')).toBeTruthy()
+    expect(server.fusions).toHaveLength(0)
+    queue = ['take-2']
+    fireEvent.click(screen.getByRole('button', { name: 'Fake recording' }))
+    expect(await screen.findByText('The server could not use the recording. Record it again.')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Read the sentence aloud' })).toBeTruthy()
+    expect(server.fusions).toHaveLength(1)
+  })
+
+  it('speaks Hebrew', async () => {
+    server.fingers = [7]
+    server.voice = { enrolled: true, enrolled_at: '2026-11-11T12:00:00+00:00' }
+    testHere('he')
+    expect(await screen.findByRole('heading', { name: 'בדיקה משולבת' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'אימות (1:1)' })).toBeTruthy()
   })
 })

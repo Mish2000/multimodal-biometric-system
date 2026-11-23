@@ -100,13 +100,27 @@ export class ServerClient {
     return this.scan(IDENTIFICATIONS, { algorithm, ...captureBody(captureFrom) }, runId, emit)
   }
 
+  // H60: a combined test. The page sends the face image and the voice recording it took for the test; the main
+  // process checks only their form and size, and the server checks the rest.
+  async fuse(mode: unknown, runId: unknown, finger: unknown, samples: unknown, emit: (event: unknown) => void): Promise<ApiResult> {
+    if (mode !== 'verify' && mode !== 'identify') return refused('invalid_request')
+    if (typeof runId !== 'string' || !UUID.test(runId)) return refused('invalid_request')
+    if (mode === 'verify' ? !validFinger(finger) : finger !== null) return refused('invalid_request')
+    const body = fusionSamples(samples)
+    if (body === null) return refused('invalid_request')
+    return this.scan(mode === 'verify' ? FUSED_VERIFICATIONS : FUSED_IDENTIFICATIONS,
+      mode === 'verify' ? { finger, ...body } : body, runId, emit)
+  }
+
   private async scan(path: string, body: object, runId: string | null, emit: (event: unknown) => void): Promise<ApiResult> {
     if (this.capture !== null) return { ok: false, status: 409, error: 'scanner_busy' }
     const controller = new AbortController()
     this.capture = { controller, path, runId }
     let ended = false
     const pass = (event: { type?: unknown; error?: unknown }) => {
-      if (event.type === 'saved' || event.type === 'verified' || event.type === 'identified' || event.type === 'failed') {
+      // H60: a refused face or voice ends a combined test before the scanner, so it ends the stream too.
+      if (event.type === 'saved' || event.type === 'verified' || event.type === 'identified' || event.type === 'failed'
+        || event.type === 'sample_rejected') {
         ended = true
         if (this.capture?.controller === controller) this.capture = null
       }
@@ -162,6 +176,11 @@ export class ServerClient {
     if (this.capture?.path === IDENTIFICATIONS && this.capture.runId === runId) this.cancelCapture()
   }
 
+  cancelFusion(runId: unknown): void {
+    if ((this.capture?.path === FUSED_VERIFICATIONS || this.capture?.path === FUSED_IDENTIFICATIONS)
+      && this.capture.runId === runId) this.cancelCapture()
+  }
+
   cancelCapture(): void {
     this.capture?.controller.abort()
   }
@@ -207,6 +226,31 @@ function captureBody(captureFrom: unknown): { capture_from?: string } {
   return typeof captureFrom === 'string' ? { capture_from: captureFrom } : {}
 }
 
+// H60: a face image of the camera (8 MB) and a recording of the microphone (1 MB), in base64, each with an ISO time.
+const IMAGE_BASE64 = Math.ceil((8 * 1024 * 1024) / 3) * 4
+const RECORDING_BASE64 = Math.ceil((1024 * 1024) / 3) * 4
+const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/
+const ISO_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/
+
+function fusionSamples(samples: unknown): Record<string, Record<string, string>> | null {
+  if (typeof samples !== 'object' || samples === null || Array.isArray(samples)) return null
+  const given = samples as Record<string, unknown>
+  if (Object.keys(given).some((key) => key !== 'face' && key !== 'voice')) return null
+  const body: Record<string, Record<string, string>> = {}
+  for (const [name, field, limit] of [['face', 'image', IMAGE_BASE64], ['voice', 'recording', RECORDING_BASE64]] as const) {
+    const sample = given[name]
+    if (sample === undefined) continue
+    if (typeof sample !== 'object' || sample === null) return null
+    const { [field]: data, captured_at: at, ...rest } = sample as Record<string, unknown>
+    if (Object.keys(rest).length > 0 || typeof data !== 'string' || data.length === 0 || data.length > limit
+      || !BASE64.test(data) || typeof at !== 'string' || !ISO_TIME.test(at)) return null
+    body[name] = { [field]: data, captured_at: at }
+  }
+  return body
+}
+
+const FUSED_VERIFICATIONS = '/api/fusion/verifications'
+const FUSED_IDENTIFICATIONS = '/api/fusion/identifications'
 const ENROLMENTS = '/api/fingerprint/enrolments'
 const VERIFICATIONS = '/api/fingerprint/verifications'
 const IDENTIFICATIONS = '/api/fingerprint/identifications'

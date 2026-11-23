@@ -227,23 +227,12 @@ async def _verify(service, databases, keys, subject, finger, run, algorithm,
         yield {"type": "captured", "image": base64.b64encode(png).decode("ascii"), "checks": [],
                "reused": {"attempt_id": str(reused.attempt_id), "at": reused.at.isoformat()}}
     else:
-        for capture in range(1, fp.MOST_CAPTURES + 1):
-            yield {"type": "place", "capture": capture, "maximum": fp.MOST_CAPTURES}
-            header, png = await fp.acquire_finger(service, run)
-            at, started = datetime.now(UTC), time.perf_counter()
-            yield {"type": "checking"}
-            score, checks = await run_in_threadpool(fp.capture_quality, service, header, png)
-            image = base64.b64encode(png).decode("ascii")
-            if checks[-1]["passed"]:
-                break
-            yield {"type": "rejected", "image": image, "checks": checks, "score": score,
-                   "minimum": service.quality_minimum}
-            if capture == fp.MOST_CAPTURES:
-                raise VerificationError("too_many_captures")
-            yield {"type": "lift"}
-            await fp.acquire(service, "lift", run)
+        capture = fp.NewCapture()
+        async for event in fp.capture_new(service, run, capture, VerificationError,
+                                          lambda header, png: run_in_threadpool(fp.capture_quality, service, header, png)):
+            yield event
+        png, at, started = capture.png, capture.at, capture.started
         captured_at, capture_attempt_id = at, None
-        yield {"type": "captured", "image": image, "checks": checks}
     yield {"type": "comparing", "completed": 0, "total": len(reference.templates)}
     probe_pores = None
     if algorithm == fp.LEARNED_PORE:
