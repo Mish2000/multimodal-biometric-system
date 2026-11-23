@@ -371,7 +371,6 @@ def test_upgrade_retains_existing_attempts_and_applies_the_new_deletion_rule(fp_
     migration = Config()
     migration.set_main_option("script_location", str(MIGRATIONS / "biometric"))
     migration.attributes["engine"] = databases.biometric
-    command.downgrade(migration, "biometric_0003")
     token = enrolled(fp_client, script)
     plan(script, finger("q60:A4"))
     verify(fp_client, token)
@@ -379,6 +378,9 @@ def test_upgrade_retains_existing_attempts_and_applies_the_new_deletion_rule(fp_
     result = identify(fp_client, token)[-1]
     with Session(databases.biometric) as db:
         before = db.get_one(Attempt, uuid.UUID(result["attempt_id"])).probe
+    # The rows go back to the schema before H41's rule and are upgraded again. The current code writes columns the
+    # older schemas lack (H59), so the attempts are made first and the schema follows them down and up.
+    command.downgrade(migration, "biometric_0003")
     migrate(databases)
     assert fp_client.delete("/api/fingerprint/fingers/7", headers=auth(token)).status_code == 204
     with Session(databases.biometric) as db:

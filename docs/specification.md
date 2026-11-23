@@ -2,7 +2,7 @@
 
 Approved on 2026-10-20 (H11–H20 in `docs/decisions.md`),
 from the draft of 2026-10-19 as revised on 2026-10-20, and amended with his
-approval since (H24 to H58). Every decision is cited by its ID; a change needs
+approval since (H24 to H59). Every decision is cited by its ID; a change needs
 the researcher's approval and a new entry in the decision record.
 
 ## 1. Purpose and scope
@@ -210,6 +210,11 @@ flow of 2026-10-18).
   the fixed referee's approval.
   A matched result offers a method-change shortcut that keeps the finger;
   the next capture still requires an explicit start (H40).
+  H59 offers the shortcut after every result, and with another method the
+  same capture can be compared again for ten minutes from when it was taken,
+  without the scanner: the server opens it from the earlier attempt's sealed
+  probe, so a fingerprint still enters only from the scanner, and NFIQ 2 is
+  not repeated. The user chooses between that and a new scan.
   H43 adds an OpenCV SIFT illustration from the same comparison that produced
   the score. The result shows the new capture, the caller's highest-scoring
   stored capture and its counted inlier pairs. Equal scores use the earliest
@@ -237,6 +242,7 @@ flow of 2026-10-18).
   tie, with deterministic ordering for storage. Results identify the caller's
   own fingers and keep other candidates anonymous (H18).
   H42 extends identification to Pore SIFT and Pore CNN.
+  H59 lets another method search the same capture again, as in verification.
   The user chooses the method before starting. Missing templates are prepared
   from sealed captures before the scanner is requested and commit together
   for each enrolled finger. The client reports progress and allows cancellation.
@@ -668,3 +674,7 @@ themes during that work.
 - **H58** The local API answers only requests addressed to 127.0.0.1 or
   localhost, and refuses a body larger than its route takes before reading
   more of it (3).
+- **H59** After a fingerprint result, another method compares or searches the
+  same capture again, from the earlier attempt's sealed probe, for ten
+  minutes from the capture; each such attempt keeps its own sealed copy and
+  names the attempt that took the capture (5.1, 7).

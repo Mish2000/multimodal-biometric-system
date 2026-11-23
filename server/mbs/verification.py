@@ -110,11 +110,11 @@ def _store_templates(databases: Databases, keys: Keys, subject: uuid.UUID, refer
 
 
 def _save(databases: Databases, keys: Keys, subject: uuid.UUID, reference: Reference, png: bytes,
-          at: datetime, score: int, duration_ms: int) -> Attempt:
+          at: datetime, score: int, duration_ms: int, capture_attempt_id: uuid.UUID | None = None) -> Attempt:
     attempt = Attempt(id=uuid.uuid4(), at=at, subject_id=subject, modality=fp.FINGERPRINT, mode="verify",
                       algorithm=reference.algorithm, enrolment_id=reference.enrolment_id, score=score,
                       threshold=reference.threshold, accepted=score > reference.threshold,
-                      duration_ms=duration_ms, source="device")
+                      duration_ms=duration_ms, source="device", capture_attempt_id=capture_attempt_id)
     attempt.probe = keyring.seal(keys, keyring.PROBE, attempt.id.bytes + subject.bytes, png)
     with Session(databases.biometric, expire_on_commit=False) as db, db.begin():
         # A deletion or replacement during capture invalidates the reference. Lock only for the save,
@@ -154,15 +154,17 @@ def _reference_image(databases: Databases, keys: Keys, subject: uuid.UUID, enrol
 
 
 async def verify(service: fp.FingerprintService, databases: Databases, keys: Keys, subject: uuid.UUID,
-                 finger: int, algorithm: str = fp.OPENCV_SIFT) -> AsyncGenerator[dict, None]:
+                 finger: int, algorithm: str = fp.OPENCV_SIFT,
+                 capture_from: uuid.UUID | None = None) -> AsyncGenerator[dict, None]:
+    # The lock also keeps a comparison of an earlier capture (H59) from sharing the engines with a scan.
     if not service.scanner_lock.acquire(blocking=False):
         yield {"type": "failed", "error": "scanner_busy"}
         return
     run = ScannerRun()
     try:
-        async for event in _verify(service, databases, keys, subject, finger, run, algorithm):
+        async for event in _verify(service, databases, keys, subject, finger, run, algorithm, capture_from):
             yield event
-    except VerificationError as error:
+    except (VerificationError, fp.CaptureUnavailable) as error:
         yield {"type": "failed", "error": str(error)}
     except ScannerError as error:
         yield {"type": "failed", "error": error.code}
@@ -178,19 +180,28 @@ async def verify(service: fp.FingerprintService, databases: Databases, keys: Key
         service.scanner_lock.release()
 
 
-async def _verify(service, databases, keys, subject, finger, run, algorithm) -> AsyncGenerator[dict, None]:
+async def _verify(service, databases, keys, subject, finger, run, algorithm,
+                  capture_from=None) -> AsyncGenerator[dict, None]:
     if algorithm not in (fp.OPENCV_SIFT, fp.PORE_SIFT, fp.LEARNED_PORE):
         raise VerificationError("unknown_method")
     engine = fp.engine_for(service, algorithm)
     if engine is None:
         raise VerificationError("method_unavailable")
     reference = await run_in_threadpool(_load, databases, keys, subject, finger, algorithm)
+    reused = None
+    if capture_from is not None:
+        # H59: the earlier capture of this finger, compared again with another method instead of a new scan.
+        reused = await run_in_threadpool(fp.reused_capture, databases, keys, subject, capture_from, "verify", algorithm)
+        if reused.enrolment_id != reference.enrolment_id:
+            raise VerificationError("capture_unavailable")
     yield {"type": "started", "finger": finger, "threshold": reference.threshold,
            "quality_minimum": service.quality_minimum, "references": fp.PLACEMENTS,
-           "algorithm": algorithm, "threshold_provisional": reference.provisional}
+           "algorithm": algorithm, "threshold_provisional": reference.provisional,
+           "reused": reused is not None}
     if reference.pending:
         yield {"type": "preparing_templates", "completed": 0, "total": len(reference.pending)}
-    await run_in_threadpool(service.quality.start)
+    if reused is None:
+        await run_in_threadpool(service.quality.start)
     ready = await run_in_threadpool(engine.start)
     if ready["version"] != reference.version:
         raise VerificationError("template_version_mismatch")
@@ -209,23 +220,30 @@ async def _verify(service, databases, keys, subject, finger, run, algorithm) -> 
         reference.templates = await run_in_threadpool(_store_templates, databases, keys, subject, reference, generated)
         reference.pending.clear()
         reference.pore_sources.clear()
-    for capture in range(1, fp.MOST_CAPTURES + 1):
-        yield {"type": "place", "capture": capture, "maximum": fp.MOST_CAPTURES}
-        header, png = await fp.acquire_finger(service, run)
-        at, started = datetime.now(UTC), time.perf_counter()
-        yield {"type": "checking"}
-        score, checks = await run_in_threadpool(fp.capture_quality, service, header, png)
-        image = base64.b64encode(png).decode("ascii")
-        if checks[-1]["passed"]:
-            break
-        yield {"type": "rejected", "image": image, "checks": checks, "score": score,
-               "minimum": service.quality_minimum}
-        if capture == fp.MOST_CAPTURES:
-            raise VerificationError("too_many_captures")
-        yield {"type": "lift"}
-        await fp.acquire(service, "lift", run)
-
-    yield {"type": "captured", "image": image, "checks": checks}
+    if reused is not None:
+        # H59: no scanner and no new quality check: the capture passed NFIQ 2 when it was taken.
+        png, at, started = reused.png, datetime.now(UTC), time.perf_counter()
+        captured_at, capture_attempt_id = reused.at, reused.attempt_id
+        yield {"type": "captured", "image": base64.b64encode(png).decode("ascii"), "checks": [],
+               "reused": {"attempt_id": str(reused.attempt_id), "at": reused.at.isoformat()}}
+    else:
+        for capture in range(1, fp.MOST_CAPTURES + 1):
+            yield {"type": "place", "capture": capture, "maximum": fp.MOST_CAPTURES}
+            header, png = await fp.acquire_finger(service, run)
+            at, started = datetime.now(UTC), time.perf_counter()
+            yield {"type": "checking"}
+            score, checks = await run_in_threadpool(fp.capture_quality, service, header, png)
+            image = base64.b64encode(png).decode("ascii")
+            if checks[-1]["passed"]:
+                break
+            yield {"type": "rejected", "image": image, "checks": checks, "score": score,
+                   "minimum": service.quality_minimum}
+            if capture == fp.MOST_CAPTURES:
+                raise VerificationError("too_many_captures")
+            yield {"type": "lift"}
+            await fp.acquire(service, "lift", run)
+        captured_at, capture_attempt_id = at, None
+        yield {"type": "captured", "image": image, "checks": checks}
     yield {"type": "comparing", "completed": 0, "total": len(reference.templates)}
     probe_pores = None
     if algorithm == fp.LEARNED_PORE:
@@ -270,9 +288,13 @@ async def _verify(service, databases, keys, subject, finger, run, algorithm) -> 
     match_view = {"placement": best_placement, "reference_image": base64.b64encode(stored_image).decode("ascii"),
                   "count": score, "pairs": base64.b64encode(best_pairs).decode("ascii")}
     yield {"type": "saving"}
-    attempt = await run_in_threadpool(_save, databases, keys, subject, reference, png, at, score, duration_ms)
+    attempt = await run_in_threadpool(_save, databases, keys, subject, reference, png, at, score, duration_ms,
+                                      capture_attempt_id)
     yield {"type": "verified", "attempt_id": str(attempt.id), "at": attempt.at.isoformat(),
            "finger": finger, "algorithm": algorithm, "score": score, "threshold": attempt.threshold,
            "threshold_provisional": reference.provisional,
            "threshold_origin": reference.origin, "accepted": attempt.accepted, "duration_ms": duration_ms,
-           "comparisons": comparisons, "match_view": match_view}
+           "comparisons": comparisons, "match_view": match_view,
+           # H59: the capture this attempt compared: taken now, or an earlier attempt's compared again.
+           "capture": {"attempt_id": str(capture_attempt_id or attempt.id), "at": captured_at.isoformat(),
+                       "reused": capture_attempt_id is not None}}

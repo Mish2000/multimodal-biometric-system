@@ -15,13 +15,15 @@ const FIGURES: Record<FingerprintAlgorithm, { rxj: string; qxj: string; verifica
   'learned-pore': { rxj: '95.1', qxj: '93.4', verification: '3.2', identification: '3.2' },
 }
 
-export function MethodChoices({ methods, algorithm, onChoose, error, onRetry, purpose = 'verification' }: {
+export function MethodChoices({ methods, algorithm, onChoose, error, onRetry, purpose = 'verification', compared = [] }: {
   methods: FingerprintMethod[]
   algorithm: FingerprintAlgorithm
   onChoose: (algorithm: FingerprintAlgorithm) => void
   error: string
   onRetry: () => void
   purpose?: 'verification' | 'identification'
+  /** H59: the methods the shown capture was already compared with. */
+  compared?: FingerprintAlgorithm[] | undefined
 }) {
   const { t } = useSession()
   const f = t.fingerprint
@@ -57,6 +59,7 @@ export function MethodChoices({ methods, algorithm, onChoose, error, onRetry, pu
             <span className="method-threshold">
               {f.verification.threshold(method.threshold)}
               {method.threshold_provisional && <Tag>{f.provisional}</Tag>}
+              {compared.includes(method.code) && <Tag tone="ink">{f.capture.compared}</Tag>}
             </span>
             {!method.available && <span className="method-problem"><Icon name="alert" />{f.methodUnavailable}</span>}
           </label>

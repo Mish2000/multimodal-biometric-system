@@ -12,7 +12,7 @@
   <img alt=".NET Framework 4.8" src="https://img.shields.io/badge/.NET_Framework-4.8-512BD4?logo=dotnet&logoColor=white">
 </p>
 <p align="center">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-351%20server%20%C2%B7%20233%20client%20%C2%B7%2015%20scanner%20%C2%B7%2039%20engines-2EA44F">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-356%20server%20%C2%B7%20239%20client%20%C2%B7%2015%20scanner%20%C2%B7%2039%20engines-2EA44F">
   <img alt="Cryptography" src="https://img.shields.io/badge/crypto-AES--256--GCM%20%C2%B7%20Argon2id%20%C2%B7%20HMAC-7C3AED">
   <a href="https://github.com/Mish2000/multimodal-biometric-system/actions/workflows/checks.yml"><img alt="Checks" src="https://github.com/Mish2000/multimodal-biometric-system/actions/workflows/checks.yml/badge.svg?branch=main"></a>
   <img alt="Progress" src="https://img.shields.io/badge/progress-increment%205%20of%206%20complete-F59E0B">
@@ -104,7 +104,7 @@ checked 1000 ppi images.
 <td valign="top">
 
 **📜 Every decision on record**<br>
-Each design choice is numbered (H1 to H58), dated, and cited in the code and the commits.
+Each design choice is numbered (H1 to H59), dated, and cited in the code and the commits.
 
 </td>
 <td valign="top">
@@ -199,7 +199,7 @@ conda activate multimodal-server
 cd server
 python -m mbs setup        # key file, local settings, cluster and databases
 python -m mbs serve        # the API on 127.0.0.1:55433
-python -m pytest           # 351 tests, including four local checks with MBS_LIVE_CAPTURES
+python -m pytest           # 356 tests, including four local checks with MBS_LIVE_CAPTURES
 python -m mypy             # type checks of the server and its tests
 ruff check ..              # lint of all the system's Python (ruff.toml)
 
@@ -207,7 +207,7 @@ ruff check ..              # lint of all the system's Python (ruff.toml)
 cd ../client
 npm ci
 npm run dev                # the app, with the server running
-npm test                   # 233 tests
+npm test                   # 239 tests
 npm run lint               # oxlint (.oxlintrc.json)
 npm run build && cd ..
 python tools/client-check/run.py first   # the built client against a throwaway server, offscreen

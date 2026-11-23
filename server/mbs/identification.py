@@ -256,11 +256,12 @@ async def _compare_batch(engines: list[Engine], databases: Databases, keys: Keys
 
 
 def _save(databases: Databases, keys: Keys, subject: uuid.UUID, gallery: Gallery,
-          best: Candidate, score: int, png: bytes, at: datetime, duration_ms: int) -> Attempt:
+          best: Candidate, score: int, png: bytes, at: datetime, duration_ms: int,
+          capture_attempt_id: uuid.UUID | None = None) -> Attempt:
     attempt = Attempt(id=uuid.uuid4(), at=at, subject_id=subject, modality=fp.FINGERPRINT, mode="identify",
                       algorithm=gallery.algorithm, top_enrolment_id=best.id, gallery_size=len(gallery.references),
                       score=score, threshold=gallery.threshold, accepted=score > gallery.threshold,
-                      duration_ms=duration_ms, source="device")
+                      duration_ms=duration_ms, source="device", capture_attempt_id=capture_attempt_id)
     attempt.probe = keyring.seal(keys, keyring.PROBE, attempt.id.bytes + subject.bytes, png)
     # Lock accounts first, then enrolments. Capture and comparison hold neither transaction open.
     with Session(databases.accounts) as accounts_db, accounts_db.begin():
@@ -279,15 +280,17 @@ def _save(databases: Databases, keys: Keys, subject: uuid.UUID, gallery: Gallery
 
 
 async def identify(service: fp.FingerprintService, databases: Databases, keys: Keys,
-                   subject: uuid.UUID, algorithm: str = fp.OPENCV_SIFT) -> AsyncGenerator[dict, None]:
+                   subject: uuid.UUID, algorithm: str = fp.OPENCV_SIFT,
+                   capture_from: uuid.UUID | None = None) -> AsyncGenerator[dict, None]:
+    # The lock also keeps a search with an earlier capture (H59) from sharing the engines with a scan.
     if not service.scanner_lock.acquire(blocking=False):
         yield {"type": "failed", "error": "scanner_busy"}
         return
     run = ScannerRun()
     try:
-        async for event in _identify(service, databases, keys, subject, run, algorithm):
+        async for event in _identify(service, databases, keys, subject, run, algorithm, capture_from):
             yield event
-    except IdentificationError as error:
+    except (IdentificationError, fp.CaptureUnavailable) as error:
         yield {"type": "failed", "error": str(error)}
     except ScannerError as error:
         yield {"type": "failed", "error": error.code}
@@ -374,41 +377,54 @@ async def _prepare_gallery(service, databases, keys, gallery: Gallery, subject: 
     gallery.references = [reference for candidate in gallery.candidates for reference in by_enrolment[candidate.id]]
 
 
-async def _identify(service, databases, keys, subject, run, algorithm) -> AsyncGenerator[dict, None]:
+async def _identify(service, databases, keys, subject, run, algorithm, capture_from=None) -> AsyncGenerator[dict, None]:
     if algorithm not in (fp.OPENCV_SIFT, fp.PORE_SIFT, fp.LEARNED_PORE):
         raise IdentificationError("unknown_method")
     if fp.engine_for(service, algorithm) is None:
         raise IdentificationError("method_unavailable")
+    reused = None
+    if capture_from is not None:
+        # H59: the earlier search's capture, searched again with another method instead of a new scan.
+        reused = await run_in_threadpool(fp.reused_capture, databases, keys, subject, capture_from, "identify", algorithm)
     gallery = await run_in_threadpool(_load_gallery, databases, keys, subject, algorithm)
     total = len(gallery.references)
     yield {"type": "started", "algorithm": algorithm, "threshold": gallery.threshold,
-           "quality_minimum": service.quality_minimum, "gallery_size": total, "enrolments": len(gallery.candidates)}
+           "quality_minimum": service.quality_minimum, "gallery_size": total, "enrolments": len(gallery.candidates),
+           "reused": reused is not None}
     engines = service.search_engines(algorithm)[:total]
     startup = [*engines, service.pore] if algorithm == fp.LEARNED_PORE else engines
     for engine in startup:
         ready = await _engine_call(engine, engine.start)
         if ready["version"] != gallery.version:
             raise IdentificationError("template_version_mismatch")
-    await _engine_call(service.quality, service.quality.start)
+    if reused is None:
+        await _engine_call(service.quality, service.quality.start)
     described_from: dict[uuid.UUID, bytes] = {}
     async for event in _prepare_gallery(service, databases, keys, gallery, subject, described_from):
         yield event
-    for capture in range(1, fp.MOST_CAPTURES + 1):
-        yield {"type": "place", "capture": capture, "maximum": fp.MOST_CAPTURES}
-        header, png = await fp.acquire_finger(service, run)
-        at, started = datetime.now(UTC), time.perf_counter()
-        yield {"type": "checking"}
-        score, checks = await _engine_call(service.quality, partial(fp.capture_quality, service, header, png))
-        image = fp.base64_text(png)
-        if checks[-1]["passed"]:
-            break
-        yield {"type": "rejected", "image": image, "checks": checks, "score": score, "minimum": service.quality_minimum}
-        if capture == fp.MOST_CAPTURES:
-            raise IdentificationError("too_many_captures")
-        yield {"type": "lift"}
-        await fp.acquire(service, "lift", run)
-
-    yield {"type": "captured", "image": image, "checks": checks}
+    if reused is not None:
+        # H59: no scanner and no new quality check: the capture passed NFIQ 2 when it was taken.
+        png, at, started = reused.png, datetime.now(UTC), time.perf_counter()
+        captured_at, capture_attempt_id = reused.at, reused.attempt_id
+        yield {"type": "captured", "image": fp.base64_text(png), "checks": [],
+               "reused": {"attempt_id": str(reused.attempt_id), "at": reused.at.isoformat()}}
+    else:
+        for capture in range(1, fp.MOST_CAPTURES + 1):
+            yield {"type": "place", "capture": capture, "maximum": fp.MOST_CAPTURES}
+            header, png = await fp.acquire_finger(service, run)
+            at, started = datetime.now(UTC), time.perf_counter()
+            yield {"type": "checking"}
+            score, checks = await _engine_call(service.quality, partial(fp.capture_quality, service, header, png))
+            image = fp.base64_text(png)
+            if checks[-1]["passed"]:
+                break
+            yield {"type": "rejected", "image": image, "checks": checks, "score": score, "minimum": service.quality_minimum}
+            if capture == fp.MOST_CAPTURES:
+                raise IdentificationError("too_many_captures")
+            yield {"type": "lift"}
+            await fp.acquire(service, "lift", run)
+        captured_at, capture_attempt_id = at, None
+        yield {"type": "captured", "image": image, "checks": checks}
     yield {"type": "extracting"}
     probe_pores = await _detect(service, png) if algorithm == fp.LEARNED_PORE else None
     probe = await _extract(service, algorithm, png, probe_pores)
@@ -436,8 +452,12 @@ async def _identify(service, databases, keys, subject, run, algorithm) -> AsyncG
         match_view = await _match_view(service, engines[0], databases, keys, gallery, candidate, winners[candidate.id],
                                        rank, scores[candidate.id], probe, probe_pores, described_from)
     yield {"type": "saving"}
-    attempt = await run_in_threadpool(_save, databases, keys, subject, gallery, best, score, png, at, duration_ms)
+    attempt = await run_in_threadpool(_save, databases, keys, subject, gallery, best, score, png, at, duration_ms,
+                                      capture_attempt_id)
     yield {"type": "identified", "attempt_id": str(attempt.id), "at": attempt.at.isoformat(),
+           # H59: the capture this search used: taken now, or an earlier search's searched again.
+           "capture": {"attempt_id": str(capture_attempt_id or attempt.id), "at": captured_at.isoformat(),
+                       "reused": capture_attempt_id is not None},
            "algorithm": algorithm, "score": score, "threshold": attempt.threshold,
            "threshold_origin": gallery.origin, "threshold_provisional": gallery.provisional,
            "accepted": attempt.accepted, "duration_ms": duration_ms, "gallery_size": total,

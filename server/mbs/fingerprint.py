@@ -25,7 +25,7 @@ import uuid
 from collections.abc import AsyncGenerator, Mapping, Sequence
 from contextlib import aclosing
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import cast
 
 import anyio
@@ -38,7 +38,7 @@ from .config import REPOSITORY, Config, learned_python, pore_python, research_py
 from .db import Databases
 from .engines import Engine, EngineError, Scanner, ScannerError, ScannerRun, conda_environment
 from .keys import Keys
-from .models import Algorithm, Enrolment, Sample, Template, sealed_data, threshold_of
+from .models import Algorithm, Attempt, Enrolment, Sample, Template, sealed_data, threshold_of
 
 logger = logging.getLogger("mbs.fingerprint")
 FINGERPRINT = "fingerprint"
@@ -52,6 +52,7 @@ MOST_CAPTURES = 12  # captures, kept or not, in one enrolment (H33)
 FINGER_WAIT_S = 60
 LIFT_WAIT_S = 30
 PORE_METHODS = (PORE_SIFT, LEARNED_PORE)  # templates an enrolment makes besides OpenCV SIFT's, when set up (H38, H39)
+CAPTURE_REUSE = timedelta(minutes=10)  # H59: how long, from the capture, it may be compared again
 
 
 @dataclass
@@ -538,3 +539,42 @@ def ndjson(events: AsyncGenerator[dict, None]) -> AsyncGenerator[bytes, None]:
             async for event in events:
                 yield (json.dumps(event, separators=(",", ":")) + "\n").encode("utf-8")
     return lines()
+
+
+class CaptureUnavailable(Exception):
+    """H59: an earlier capture that cannot be compared again, as a client error code."""
+
+
+@dataclass
+class ReusedCapture:
+    """H59: the capture of an earlier attempt, opened from that attempt's sealed probe."""
+
+    attempt_id: uuid.UUID  # the attempt that took the capture
+    at: datetime  # when the capture was taken
+    enrolment_id: uuid.UUID | None  # in 1:1, the enrolment the earlier attempt compared it with
+    png: bytes
+
+
+def reused_capture(databases: Databases, keys: Keys, subject: uuid.UUID, attempt_id: uuid.UUID, mode: str,
+                   algorithm: str, now: datetime | None = None) -> ReusedCapture:
+    """H59: the caller's own capture of an earlier attempt in the same mode, to be compared again with another
+    method. It never comes back from the client: it is opened from that attempt's sealed probe, so a fingerprint
+    still enters only from the scanner (D1, H27). An attempt that already compared a capture again leads to the
+    attempt that took it, whose time bounds the reuse."""
+    with DbSession(databases.biometric) as db:
+        source = db.scalar(select(Attempt).where(Attempt.id == attempt_id, Attempt.subject_id == subject))
+        if source is None or source.modality != FINGERPRINT or source.mode != mode:
+            raise CaptureUnavailable("capture_unavailable")
+        if source.algorithm == algorithm:
+            raise CaptureUnavailable("same_method")
+        origin = source
+        if source.capture_attempt_id is not None:
+            taken = db.scalar(select(Attempt).where(Attempt.id == source.capture_attempt_id,
+                                                    Attempt.subject_id == subject))
+            if taken is None:
+                raise CaptureUnavailable("capture_unavailable")
+            origin = taken
+        if (now or datetime.now(UTC)) - origin.at > CAPTURE_REUSE:
+            raise CaptureUnavailable("capture_expired")
+        png = keyring.open_sealed(keys, keyring.PROBE, source.id.bytes + subject.bytes, source.probe)
+        return ReusedCapture(origin.id, origin.at.astimezone(UTC), source.enrolment_id, png)

@@ -3,6 +3,7 @@ with the scanner's progress streamed as JSON lines, and the methods' cards."""
 
 from __future__ import annotations
 
+import uuid
 from typing import Annotated, Literal
 
 import anyio
@@ -50,11 +51,13 @@ class FingerprintEnrolment(BaseModel):
 
 class FingerprintVerification(FingerprintEnrolment):
     algorithm: Literal["opencv-sift", "pore-sift", "learned-pore"] = "opencv-sift"  # H38, H39
+    capture_from: uuid.UUID | None = None  # H59: an earlier attempt whose capture to compare again
 
 
 class FingerprintIdentification(BaseModel):
     model_config = {"extra": "forbid"}
     algorithm: Literal["opencv-sift", "pore-sift", "learned-pore"] = "opencv-sift"  # H41, H42
+    capture_from: uuid.UUID | None = None  # H59: an earlier search whose capture to search again
 
 
 # Fingerprint enrolment (H15, H33): the answer is a stream of JSON lines, one per event, so the client can
@@ -89,7 +92,7 @@ async def verify_fingerprint(body: FingerprintVerification, databases: Databases
     if service is None:
         raise AccountError("fingerprint_unavailable", 503)
     subject = await run_in_threadpool(accounts.user_subject, databases, keys, account.id)
-    events = verification.verify(service, databases, keys, subject, body.finger, body.algorithm)
+    events = verification.verify(service, databases, keys, subject, body.finger, body.algorithm, body.capture_from)
     return FingerprintResponse(events)
 
 
@@ -106,4 +109,5 @@ async def identify_fingerprint(body: FingerprintIdentification, databases: Datab
     if service is None:
         raise AccountError("fingerprint_unavailable", 503)
     subject = await run_in_threadpool(accounts.user_subject, databases, keys, account.id)
-    return FingerprintResponse(identification.identify(service, databases, keys, subject, body.algorithm))
+    return FingerprintResponse(identification.identify(service, databases, keys, subject, body.algorithm,
+                                                       body.capture_from))

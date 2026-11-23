@@ -60,28 +60,28 @@ export function registerBridge(serverUrl: string): ServerClient {
     if (fromTopFrame(event)) server.cancelEnrolment()
   })
   // H35: a verification's events name their run, and only that run is cancelled.
-  ipcMain.handle('mbs:verify', (event, finger: unknown, runId: unknown, algorithm: unknown) => {
+  ipcMain.handle('mbs:verify', (event, finger: unknown, runId: unknown, algorithm: unknown, captureFrom: unknown) => {
     if (!fromTopFrame(event)) return { ok: false, status: 0, error: 'unknown_route' }
     const page = event.sender
     return stream(
       page,
       () => server.cancelVerification(runId),
       (verificationEvent) => page.send('mbs:verification', runId, verificationEvent),
-      (emit) => server.verify(finger, runId, emit, algorithm),
+      (emit) => server.verify(finger, runId, emit, algorithm, captureFrom),
     )
   })
   ipcMain.on('mbs:verify-cancel', (event, runId: unknown) => {
     if (fromTopFrame(event)) server.cancelVerification(runId)
   })
   // H41: identification has its own fixed route and per-run events, with the same window lifecycle.
-  ipcMain.handle('mbs:identify', (event, runId: unknown, algorithm: unknown) => {
+  ipcMain.handle('mbs:identify', (event, runId: unknown, algorithm: unknown, captureFrom: unknown) => {
     if (!fromTopFrame(event)) return { ok: false, status: 0, error: 'unknown_route' }
     const page = event.sender
     return stream(
       page,
       () => server.cancelIdentification(runId),
       (identificationEvent) => page.send('mbs:identification', runId, identificationEvent),
-      (emit) => server.identify(runId, emit, algorithm),
+      (emit) => server.identify(runId, emit, algorithm, captureFrom),
     )
   })
   ipcMain.on('mbs:identify-cancel', (event, runId: unknown) => {

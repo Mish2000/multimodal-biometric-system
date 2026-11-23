@@ -82,17 +82,22 @@ export class ServerClient {
     return this.scan(ENROLMENTS, { finger }, null, emit)
   }
 
-  async verify(finger: unknown, runId: unknown, emit: (event: unknown) => void, algorithm?: unknown): Promise<ApiResult> {
+  async verify(finger: unknown, runId: unknown, emit: (event: unknown) => void, algorithm?: unknown,
+    captureFrom?: unknown): Promise<ApiResult> {
     if (!validFinger(finger)) return refused('invalid_request')
     if (typeof runId !== 'string' || !UUID.test(runId)) return refused('invalid_request')
     if (algorithm !== undefined && !FINGERPRINT_ALGORITHMS.includes(algorithm as FingerprintAlgorithm)) return refused('invalid_request')
-    return this.scan(VERIFICATIONS, { finger, ...(algorithm === undefined ? {} : { algorithm }) }, runId, emit)
+    if (!validCaptureFrom(captureFrom)) return refused('invalid_request')
+    return this.scan(VERIFICATIONS, { finger, ...(algorithm === undefined ? {} : { algorithm }), ...captureBody(captureFrom) },
+      runId, emit)
   }
 
-  async identify(runId: unknown, emit: (event: unknown) => void, algorithm: unknown = 'opencv-sift'): Promise<ApiResult> {
+  async identify(runId: unknown, emit: (event: unknown) => void, algorithm: unknown = 'opencv-sift',
+    captureFrom?: unknown): Promise<ApiResult> {
     if (typeof runId !== 'string' || !UUID.test(runId)) return refused('invalid_request')
     if (!FINGERPRINT_ALGORITHMS.includes(algorithm as FingerprintAlgorithm)) return refused('invalid_request')
-    return this.scan(IDENTIFICATIONS, { algorithm }, runId, emit)
+    if (!validCaptureFrom(captureFrom)) return refused('invalid_request')
+    return this.scan(IDENTIFICATIONS, { algorithm, ...captureBody(captureFrom) }, runId, emit)
   }
 
   private async scan(path: string, body: object, runId: string | null, emit: (event: unknown) => void): Promise<ApiResult> {
@@ -191,6 +196,15 @@ function refused(error: string): ApiResult {
 
 function validFinger(finger: unknown): finger is number {
   return typeof finger === 'number' && Number.isInteger(finger) && finger >= 1 && finger <= 10
+}
+
+// H59: an earlier attempt whose capture is compared again; absent for a new scan.
+function validCaptureFrom(captureFrom: unknown): boolean {
+  return captureFrom === undefined || captureFrom === null || (typeof captureFrom === 'string' && UUID.test(captureFrom))
+}
+
+function captureBody(captureFrom: unknown): { capture_from?: string } {
+  return typeof captureFrom === 'string' ? { capture_from: captureFrom } : {}
 }
 
 const ENROLMENTS = '/api/fingerprint/enrolments'

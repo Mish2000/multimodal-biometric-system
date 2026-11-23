@@ -2237,3 +2237,33 @@ progress::-webkit-progress-value { background: var(--ink); }
 :root.theme-changing *,
 :root.theme-changing *::before,
 :root.theme-changing *::after { transition: none !important; }
+
+/* H59: after a result, the capture another method may compare again (key screen 4b): the screen's heading and the
+   words that offer it, beside the capture on its plate with when it was taken and what the last method made of it. */
+.again-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: var(--space-16) var(--space-32);
+}
+
+.capture-card {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 19rem);
+  align-items: center;
+  gap: var(--space-16);
+  margin: 0;
+  padding: var(--space-12);
+  padding-inline-end: var(--space-16);
+  border: 1px solid var(--mist);
+  border-radius: var(--radius-12);
+  background: var(--surface);
+}
+
+.capture-card figcaption { display: grid; gap: 2px; color: var(--ink-2); font-size: 13px; line-height: 1.45; }
+.capture-card figcaption strong { color: var(--ink); font-size: 15px; font-weight: 600; }
+.capture-card-window { margin-top: var(--space-4); }
+
+@media (max-width: 900px) {
+  .again-head { grid-template-columns: minmax(0, 1fr); }
+}

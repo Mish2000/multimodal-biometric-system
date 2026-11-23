@@ -49,6 +49,7 @@ interface IdentifyEvent {
 }
 interface IdentifyRun {
   algorithm: unknown
+  captureFrom: unknown // H59: the earlier attempt whose capture is searched again
   events: IdentifyEvent[]
 }
 
@@ -135,14 +136,14 @@ app.whenReady().then(async () => {
   const identifyRuns: IdentifyRun[] = []
   if (process.env.MBS_CHECK_IDENTIFY_METHODS) {
     const identify = serverClient.identify.bind(serverClient)
-    serverClient.identify = (runId, emit, algorithm) => {
-      const trace: IdentifyRun = { algorithm, events: [] }
+    serverClient.identify = (runId, emit, algorithm, captureFrom) => {
+      const trace: IdentifyRun = { algorithm, captureFrom, events: [] }
       identifyRuns.push(trace)
       return identify(runId, (event) => {
         const { type, completed, total } = event as IdentifyEvent
         trace.events.push({ type, ...(completed === undefined ? {} : { completed }), ...(total === undefined ? {} : { total }) })
         emit(event)
-      }, algorithm)
+      }, algorithm, captureFrom)
     }
   }
   await session.defaultSession.clearCache()
@@ -481,6 +482,21 @@ app.whenReady().then(async () => {
         await waitText('Fingerprint does not match', 90_000)
         check('Pore SIFT rejects a different finger', await has('The result and its encrypted capture were saved.'))
         if (process.env.MBS_CHECK_MATCH_VIEW) await checkStage('a Pore SIFT non-match')
+        // H59: a non-match offers another method too, which compares the same capture again: no scan is queued, so a
+        // new scan would wait for a finger that never comes.
+        await click('Change method')
+        await waitText('The capture from')
+        check('a result\'s capture is offered to another method, marked with the method that compared it',
+          await has('Pore SIFT: no match') && await has('already compared'))
+        await page(`document.querySelector('input[value="opencv-sift"]').click()`)
+        await shot('03r-capture-again')
+        const scans = JSON.parse(fs.readFileSync(path.join(run, 'scanner.json'), 'utf8')).length
+        await click('Compare the same capture')
+        await waitText('Fingerprint does not match', 90_000)
+        check('OpenCV SIFT compares the same capture again without the scanner (H59)',
+          JSON.parse(fs.readFileSync(path.join(run, 'scanner.json'), 'utf8')).length === scans &&
+          await has('The same capture as at') && await has('(Pore SIFT).'))
+        await shot('03r-capture-again-result')
         await click('Back to the fingers')
       }
       if (process.env.MBS_CHECK_LEARNED) {
@@ -713,14 +729,21 @@ app.whenReady().then(async () => {
           await click('Change method')
           await until(() => page(`return ${learnedRadio} && !${learnedRadio}.disabled`), 'the Pore CNN choice')
           check('the change-method shortcut keeps the previous choice until it is changed', await page(`return ${poreRadio}.checked`))
+          // H59: Pore CNN searches the same capture again instead of a new scan.
+          check('the search\'s capture is offered to another method', await has('The capture from') && await has('already compared'))
           await page(`${learnedRadio}.click()`)
-          nextScan(captureFile(2, 3))
-          await click('Start identification')
+          await shot('03s-capture-again-identification')
+          const scans = JSON.parse(fs.readFileSync(path.join(run, 'scanner.json'), 'utf8')).length
+          await click('Compare the same capture')
           await waitText('A matching fingerprint was found', 90_000)
           check('Pore CNN prepares its own gallery and shows its threshold and ranking',
             lastRun().algorithm === 'learned-pore' && preparation().at(-1)?.completed === 6 &&
             await has('Pore CNN') && await has('Match above 21') && await has('Matching pores') &&
             await page('return document.querySelector(".verification-result").innerText.includes("Another registered user")'))
+          check('Pore CNN searches the same capture again without the scanner (H59)',
+            typeof lastRun().captureFrom === 'string' &&
+            JSON.parse(fs.readFileSync(path.join(run, 'scanner.json'), 'utf8')).length === scans &&
+            await has('The same capture as at') && await has('(Pore SIFT).'))
           await shot('03n-learned-identification-light')
           nextScan(captureFile(4, 1))
           await click('Identify again')

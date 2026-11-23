@@ -282,6 +282,9 @@ class Attempt(BiometricBase):
                         " AND num_nonnulls(weight_opencv_sift, weight_learned_pore, weight_pore_sift) = 3)"
                         " OR (algorithm <> 'fusion' AND num_nonnulls(weight_opencv_sift, weight_learned_pore, weight_pore_sift) = 0)",
                         name="attempt_weights"),
+        # H59: only a fingerprint attempt compares an earlier attempt's capture again, never its own.
+        CheckConstraint("capture_attempt_id IS NULL OR (modality = 'fingerprint' AND capture_attempt_id <> id)",
+                        name="attempt_capture"),
         Index("ix_attempt_subject_at", "subject_id", "at"),
     )
 
@@ -303,3 +306,6 @@ class Attempt(BiometricBase):
     duration_ms: Mapped[int] = mapped_column(Integer)
     source: Mapped[str] = mapped_column(String(8), server_default="device")
     probe: Mapped[bytes] = mapped_column(LargeBinary)
+    # H59: the attempt that took this attempt's capture, when the capture was compared again with another method;
+    # null for a new capture. The attempt keeps its own sealed copy, so deleting that one only empties the link.
+    capture_attempt_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("attempt.id", ondelete="SET NULL"))

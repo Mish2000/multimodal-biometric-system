@@ -10,6 +10,7 @@ import { Plate } from '../ui/Plate'
 import { ScoreMeter } from '../ui/ScoreMeter'
 import { Steps } from '../ui/Steps'
 import { Tag } from '../ui/Tag'
+import { captureOf, captureTime, type LastCapture } from './capture'
 import { Checks, type Captured } from './Journey'
 import { MatchResult } from './MatchResult'
 import { stageSupported } from './stage'
@@ -27,17 +28,21 @@ interface Run {
 }
 const START: Run = { phase: 'starting', latest: null, rejection: '', completed: 0, total: 3, error: '', result: null }
 
-export function Verification({ finger, enrolled, algorithm, onLeave, onEnrol, onChangeMethod }: {
+export function Verification({ finger, enrolled, algorithm, reuse = null, onLeave, onEnrol, onChangeMethod }: {
   finger: number
   enrolled: boolean
   algorithm: FingerprintAlgorithm
+  /** H59: the earlier capture this screen's first run compares again instead of scanning. */
+  reuse?: LastCapture | null
   onLeave: () => void
   onEnrol: () => void
-  onChangeMethod: () => void
+  /** H40, H59: back to the methods, with the capture of the result for another method to compare again. */
+  onChangeMethod: (capture: LastCapture | null) => void
 }) {
   const { t, language, call } = useSession()
   const f = t.fingerprint
   const v = f.verification
+  const c = f.capture
   const [run, setRun] = useState<Run>(START)
   const [attempt, setAttempt] = useState(0)
   // H22: once a result has been shown on this screen, the next one starts from the reliefs and skips the tilt.
@@ -57,6 +62,8 @@ export function Verification({ finger, enrolled, algorithm, onLeave, onEnrol, on
     if (!enrolled) return
     const runId = crypto.randomUUID()
     control.current = runId
+    // H59: only the screen's first run compares the earlier capture; "Verify again" scans.
+    const captureFrom = attempt === 0 ? reuse?.attemptId : undefined
     let active = true
     let finished = false
     let started = false
@@ -86,7 +93,9 @@ export function Verification({ finger, enrolled, algorithm, onLeave, onEnrol, on
           setRun((current) => ({ ...current, latest: event, rejection: f.rejected(event.score, event.minimum) }))
           break
         case 'captured':
-          setRun((current) => ({ ...current, latest: event, rejection: '' }))
+          // H59: a capture compared again keeps the checks it passed when it was taken.
+          setRun((current) => ({ ...current, rejection: '',
+            latest: event.reused && reuse ? { image: event.image, checks: reuse.checks } : event }))
           break
         case 'comparing':
           setRun((current) => ({ ...current, phase: 'comparing', completed: event.completed, total: event.total }))
@@ -106,7 +115,7 @@ export function Verification({ finger, enrolled, algorithm, onLeave, onEnrol, on
     queueMicrotask(() => {
       if (!active) return
       started = true
-      void window.mbs.verifyFingerprint(finger, runId, algorithm).then((answer) => {
+      void window.mbs.verifyFingerprint(finger, runId, algorithm, captureFrom).then((answer) => {
         if (!active || finished || answer.ok) return
         fail(answer.error)
         if (answer.status === 401) void call('me') // keep the normal expired-session navigation
@@ -122,14 +131,16 @@ export function Verification({ finger, enrolled, algorithm, onLeave, onEnrol, on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [finger, enrolled, algorithm, attempt])
 
+  const reusing = attempt === 0 && reuse !== null
+  const methodName = f.methodNames[algorithm] ?? algorithm
   const prompts = {
-    starting: v.preparing, place: v.place, checking: v.checking, lift: f.lift,
+    starting: reusing && reuse ? c.comparing(methodName, captureTime(reuse.takenAt, language)) : v.preparing, place: v.place, checking: v.checking, lift: f.lift,
     preparing: f.preparingTemplates(f.methodNames[algorithm] ?? algorithm, run.completed, run.total),
     comparing: v.comparing(run.completed, run.total), saving: v.saving,
     verified: '', failed: '', cancelled: v.cancelled,
   }
   const stages: Record<Phase, number> = {
-    starting: 0, preparing: -1, place: 0, lift: 0, checking: 1, comparing: 2, saving: 3, verified: 3, failed: -1, cancelled: -1,
+    starting: reusing ? 2 : 0, preparing: -1, place: 0, lift: 0, checking: 1, comparing: 2, saving: 3, verified: 3, failed: -1, cancelled: -1,
   }
   // The scanner's red dot while it waits for the finger or for its lift; a turning ring while the system works.
   const tone: Tone = run.phase === 'cancelled' ? 'info' : !stopping && (run.phase === 'place' || run.phase === 'lift') ? 'live' : 'busy'
@@ -195,7 +206,9 @@ export function Verification({ finger, enrolled, algorithm, onLeave, onEnrol, on
                     setAttempt((value) => value + 1)
                   }}>{result ? v.again : f.tryAgain}</button>
                 )}
-                {result?.accepted && <button type="button" className="secondary" onClick={onChangeMethod}>{v.changeMethod}</button>}
+                {result && <button type="button" className="secondary" onClick={() => {
+                  onChangeMethod(run.latest ? captureOf(result, run.latest, reuse) : null)
+                }}>{v.changeMethod}</button>}
                 <button type="button" className="quiet" onClick={onLeave}>{f.back}</button>
               </>
             ) : (
@@ -235,6 +248,10 @@ export function Verification({ finger, enrolled, algorithm, onLeave, onEnrol, on
                 </table>
               </div>
               <p className="aside">{v.duration} {v.seconds(result.duration_ms)}</p>
+              {result.capture.reused && reuse && (
+                <p className="aside capture-same">{c.same(captureTime(result.capture.at, language),
+                  f.methodNames[reuse.compared[0] ?? reuse.algorithm] ?? reuse.algorithm)}</p>
+              )}
             </>
           )}
           {run.latest !== null && (

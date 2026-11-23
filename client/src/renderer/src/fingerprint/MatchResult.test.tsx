@@ -51,6 +51,7 @@ const view: MatchViewData = { placement: 2, reference_image: 'c3RvcmVk', count: 
 const result = (accepted: boolean): VerificationResult => ({
   attempt_id: 'a1', at: '2026-11-15T10:00:00Z', finger: 7, algorithm: 'opencv-sift', score: 3, threshold: accepted ? 2 : 57,
   threshold_origin: 'test', accepted, duration_ms: 410, comparisons: [],
+  capture: { attempt_id: 'a1', at: '2026-11-15T10:00:00Z', reused: false },
 })
 const v = TEXTS.en.fingerprint.verification
 

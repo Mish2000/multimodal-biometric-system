@@ -2,6 +2,7 @@
 // how its template is stored, or verify it with a new capture (H35).
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Check, EnrolmentEvent, Pair, SavedEnrolment, FingerprintAlgorithm, FingerprintMethod } from '../../../shared/bridge'
+import { CaptureCard, useFreshCapture, type LastCapture } from '../fingerprint/capture'
 import { Checks, Journey, Pairs, type Captured } from '../fingerprint/Journey'
 import { Verification } from '../fingerprint/Verification'
 import { Identification } from '../fingerprint/Identification'
@@ -36,6 +37,11 @@ export function Fingerprint() {
   const [confirming, setConfirming] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
+  // H59: the capture of the last verification result, which another method may compare again, and whether the
+  // next verification does so instead of scanning.
+  const [last, setLast] = useState<{ finger: number; capture: LastCapture } | null>(null)
+  const [reuse, setReuse] = useState(false)
+  const fresh = useFreshCapture(last?.capture ?? null)
 
   function choose(position: number) {
     setChosen(position)
@@ -85,23 +91,48 @@ export function Fingerprint() {
       load()
     }} />
 
-  if (choosingMethod && chosen !== null)
+  if (choosingMethod && chosen !== null) {
+    const capture = fresh && last?.finger === chosen ? last.capture : null
+    // H59: another method than those the capture was compared with may compare it again, or scan anew.
+    const again = capture !== null && !capture.compared.includes(algorithm)
+    const start = (fromCapture: boolean) => {
+      setReuse(fromCapture)
+      setChoosingMethod(false)
+      setVerifying(true)
+    }
+    const leave = () => {
+      setLast(null)
+      setChoosingMethod(false)
+    }
     return (
       <section className="method-selection">
-        <h1 ref={methodHeading} tabIndex={-1}>{f.verification.title}</h1>
-        <p className="lead"><bdi>{f.fingers[chosen]}</bdi></p>
-        <p>{f.methodLead}</p>
+        <div className={capture !== null ? 'again-head' : undefined}>
+          <div>
+            <h1 ref={methodHeading} tabIndex={-1}>{f.verification.title}</h1>
+            <p className="lead"><bdi>{f.fingers[chosen]}</bdi></p>
+            <p>{capture !== null ? f.capture.lead : f.methodLead}</p>
+          </div>
+          {capture !== null && <CaptureCard capture={capture} mode="verify" />}
+        </div>
         <MethodChoices methods={methods} algorithm={algorithm} onChoose={setAlgorithm}
-          error={methodError} onRetry={loadMethods} />
+          error={methodError} onRetry={loadMethods} compared={capture?.compared} />
         <div className="actions">
-          <button type="button" className="primary" disabled={!selectedMethod?.available} onClick={() => {
-            setChoosingMethod(false)
-            setVerifying(true)
-          }}>{f.verification.begin}</button>
-          <button type="button" className="quiet" onClick={() => setChoosingMethod(false)}>{f.back}</button>
+          {again ? (
+            <>
+              <button type="button" className="primary" disabled={!selectedMethod?.available}
+                onClick={() => start(true)}>{f.capture.reuse}</button>
+              <button type="button" className="secondary" disabled={!selectedMethod?.available}
+                onClick={() => start(false)}>{f.capture.rescan}</button>
+            </>
+          ) : (
+            <button type="button" className="primary" disabled={!selectedMethod?.available}
+              onClick={() => start(false)}>{f.verification.begin}</button>
+          )}
+          <button type="button" className="quiet" onClick={leave}>{f.back}</button>
         </div>
       </section>
     )
+  }
 
   if (verifying && chosen !== null)
     return (
@@ -109,13 +140,18 @@ export function Fingerprint() {
         finger={chosen}
         enrolled={enrolled?.includes(chosen) ?? false}
         algorithm={algorithm}
-        onChangeMethod={() => {
-          // H40: retain the chosen finger and wait for an explicit start with the next method.
+        reuse={reuse && fresh && last?.finger === chosen ? last.capture : null}
+        onChangeMethod={(capture) => {
+          // H40: retain the chosen finger and wait for an explicit start with the next method. H59: keep the
+          // result's capture, which another method may compare again.
+          setLast(capture === null ? null : { finger: chosen, capture })
+          setReuse(false)
           setVerifying(false)
           setChoosingMethod(true)
           loadMethods()
         }}
         onLeave={() => {
+          setLast(null)
           setVerifying(false)
           load()
         }}

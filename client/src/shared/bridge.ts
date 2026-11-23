@@ -154,6 +154,14 @@ export interface MatchViewData {
   pairs: string // little-endian float32: probe x/y, reference x/y, one row per counted inlier
 }
 
+// H59: the capture an attempt compared: taken for it, or an earlier attempt's compared again (`reused`).
+// `attempt_id` names the attempt that took it, and `at` when it was taken.
+export interface CaptureOrigin {
+  attempt_id: string
+  at: string
+  reused: boolean
+}
+
 export interface VerificationResult {
   attempt_id: string
   at: string
@@ -167,16 +175,17 @@ export interface VerificationResult {
   duration_ms: number
   comparisons: Array<{ placement: number; score: number; accepted: boolean; computed: boolean }>
   match_view?: MatchViewData
+  capture: CaptureOrigin
 }
 
 export type VerificationEvent =
-  | { type: 'started'; finger: number; threshold: number; quality_minimum: number; references: number }
+  | { type: 'started'; finger: number; threshold: number; quality_minimum: number; references: number; reused?: boolean }
   | { type: 'preparing_templates'; completed: number; total: number }
   | { type: 'place'; capture: number; maximum: number }
   | { type: 'checking' }
   | { type: 'rejected'; image: string; checks: Check[]; score: number | null; minimum: number }
   | { type: 'lift' }
-  | { type: 'captured'; image: string; checks: Check[] }
+  | { type: 'captured'; image: string; checks: Check[]; reused?: { attempt_id: string; at: string } }
   | { type: 'comparing'; completed: number; total: number }
   | { type: 'saving' }
   | ({ type: 'verified' } & VerificationResult)
@@ -199,15 +208,16 @@ export interface IdentificationResult {
   candidates: Array<{ rank: number; own: boolean; finger: number | null; score: number; accepted: boolean }>
   // H45: only for the caller's own highest-ranked print among the shown candidates.
   match_view?: MatchViewData & { rank: number; finger: number }
+  capture: CaptureOrigin
 }
 
 export type IdentificationEvent =
-  | { type: 'started'; algorithm: FingerprintAlgorithm; threshold: number; quality_minimum: number; gallery_size: number; enrolments: number }
+  | { type: 'started'; algorithm: FingerprintAlgorithm; threshold: number; quality_minimum: number; gallery_size: number; enrolments: number; reused?: boolean }
   | { type: 'preparing_templates'; algorithm: FingerprintAlgorithm; completed: number; total: number }
   | { type: 'place'; capture: number; maximum: number }
   | { type: 'checking' | 'lift' | 'extracting' | 'saving' }
   | { type: 'rejected'; image: string; checks: Check[]; score: number | null; minimum: number }
-  | { type: 'captured'; image: string; checks: Check[] }
+  | { type: 'captured'; image: string; checks: Check[]; reused?: { attempt_id: string; at: string } }
   | { type: 'searching'; completed: number; total: number }
   | ({ type: 'identified' } & IdentificationResult)
   | { type: 'failed'; error: string }
@@ -465,11 +475,12 @@ export interface MbsBridge {
   enrolFingerprint(finger: number): Promise<ApiResult<null>>
   cancelEnrolment(): void
   onEnrolment(listener: (event: EnrolmentEvent) => void): () => void
-  // Each verification has a page-generated id, so a cancelled run cannot update a later screen (H35).
-  verifyFingerprint(finger: number, runId: string, algorithm?: FingerprintAlgorithm): Promise<ApiResult<null>>
+  // Each verification has a page-generated id, so a cancelled run cannot update a later screen (H35). With
+  // `captureFrom`, an earlier attempt's capture is compared again instead of a new scan (H59).
+  verifyFingerprint(finger: number, runId: string, algorithm?: FingerprintAlgorithm, captureFrom?: string): Promise<ApiResult<null>>
   cancelVerification(runId: string): void
   onVerification(runId: string, listener: (event: VerificationEvent) => void): () => void
-  identifyFingerprint(runId: string, algorithm?: FingerprintAlgorithm): Promise<ApiResult<null>>
+  identifyFingerprint(runId: string, algorithm?: FingerprintAlgorithm, captureFrom?: string): Promise<ApiResult<null>>
   cancelIdentification(runId: string): void
   onIdentification(runId: string, listener: (event: IdentificationEvent) => void): () => void
 }

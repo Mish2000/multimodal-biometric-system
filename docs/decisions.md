@@ -2194,3 +2194,41 @@ screenshots. A first run with OpenCV SIFT stopped at 40 of 41, when "Try again" 
 refused because the scanner was still held, as on 2026-11-15; the run again passed. The manual check in the client,
 with the HiScan PRO, the camera and the microphone, in both themes and in Hebrew, passed on 2026-11-22, for this entry
 and the one before.
+
+## 2026-11-23: the same capture with another method
+
+Approved on 2026-11-22, after the supervisor asked that a user who tries another method after a fingerprint result
+may choose between the same capture and a new scan. Its screens were approved as images on 2026-11-23.
+
+- **H59** After a fingerprint result, of a verification or an identification, "Change method" opens the methods,
+  now after every result and not only after a match as H40 had it. When another method is chosen and the result's
+  capture was taken at most ten minutes earlier, the user chooses between comparing the same capture again and a new
+  scan. A method that already compared that capture starts a new scan, and "Verify again" or "Identify again"
+  always scans.
+- The capture does not come back from the client: the request names the earlier attempt (`capture_from`), and the
+  server opens that attempt's sealed probe. It accepts only the caller's own attempt, in the same mode, for another
+  method than that attempt's, at most ten minutes after the capture was taken (an attempt that compared a capture
+  again leads to the one that took it), and in 1:1 only one that compared the finger's current enrolment. Otherwise
+  it answers `capture_unavailable`, `capture_expired` or `same_method` and saves nothing. A fingerprint still enters
+  only from the scanner (D1, H27), and NFIQ 2 is not repeated, since the capture passed it when it was taken.
+- The new attempt is stored like any other, with `source = device` and its own sealed copy of the capture, and the
+  new column `attempt.capture_attempt_id` names the attempt that took the capture (migration `biometric_0007`,
+  `ON DELETE SET NULL`; a check keeps it to fingerprint attempts and never to the row itself). Its time runs from
+  the request through the comparison. The answer names the capture (the attempt that took it, when, and whether it
+  was compared again), and the result says, for example, "The same capture as at 14:32 (OpenCV SIFT)."
+- A comparison of an earlier capture takes the same lock as a scan, so it never shares the engines with one.
+- The method choice shows the capture on its plate beside the words that offer it, with when it was taken and the
+  last method's verdict and score, and marks the methods that already compared it. While it is compared again, the
+  steps start at the comparison and the scanner stays off.
+
+The server has 356 tests (5 new: a verification and a search of the same capture again without the scanner, the
+refusals, and an earlier attempt deleted after its capture was compared again). The test that upgrades attempts
+saved before H41 now makes them at the current schema and takes them down to `biometric_0003` and up again, since
+the current code writes a column the older schemas lack. ruff and mypy passed. The client has 239 tests (6 new),
+and the type checks, the lint and the build passed. The offscreen check gained two steps that compare the same
+capture again, after a Pore SIFT non-match in 1:1 and after a Pore SIFT search in 1:N, and check that the stand-in
+scanner was not used. It passed 37 of 37 without engines and 78 of 78 with the face and the voice, and on the final
+build 79 of 79 with OpenCV SIFT in 1:1 and 1:N, 84 of 84 with Pore SIFT and Pore CNN in 1:1 and 90 of 90 with the
+three methods in 1:N, with no finding in their screenshots. A first run of the 1:N methods stopped at 58 of 59
+because the check's own record of each search did not pass the earlier attempt on. The manual check in the
+client with the HiScan PRO passed on 2026-11-23, in 1:1 and in 1:N.

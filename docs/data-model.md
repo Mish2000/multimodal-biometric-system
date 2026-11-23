@@ -338,6 +338,7 @@ table.
 | `duration_ms` | `integer` | processing time from capture receipt through quality, extraction and comparison, before storage (H35, H41) |
 | `source` | `varchar(8)` | `device` (the default) or `file` (H27); a check keeps fingerprint attempts to `device` |
 | `probe` | `bytea` | the sealed new capture; from a file, its normalised form: a face's pixels as PNG, a voice as 16 kHz mono WAV, without the original file or its name |
+| `capture_attempt_id` | `uuid` | fingerprints only: the earlier attempt that took the capture this attempt compared again with another method (H59); null for a new capture, and set to null when that attempt is deleted (`ON DELETE SET NULL`) |
 
 The attempt's outcome stays unsealed, so the administration area can filter
 the history (H12); its capture is sealed (H14). The administration area turns
@@ -387,6 +388,15 @@ A voice verification or identification may take its new recording from a file
 (H57): its row has `source = file`, and its probe is the engine's WAV of the
 recording as converted to 16 kHz, one channel and 16-bit PCM, the recording
 compared. The file, its name and its metadata are not kept.
+
+A fingerprint verification or identification may compare again, with another
+method, the capture of an earlier attempt of the same person in the same mode,
+for ten minutes from when it was taken (H59, migration `biometric_0007`). Its
+row has `source = device`, the earlier attempt that took the capture in
+`capture_attempt_id`, and its own probe: the same PNG sealed again to this row,
+so deleting the earlier attempt keeps it. In 1:1 the earlier attempt must have
+compared the finger's current enrolment. A check keeps the link to fingerprint
+attempts, never to the row itself.
 
 Identification uses `mode = identify`, `enrolment_id = null` and the number
 of compared templates in `gallery_size` (H41). The selected method is

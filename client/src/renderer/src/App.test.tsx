@@ -41,7 +41,7 @@ class FakeServer implements MbsBridge {
   cancelled = 0
   private enrolmentListeners = new Set<(event: EnrolmentEvent) => void>()
   verification: VerificationEvent[] = []
-  verifications: Array<{ finger: number; runId: string; algorithm: FingerprintAlgorithm }> = []
+  verifications: Array<{ finger: number; runId: string; algorithm: FingerprintAlgorithm; captureFrom?: string }> = []
   verificationCancels: string[] = []
   poreAvailable = true
   learnedAvailable = true
@@ -49,6 +49,7 @@ class FakeServer implements MbsBridge {
   identification: IdentificationEvent[] = []
   identifications: string[] = []
   identificationMethods: FingerprintAlgorithm[] = []
+  identificationCaptures: Array<string | undefined> = [] // H59
   identificationCancels: string[] = []
   private identificationListeners = new Map<string, (event: IdentificationEvent) => void>()
   // The face (H48): its enrolment state, whether the engine is set up, and deletions asked for.
@@ -75,9 +76,10 @@ class FakeServer implements MbsBridge {
 
   onDisplays = (_listener: (state: DisplayState) => void): (() => void) => () => undefined
 
-  identifyFingerprint = async (runId: string, algorithm: FingerprintAlgorithm = 'opencv-sift'): Promise<ApiResult<null>> => {
+  identifyFingerprint = async (runId: string, algorithm: FingerprintAlgorithm = 'opencv-sift', captureFrom?: string): Promise<ApiResult<null>> => {
     this.identifications.push(runId)
     this.identificationMethods.push(algorithm)
+    this.identificationCaptures.push(captureFrom)
     for (const event of this.identification) {
       await Promise.resolve()
       this.emitIdentification(event, runId)
@@ -99,8 +101,9 @@ class FakeServer implements MbsBridge {
     return () => { this.identificationListeners.delete(runId) }
   }
 
-  verifyFingerprint = async (finger: number, runId: string, algorithm: FingerprintAlgorithm = 'opencv-sift'): Promise<ApiResult<null>> => {
-    this.verifications.push({ finger, runId, algorithm })
+  verifyFingerprint = async (finger: number, runId: string, algorithm: FingerprintAlgorithm = 'opencv-sift',
+    captureFrom?: string): Promise<ApiResult<null>> => {
+    this.verifications.push({ finger, runId, algorithm, ...(captureFrom === undefined ? {} : { captureFrom }) })
     for (const event of this.verification) {
       await Promise.resolve()
       this.emitVerification(event, runId)
@@ -924,6 +927,7 @@ const VERIFIED: VerificationEvent = {
   type: 'verified', attempt_id: '00000000-0000-4000-8000-000000000001', at: '2026-11-06T10:00:00Z',
   finger: 7, algorithm: 'opencv-sift', score: 88, threshold: 57, threshold_origin: 'SD302 plain vs plain, FAR 0.1 % (RxJ)',
   accepted: true, duration_ms: 430,
+  capture: { attempt_id: '00000000-0000-4000-8000-000000000001', at: '2026-11-06T10:00:00Z', reused: false },
   comparisons: [
     { placement: 1, score: 40, accepted: false, computed: true },
     { placement: 2, score: 57, accepted: false, computed: true },
@@ -1107,6 +1111,86 @@ describe('fingerprint verification (H35)', () => {
   })
 })
 
+describe('the same capture with another method (H59)', () => {
+  it.each(['en', 'he'] as const)('compares the capture of a result again with another method, without scanning, in %s', async (language) => {
+    server.current = server.add('dana', 'user', { language })
+    server.fingers = [7]
+    const he = language === 'he'
+    const takenAt = new Date().toISOString()
+    const origin = { attempt_id: '00000000-0000-4000-8000-000000000001', at: takenAt }
+    server.verification = [{ type: 'captured', image: 'cG5n', checks: [] },
+      { ...VERIFIED, accepted: false, score: 31, capture: { ...origin, reused: false } }]
+    open('/fingerprint')
+    fireEvent.click(within(await screen.findByRole('group', { name: he ? 'יד שמאל' : 'Left hand' })).getByRole('button', { name: he ? /מורה/ : /Index/ }))
+    fireEvent.click(screen.getByRole('button', { name: he ? 'אימות האצבע הזו (1:1)' : 'Verify this finger (1:1)' }))
+    fireEvent.click(await screen.findByRole('button', { name: he ? 'התחלת האימות' : 'Start verification' }))
+    // A non-match offers another method too.
+    fireEvent.click(await screen.findByRole('button', { name: he ? 'החלפת שיטה' : 'Change method' }))
+    const card = (await screen.findByText(he ? /^הסריקה מ־/ : /^The capture from /)).closest('figure')!
+    expect(card.textContent).toContain(he ? 'OpenCV SIFT: אין התאמה, ציון 31' : 'OpenCV SIFT: no match, score 31')
+    // The method it was compared with is marked, and choosing it again starts a new scan.
+    expect(screen.getByText(he ? 'כבר הושוותה' : 'already compared')).toBeTruthy()
+    expect(screen.getByRole('button', { name: he ? 'התחלת האימות' : 'Start verification' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: he ? 'להשוות את אותה סריקה' : 'Compare the same capture' })).toBeNull()
+    fireEvent.click(screen.getByRole('radio', { name: 'Pore SIFT' }))
+    expect([...screen.getByRole('button', { name: he ? 'לסרוק מחדש' : 'Scan again' }).closest('.actions')!.querySelectorAll('button')]
+      .map((button) => button.textContent)).toEqual(he
+      ? ['להשוות את אותה סריקה', 'לסרוק מחדש', 'חזרה לבחירת האצבע'] : ['Compare the same capture', 'Scan again', 'Back to the fingers'])
+    server.verification = []
+    fireEvent.click(screen.getByRole('button', { name: he ? 'להשוות את אותה סריקה' : 'Compare the same capture' }))
+    await waitFor(() => expect(server.verifications).toHaveLength(2))
+    expect(server.verifications[1]).toMatchObject({ finger: 7, algorithm: 'pore-sift', captureFrom: origin.attempt_id })
+    expect(await screen.findByText(he ? /^Pore SIFT משווה את הסריקה מ־/ : /^Pore SIFT compares the capture from .* without scanning/)).toBeTruthy()
+    act(() => server.emitVerification({ type: 'captured', image: 'cG5n', checks: [], reused: origin }))
+    act(() => server.emitVerification({ ...VERIFIED, attempt_id: '00000000-0000-4000-8000-000000000002', algorithm: 'pore-sift',
+      score: 45, threshold: 37, capture: { ...origin, reused: true } }))
+    expect(await screen.findByText(he ? /^אותה סריקה כמו ב־.*\(OpenCV SIFT\)\.$/ : /^The same capture as at .* \(OpenCV SIFT\)\.$/)).toBeTruthy()
+    // Both methods are now marked for that capture, and verifying again scans.
+    fireEvent.click(screen.getByRole('button', { name: he ? 'החלפת שיטה' : 'Change method' }))
+    expect(await screen.findAllByText(he ? 'כבר הושוותה' : 'already compared')).toHaveLength(2)
+  })
+
+  it('offers a capture only until ten minutes after it was taken', async () => {
+    server.fingers = [7]
+    const taken = { attempt_id: '00000000-0000-4000-8000-000000000001', at: new Date(Date.now() - 11 * 60 * 1000).toISOString() }
+    server.verification = [{ type: 'captured', image: 'cG5n', checks: [] }, { ...VERIFIED, capture: { ...taken, reused: false } }]
+    await openFingerprint()
+    fireEvent.click(within(screen.getByRole('group', { name: 'Left hand' })).getByRole('button', { name: /Index/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Verify this finger (1:1)' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Start verification' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Change method' }))
+    fireEvent.click(await screen.findByRole('radio', { name: 'Pore SIFT' }))
+    expect(screen.queryByText(/^The capture from /)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Compare the same capture' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Start verification' })).toBeTruthy()
+  })
+
+  it('searches the capture of an identification again with another method', async () => {
+    server.fingers = [7]
+    const origin = { attempt_id: '00000000-0000-4000-8000-000000000041', at: new Date().toISOString() }
+    const identified = IDENTIFIED as Extract<IdentificationEvent, { type: 'identified' }>
+    server.identification = [{ type: 'captured', image: 'cG5n', checks: [] }, { ...identified, capture: { ...origin, reused: false } }]
+    await openFingerprint()
+    fireEvent.click(await screen.findByRole('button', { name: 'Identify a fingerprint (1:N)' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Start identification' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Change method' }))
+    expect((await screen.findByText(/^The capture from /)).closest('figure')!.textContent).toContain('OpenCV SIFT: found, score 90')
+    fireEvent.click(screen.getByRole('radio', { name: 'Pore CNN' }))
+    server.identification = []
+    fireEvent.click(screen.getByRole('button', { name: 'Compare the same capture' }))
+    await waitFor(() => expect(server.identifications).toHaveLength(2))
+    expect(server.identificationMethods[1]).toBe('learned-pore')
+    expect(server.identificationCaptures).toEqual([undefined, origin.attempt_id])
+    act(() => server.emitIdentification({ ...identified, algorithm: 'learned-pore', capture: { ...origin, reused: true } }))
+    expect(await screen.findByText(/^The same capture as at .* \(OpenCV SIFT\)\.$/)).toBeTruthy()
+    // Identifying again scans anew.
+    server.identification = [{ type: 'place', capture: 1, maximum: 12 }]
+    fireEvent.click(screen.getByRole('button', { name: 'Identify again' }))
+    await waitFor(() => expect(server.identifications).toHaveLength(3))
+    expect(server.identificationCaptures[2]).toBeUndefined()
+  })
+})
+
 describe('learned verification and generic enrolment clarity (H39)', () => {
   it.each(['en', 'he'] as const)('selects Pore CNN before capture and explains preparation and its result in %s', async (language) => {
     server.current = server.add('dana', 'user', { language })
@@ -1194,6 +1278,7 @@ const IDENTIFIED: IdentificationEvent = {
   type: 'identified', attempt_id: '00000000-0000-4000-8000-000000000041', at: '2026-11-07T16:00:00Z',
   algorithm: 'opencv-sift', score: 90, threshold: 57, threshold_origin: 'SD302 plain vs plain', threshold_provisional: false,
   accepted: true, duration_ms: 710, gallery_size: 6, enrolments: 2, tied_leaders: 1,
+  capture: { attempt_id: '00000000-0000-4000-8000-000000000041', at: '2026-11-07T16:00:00Z', reused: false },
   candidates: [
     { rank: 1, own: false, finger: null, score: 90, accepted: true },
     { rank: 2, own: true, finger: 7, score: 5, accepted: false },

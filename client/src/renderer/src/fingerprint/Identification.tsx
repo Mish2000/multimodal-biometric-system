@@ -10,6 +10,7 @@ import { ScoreMeter } from '../ui/ScoreMeter'
 import { Steps } from '../ui/Steps'
 import { Checks, type Captured } from './Journey'
 import { MatchView } from './MatchView'
+import { CaptureCard, captureOf, captureTime, useFreshCapture, type LastCapture } from './capture'
 import { MethodChoices } from './MethodChoices'
 
 type Phase = 'ready' | 'starting' | 'preparing' | 'place' | 'checking' | 'lift' | 'extracting' | 'searching' | 'saving' | 'identified' | 'failed' | 'cancelled'
@@ -41,6 +42,11 @@ export function Identification({ enrolled, methods, methodError, onReloadMethods
   const [run, setRun] = useState<Run>({ ...START, phase: 'ready' })
   const [attempt, setAttempt] = useState(0)
   const [algorithm, setAlgorithm] = useState<FingerprintAlgorithm>('opencv-sift')
+  // H59: the last result's capture, which another method may search again, and the capture the run in progress
+  // searches again (null when it scans).
+  const [capture, setCapture] = useState<LastCapture | null>(null)
+  const [reuseFrom, setReuseFrom] = useState<LastCapture | null>(null)
+  const fresh = useFreshCapture(capture)
   const [stopping, setStopping] = useState(false)
   const control = useRef<string | null>(null)
   const heading = useRef<HTMLHeadingElement>(null)
@@ -86,7 +92,9 @@ export function Identification({ enrolled, methods, methodError, onReloadMethods
           setRun((current) => ({ ...current, latest: event, rejection: f.rejected(event.score, event.minimum) }))
           break
         case 'captured':
-          setRun((current) => ({ ...current, latest: event, rejection: '' }))
+          // H59: a capture searched again keeps the checks it passed when it was taken.
+          setRun((current) => ({ ...current, rejection: '',
+            latest: event.reused && reuseFrom ? { image: event.image, checks: reuseFrom.checks } : event }))
           break
         case 'searching':
           setRun((current) => ({ ...current, phase: 'searching', completed: event.completed, total: event.total }))
@@ -105,7 +113,7 @@ export function Identification({ enrolled, methods, methodError, onReloadMethods
     queueMicrotask(() => {
       if (!active) return
       started = true
-      void window.mbs.identifyFingerprint(runId, algorithm).then((answer) => {
+      void window.mbs.identifyFingerprint(runId, algorithm, reuseFrom?.attemptId).then((answer) => {
         if (!active || finished || answer.ok) return
         fail(answer.error)
         if (answer.status === 401) void call('me')
@@ -119,21 +127,25 @@ export function Identification({ enrolled, methods, methodError, onReloadMethods
     }
     // Language and theme changes do not restart capture.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enrolled, attempt, algorithm])
+  }, [enrolled, attempt, algorithm, reuseFrom])
 
   const result = run.result
   const ended = result !== null || run.phase === 'failed' || run.phase === 'cancelled'
   const methodName = f.methodNames[algorithm] ?? algorithm
   const selectedMethod = methods.find((method) => method.code === algorithm)
   const scoreLabel = algorithm === 'opencv-sift' ? f.verification.score : f.verification.pores
+  const c = f.capture
+  const reusing = reuseFrom !== null && run.phase !== 'ready'
+  // H59: in the method choice after a result, the capture that another method may search again.
+  const offered = run.phase === 'ready' && capture !== null && fresh ? capture : null
   const prompts: Record<Phase, string> = {
-    ready: '', starting: i.preparing, place: i.place, checking: f.verification.checking,
+    ready: '', starting: reusing && reuseFrom ? c.comparing(methodName, captureTime(reuseFrom.takenAt, language)) : i.preparing, place: i.place, checking: f.verification.checking,
     preparing: f.preparingTemplates(methodName, run.prepared, run.preparationTotal),
     lift: f.lift, extracting: i.extracting, searching: i.searching(run.completed, run.total),
     saving: f.verification.saving, identified: '', failed: '', cancelled: i.cancelled,
   }
   const stage: Record<Phase, number> = {
-    ready: -1, starting: 0, preparing: -1, place: 0, lift: 0, checking: 1, extracting: 2, searching: 2,
+    ready: -1, starting: reusing ? 2 : 0, preparing: -1, place: 0, lift: 0, checking: 1, extracting: 2, searching: 2,
     saving: 3, identified: 3, failed: -1, cancelled: -1,
   }
   const error = i.errors[run.error] ?? f.verification.errors[run.error] ?? f.errors[run.error]
@@ -145,8 +157,14 @@ export function Identification({ enrolled, methods, methodError, onReloadMethods
 
   return (
     <section className="identification verification">
-      <h1 ref={heading} tabIndex={-1}>{i.title} <bdi dir="ltr">(1:N)</bdi></h1>
-      <p className="lead">{i.lead}</p>
+      <div className={offered !== null ? 'again-head' : undefined}>
+        <div>
+          <h1 ref={heading} tabIndex={-1}>{i.title} <bdi dir="ltr">(1:N)</bdi></h1>
+          <p className="lead">{i.lead}</p>
+          {offered !== null && <p>{c.lead}</p>}
+        </div>
+        {offered !== null && <CaptureCard capture={offered} mode="identify" />}
+      </div>
       {run.phase !== 'ready' && <p><strong>{methodName}</strong></p>}
       {needsEnrolment ? (
         <>
@@ -161,9 +179,25 @@ export function Identification({ enrolled, methods, methodError, onReloadMethods
           <p>{i.explanation(methodName)}</p>
           <p className="aside">{i.privacy}</p>
           <MethodChoices methods={methods} algorithm={algorithm} onChoose={setAlgorithm} error={methodError}
-            onRetry={onReloadMethods} purpose="identification" />
+            onRetry={onReloadMethods} purpose="identification" compared={fresh ? capture?.compared : undefined} />
           <div className="actions">
-            <button type="button" className="primary" disabled={!selectedMethod?.available} onClick={() => setAttempt((value) => value + 1)}>{i.begin}</button>
+            {capture !== null && fresh && !capture.compared.includes(algorithm) ? (
+              <>
+                <button type="button" className="primary" disabled={!selectedMethod?.available} onClick={() => {
+                  setReuseFrom(capture)
+                  setAttempt((value) => value + 1)
+                }}>{c.reuse}</button>
+                <button type="button" className="secondary" disabled={!selectedMethod?.available} onClick={() => {
+                  setReuseFrom(null)
+                  setAttempt((value) => value + 1)
+                }}>{c.rescan}</button>
+              </>
+            ) : (
+              <button type="button" className="primary" disabled={!selectedMethod?.available} onClick={() => {
+                setReuseFrom(null)
+                setAttempt((value) => value + 1)
+              }}>{i.begin}</button>
+            )}
             <button type="button" className="quiet" onClick={onLeave}>{f.back}</button>
           </div>
         </>
@@ -182,6 +216,10 @@ export function Identification({ enrolled, methods, methodError, onReloadMethods
               </ScoreMeter>
               {result.threshold_provisional && <Notice still>{f.provisionalExplanation}</Notice>}
               <p>{f.verification.saved}</p>
+              {result.capture.reused && reuseFrom && (
+                <p className="aside capture-same">{c.same(captureTime(result.capture.at, language),
+                  f.methodNames[reuseFrom.compared[0] ?? reuseFrom.algorithm] ?? reuseFrom.algorithm)}</p>
+              )}
             </div>
           ) : run.phase === 'failed' ? (
             <Notice tone="alert" role="alert">{error}</Notice>
@@ -212,8 +250,14 @@ export function Identification({ enrolled, methods, methodError, onReloadMethods
           <div className="actions">
             {ended ? (
               <>
-                <button type="button" className="primary" onClick={() => setAttempt((value) => value + 1)}>{result ? i.again : f.tryAgain}</button>
+                <button type="button" className="primary" onClick={() => {
+                  setReuseFrom(null)
+                  setAttempt((value) => value + 1)
+                }}>{result ? i.again : f.tryAgain}</button>
                 {result && <button type="button" className="secondary" onClick={() => {
+                  // H59: keep the result's capture, which another method may search again.
+                  setCapture(run.latest ? captureOf(result, run.latest, reuseFrom) : null)
+                  setReuseFrom(null)
                   setAttempt(0)
                   setRun({ ...START, phase: 'ready' })
                   onReloadMethods()
