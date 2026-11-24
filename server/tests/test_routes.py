@@ -18,6 +18,7 @@ ROUTES = [
     ("GET", "/api/admin/accounts", "admin_accounts", None, ("admin",), False, None),
     ("POST", "/api/admin/accounts/{account_id}/status", "admin_status", 204, ("admin",), False, "StatusChange"),
     ("POST", "/api/admin/administrators", "admin_new_administrator", 201, ("admin",), False, "NewAdministrator"),
+    ("POST", "/api/admin/attempts/search", "admin_attempts", None, ("admin",), False, "AttemptSearch"),
     ("GET", "/api/admin/audit", "admin_audit", None, ("admin",), False, None),
     ("POST", "/api/face/checks", "check_face", None, ("user",), False, "FaceImage"),
     ("POST", "/api/face/detect", "detect_face", None, ("user",), False, "FaceFrame"),
@@ -55,6 +56,7 @@ ROUTES = [
 ]
 
 SCHEMAS = {
+    "AttemptSearch": "851fd2975e4a",
     "Credentials": "5609baba1730",
     "FaceEnrolment": "ddb89bde9c7f",
     "FaceFrame": "d37b32ff5418",

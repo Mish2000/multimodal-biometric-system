@@ -18,6 +18,7 @@ export const ROUTES = {
   newAdministrator: ['POST', '/api/admin/administrators'],
   setStatus: ['POST', '/api/admin/accounts/{id}/status'],
   audit: ['GET', '/api/admin/audit'],
+  attempts: ['POST', '/api/admin/attempts/search'], // H61: the filters travel in the body
   // H34: a finger's position, 1 to 10, in place of {finger}.
   deleteFingerprint: ['DELETE', '/api/fingerprint/fingers/{finger}'],
   fingerprintMethods: ['GET', '/api/fingerprint/methods'],
@@ -53,6 +54,82 @@ export type Language = (typeof LANGUAGES)[number]
 export type ApiResult<T = unknown> =
   | { ok: true; data: T }
   | { ok: false; status: number; error: string; retryAfter?: number }
+
+// H61: the administration area's attempt history. Outcomes only: no sample, probe or template ever comes, and the
+// leader of a 1:N search is the user's own enrolment, another registered user's, or one no longer enrolled.
+export type HistoryModality = 'fingerprint' | 'face' | 'voice'
+export type HistoryLeader = 'own' | 'other' | 'gone'
+export interface HistoryUser {
+  username: string
+  disabled: boolean
+}
+export interface HistoryAttempt {
+  kind: 'attempt'
+  id: string
+  at: string
+  user: HistoryUser | null
+  modality: HistoryModality
+  mode: 'verify' | 'identify'
+  algorithm: string
+  provisional: boolean
+  score: number
+  threshold: number
+  accepted: boolean
+  duration_ms: number
+  source: 'device' | 'file'
+  gallery_size: number | null
+  leader: HistoryLeader | null
+  capture_of: string | null
+}
+export interface HistoryPart {
+  modality: HistoryModality
+  algorithm: string
+  score: number
+  threshold: number
+  accepted: boolean
+  evidence: number
+  capped: boolean
+  points: number
+  weight: number
+}
+export interface HistoryCombined {
+  kind: 'combined'
+  id: string
+  at: string
+  user: HistoryUser | null
+  mode: 'verify' | 'identify'
+  policy: number
+  weights: Record<HistoryModality, number>
+  budget: number
+  score: number
+  threshold: number
+  accepted: boolean
+  evidence: number
+  duration_ms: number
+  gallery_size: number | null
+  leader: HistoryLeader | null
+  parts: HistoryPart[]
+}
+export type HistoryRow = HistoryAttempt | HistoryCombined
+export interface HistoryCursor {
+  at: string
+  id: string
+}
+export interface HistoryPage {
+  rows: HistoryRow[]
+  total: number
+  next: HistoryCursor | null
+}
+export interface HistoryFilters {
+  since?: string
+  until?: string
+  user?: string
+  type?: HistoryModality | 'combined'
+  mode?: 'verify' | 'identify'
+  method?: 'opencv-sift' | 'pore-sift' | 'learned-pore' | 'sface' | 'ecapa-voxceleb'
+  result?: 'accepted' | 'rejected'
+  source?: 'device' | 'file'
+}
 
 export interface Account {
   id: string

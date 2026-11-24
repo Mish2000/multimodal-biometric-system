@@ -1,4 +1,4 @@
-# Server (increments 1 to 5 of H20)
+# Server (increments 1 to 5 of H20, and increment 6 in part)
 
 The FastAPI server of the system: the local PostgreSQL cluster, the key file, registration with the
 national ID and the mobile phone, sign-in, password recovery, roles and the accounts part of the
@@ -6,7 +6,9 @@ administration (H3, H11, H12, H14, H19, H29 to H32), fingerprint enrolment (H33)
 and 1:1 verification with OpenCV SIFT, Pore SIFT and Pore CNN
 (H35, H38, H39) and 1:N identification (H41, H42) with all three methods, and face enrolment (H48),
 1:1 verification (H49) and 1:N identification (H50), also from image files (H51), and voice enrolment
-(H54), 1:1 verification (H55) and 1:N identification (H56), also from recording files (H57). It runs with the `multimodal-server` environment and
+(H54), 1:1 verification (H55) and 1:N identification (H56), also from recording files (H57), the
+combined test of every enrolled modality (H60) and the administration's attempt history (H61). It runs
+with the `multimodal-server` environment and
 starts PostgreSQL from the `multimodal-postgres` environment (`environments/`); the face engine runs in
 `multimodal-face` and the voice engine in `multimodal-voice`.
 
@@ -21,7 +23,7 @@ $python = '<conda envs>\multimodal-server\python.exe'
 & $python -m mbs create-admin --username <name> --email <address>   # prints a one-time password
 & $python -m mbs serve        # the API on 127.0.0.1; starts and stops PostgreSQL with it
 & $python -m mbs db status    # or start / stop
-& $python -m pytest           # 364 tests against a throwaway cluster (four need MBS_LIVE_CAPTURES)
+& $python -m pytest           # 382 tests against a throwaway cluster (four need MBS_LIVE_CAPTURES)
 & $python -m mypy             # type checks of mbs/ and tests/ (pyproject.toml)
 & '<conda envs>\multimodal-server\Library\bin\ruff.exe' check ..   # lint of all the system's Python (../ruff.toml)
 ```
@@ -135,6 +137,7 @@ checked on every request by `mbs/routes/policy.py`, the application's own depend
 | `DELETE /api/voice/enrolment` | user | delete the voice's current and replaced enrolments with their recordings, embeddings and verification attempts; identification attempts stay, without the link; 404 when it is not enrolled |
 | `GET /api/admin/accounts`, `POST /api/admin/accounts/{id}/status` | administrator | accounts; disable or enable |
 | `POST /api/admin/administrators`, `GET /api/admin/audit` | administrator | a new administrator; the audit log |
+| `POST /api/admin/attempts/search` | administrator | the attempt history: filters in the body, 50 rows a page after the last one read (H61) |
 
 Errors answer `{"error": "<code>"}`; the client turns codes into English or Hebrew text.
 Before any route (H58, `mbs/guard.py`), a request addressed to a host other than 127.0.0.1 or

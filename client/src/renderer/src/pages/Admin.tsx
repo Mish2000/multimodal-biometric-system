@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { NavLink, Outlet } from 'react-router'
+import { withRatios } from '../admin/History'
 import { Field } from '../Field'
 import { PasswordField, RevealInput } from '../PasswordField'
 import { useSession } from '../session'
@@ -26,24 +28,37 @@ interface AuditRow {
 const when = (iso: string, t: Texts) =>
   new Date(iso).toLocaleString(t.dateLocale, { dateStyle: 'short', timeStyle: 'short' })
 
-// The administration area of increment 1 (H12): accounts, new administrators, disabling, the audit log.
-// Every change asks for the administrator's own password again.
+// The administration area (H12): its sections as tabs under the bar (H61), each on one screen that keeps the page
+// still; every change asks for the administrator's own password again and enters the audit log.
 export function Admin() {
+  const { t } = useSession()
+  return (
+    <div className="admin">
+      <nav className="admin-tabs" aria-label={t.administration}>
+        <NavLink to="/admin" end>
+          {t.accounts}
+        </NavLink>
+        <NavLink to="/admin/history">{t.history.title}</NavLink>
+        <NavLink to="/admin/audit">{t.auditLog}</NavLink>
+      </nav>
+      <Outlet />
+    </div>
+  )
+}
+
+// The accounts: users and administrators, disabling and enabling, and a new administrator.
+export function AdminAccounts() {
   const { account, call, t } = useSession()
   const [accounts, setAccounts] = useState<AccountRow[] | null>(null)
-  const [audit, setAudit] = useState<AuditRow[] | null>(null)
   const [error, setError] = useState<Parameters<typeof errorText>[0] | null>(null)
 
-  // The two lists, set when both answers are in: when the area opens and after every change.
+  // The list, when the section opens and after every change.
   const load = useCallback(
     () =>
-      Promise.all([call<{ accounts: AccountRow[] }>('accounts'), call<{ entries: AuditRow[] }>('audit')]).then(
-        ([list, log]) => {
-          if (list.ok) setAccounts(list.data.accounts)
-          else setError(list)
-          if (log.ok) setAudit(log.data.entries)
-        },
-      ),
+      call<{ accounts: AccountRow[] }>('accounts').then((list) => {
+        if (list.ok) setAccounts(list.data.accounts)
+        else setError(list)
+      }),
     [call],
   )
 
@@ -52,14 +67,16 @@ export function Admin() {
   }, [load])
 
   return (
-    <section>
-      <h1>{t.administration}</h1>
+    <section className="admin-section">
+      <div className="admin-head">
+        <h1>{t.accounts}</h1>
+        <p className="lead">{withRatios(t.accountsLead)}</p>
+      </div>
       {error && (
         <Notice tone="alert" role="alert">
           {errorText(error, t)}
         </Notice>
       )}
-      <h2>{t.accounts}</h2>
       {accounts === null ? (
         <p className="aside">{t.loading}</p>
       ) : (
@@ -82,7 +99,34 @@ export function Admin() {
         </table>
       )}
       <NewAdministrator created={load} />
-      <h2>{t.auditLog}</h2>
+    </section>
+  )
+}
+
+// The audit log: every change made in the area, newest first; it can be read and never changed (H12).
+export function AdminAudit() {
+  const { call, t } = useSession()
+  const [audit, setAudit] = useState<AuditRow[] | null>(null)
+  const [error, setError] = useState<Parameters<typeof errorText>[0] | null>(null)
+
+  useEffect(() => {
+    void call<{ entries: AuditRow[] }>('audit').then((log) => {
+      if (log.ok) setAudit(log.data.entries)
+      else setError(log)
+    })
+  }, [call])
+
+  return (
+    <section className="admin-section">
+      <div className="admin-head">
+        <h1>{t.auditLog}</h1>
+        <p className="lead">{t.auditLead}</p>
+      </div>
+      {error && (
+        <Notice tone="alert" role="alert">
+          {errorText(error, t)}
+        </Notice>
+      )}
       {audit === null ? (
         <p className="aside">{t.loading}</p>
       ) : (

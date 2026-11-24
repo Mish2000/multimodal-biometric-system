@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { StrictMode } from 'react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import type { Account, ApiResult, DisplayState, FaceIdentificationResult, FaceVerificationResult, EnrolmentEvent, Language, MbsBridge, OpenedLink, RouteName, Theme, VerificationEvent, FingerprintAlgorithm, FusionEvent, FusionSamples, IdentificationEvent, VoiceEnrolmentAnswer, VoiceIdentificationResult, VoiceMethod, VoiceSaved, VoiceVerificationResult } from '../../shared/bridge'
+import type { Account, ApiResult, DisplayState, FaceIdentificationResult, FaceVerificationResult, EnrolmentEvent, HistoryCombined, HistoryCursor, HistoryFilters, HistoryPage, HistoryRow, Language, MbsBridge, OpenedLink, RouteName, Theme, VerificationEvent, FingerprintAlgorithm, FusionEvent, FusionSamples, IdentificationEvent, VoiceEnrolmentAnswer, VoiceIdentificationResult, VoiceMethod, VoiceSaved, VoiceVerificationResult } from '../../shared/bridge'
 import { App } from './App'
 import { FaceIdentificationView } from './face/FaceIdentification'
 import { FaceVerificationView } from './face/FaceVerification'
@@ -26,7 +26,12 @@ const view = ({ password: _password, status: _status, phone: _phone, ...account 
 
 // The server as the page sees it through the bridge, in memory: as much of the API as the screens use. The
 // reset link's token stays in the main process, so here a link simply names its account.
+type HistoryAsk = HistoryFilters & { after?: HistoryCursor }
+
 class FakeServer implements MbsBridge {
+  // H61: what the attempt history was asked, and what it answers.
+  historyAsked: HistoryAsk[] = []
+  history: (ask: HistoryAsk) => HistoryPage = () => ({ rows: [], total: 0, next: null })
   accounts: Stored[] = []
   current: Stored | null = null
   up = true
@@ -372,6 +377,9 @@ class FakeServer implements MbsBridge {
         })
       case 'audit':
         return ok({ entries: [{ at: '2026-10-22T09:00:00+00:00', administrator: 'admin', action: 'first_administrator', target: 'admin' }] })
+      case 'attempts': // H61
+        this.historyAsked.push(body as unknown as HistoryAsk)
+        return ok(this.history(body as unknown as HistoryAsk))
       case 'setStatus': {
         if (body.password !== me.password) return no(403, 'wrong_password')
         const target = this.accounts.find((a) => a.id === id)
@@ -582,7 +590,7 @@ describe('the navigation', () => {
     expect(await screen.findByText('The two new passwords are not the same.')).toBeTruthy()
     type('New password again', 'A new password 1')
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-    expect(await screen.findByRole('heading', { name: 'Administration', level: 1 })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Accounts', level: 1 })).toBeTruthy()
     expect(await screen.findByRole('row', { name: /dana/ })).toBeTruthy()
   })
 
@@ -801,6 +809,96 @@ describe('the administration area', () => {
     fireEvent.click(create)
     expect((await screen.findByRole('status')).textContent).toContain('one-time-Kq7xW2')
     expect(await screen.findByRole('row', { name: /rotem/ })).toBeTruthy()
+  })
+
+  // H61: the attempt history, as the server answers it.
+  const REFUSED: HistoryCombined = {
+    kind: 'combined', id: '11111111-1111-4111-8111-111111111111', at: '2026-11-21T10:05:00Z',
+    user: { username: 'noa.b', disabled: false }, mode: 'verify', policy: 1,
+    weights: { fingerprint: 55, face: 25, voice: 20 }, budget: 6, score: 65.64, threshold: 75, accepted: false,
+    evidence: 1.8765, duration_ms: 940, gallery_size: null, leader: null,
+    parts: [
+      { modality: 'fingerprint', algorithm: 'opencv-sift', score: 8, threshold: 57, accepted: false, evidence: -0.8235, capped: false, points: 20.64, weight: 55 },
+      { modality: 'face', algorithm: 'sface', score: 0.73, threshold: 0.363, accepted: true, evidence: 1.5, capped: true, points: 25, weight: 25 },
+      { modality: 'voice', algorithm: 'ecapa-voxceleb', score: 0.75, threshold: 0.25, accepted: true, evidence: 1.2, capped: true, points: 20, weight: 20 },
+    ],
+  }
+  const OTHER_FOUND: HistoryRow = {
+    kind: 'attempt', id: '22222222-2222-4222-8222-222222222222', at: '2026-11-21T10:00:00Z',
+    user: { username: 'amir_s', disabled: true }, modality: 'face', mode: 'identify', algorithm: 'sface',
+    provisional: false, score: 0.402, threshold: 0.363, accepted: true, duration_ms: 60, source: 'device',
+    gallery_size: 12, leader: 'other', capture_of: null,
+  }
+  const AGAIN: HistoryRow = {
+    kind: 'attempt', id: '33333333-3333-4333-8333-333333333333', at: '2026-11-21T09:55:00Z',
+    user: { username: 'dana', disabled: false }, modality: 'fingerprint', mode: 'verify', algorithm: 'learned-pore',
+    provisional: true, score: 58, threshold: 21, accepted: true, duration_ms: 3080, source: 'device',
+    gallery_size: null, leader: null, capture_of: '2026-11-21T09:54:00Z',
+  }
+
+  it('shows the attempt history, where a combined test opens to its comparisons', async () => {
+    server.current = server.add('admin', 'admin')
+    server.history = () => ({ rows: [REFUSED, OTHER_FOUND, AGAIN], total: 3, next: null })
+    open('/admin/history')
+    expect(await screen.findByRole('heading', { name: 'Attempt history', level: 1 })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Attempt history' }).getAttribute('aria-current')).toBe('page')
+    const combined = await screen.findByRole('row', { name: /noa\.b/ })
+    expect(within(combined).getByText('Rejected')).toBeTruthy()
+    expect(within(combined).getByText('65.6')).toBeTruthy()
+    const found = screen.getByRole('row', { name: /amir_s/ })
+    expect(within(found).getByText('Disabled')).toBeTruthy()
+    expect(within(found).getByText('another registered user')).toBeTruthy()
+    expect(within(found).getByText('12 templates searched')).toBeTruthy()
+    expect(within(screen.getByRole('row', { name: /dana/ })).getByText('provisional')).toBeTruthy()
+    expect(screen.getByRole('rowheader', { name: /21 November 2026/ })).toBeTruthy()
+    expect(screen.getByText('3 results')).toBeTruthy()
+    expect(screen.queryByRole('columnheader', { name: 'On its own' })).toBeNull()
+    fireEvent.click(within(combined).getByRole('button', { name: 'Show its comparisons' }))
+    expect(await screen.findByRole('columnheader', { name: 'On its own' })).toBeTruthy()
+    expect(screen.getByText('×32, its cap')).toBeTruthy()
+    expect(screen.getByText(/acceptance needs more than ×1,000/)).toBeTruthy()
+    expect(screen.getByText(/without the fingerprint’s support/)).toBeTruthy()
+    fireEvent.click(within(combined).getByRole('button', { name: 'Hide its comparisons' }))
+    expect(screen.queryByRole('columnheader', { name: 'On its own' })).toBeNull()
+  })
+
+  it('asks the history again with every filter and reads on after its last row', async () => {
+    server.current = server.add('admin', 'admin')
+    server.history = (ask) =>
+      ask.after ? { rows: [OTHER_FOUND], total: 2, next: null } : { rows: [AGAIN], total: 2, next: { at: AGAIN.at, id: AGAIN.id } }
+    open('/admin/history')
+    expect(await screen.findByText('Showing 1 of 2')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Show more' }))
+    expect(await screen.findByText('2 results')).toBeTruthy()
+    expect(server.historyAsked.at(-1)).toEqual({ after: { at: AGAIN.at, id: AGAIN.id } })
+    fireEvent.click(screen.getByRole('button', { name: 'Type' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Combined' }))
+    await waitFor(() => expect(server.historyAsked.at(-1)).toEqual({ type: 'combined' }))
+    await waitFor(() => expect(document.querySelector('.history__list')?.getAttribute('aria-busy')).toBe('false'))
+    expect(screen.getByRole('button', { name: 'Type: Combined' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '1:1 or 1:N' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Identify (1:N)' }))
+    await waitFor(() => expect(server.historyAsked.at(-1)).toEqual({ type: 'combined', mode: 'identify' }))
+    fireEvent.change(screen.getByLabelText('User'), { target: { value: ' noa ' } })
+    await waitFor(() => expect(server.historyAsked.at(-1)).toEqual({ type: 'combined', mode: 'identify', user: 'noa' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove this filter: Type' }))
+    await waitFor(() => expect(server.historyAsked.at(-1)).toEqual({ mode: 'identify', user: 'noa' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }))
+    await waitFor(() => expect(server.historyAsked.at(-1)).toEqual({}))
+  })
+
+  it('says when nothing matches, in Hebrew too, and keeps the audit log in a section of its own', async () => {
+    server.current = server.add('admin', 'admin', { language: 'he' })
+    open('/admin/history')
+    expect(await screen.findByRole('heading', { name: 'היסטוריית הניסיונות', level: 1 })).toBeTruthy()
+    expect(await screen.findByText('עוד אין ניסיונות.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'סוג' }))
+    fireEvent.click(screen.getByRole('option', { name: 'קול' }))
+    expect(await screen.findByText('אין תוצאות שמתאימות למסננים.')).toBeTruthy()
+    expect(server.historyAsked.at(-1)).toEqual({ type: 'voice' })
+    fireEvent.click(screen.getByRole('link', { name: 'יומן הביקורת' }))
+    expect(await screen.findByRole('heading', { name: 'יומן הביקורת', level: 1 })).toBeTruthy()
+    expect(await screen.findByText('נוצר המנהל הראשון')).toBeTruthy()
   })
 })
 

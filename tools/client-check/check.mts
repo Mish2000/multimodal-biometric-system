@@ -1314,9 +1314,12 @@ app.whenReady().then(async () => {
     await fill('New password again', 'Admin password 1')
     await click('Save')
     await waitText('Audit log')
-    // The audit log arrives after the area itself, so the check waits for its first row.
+    // The audit log has a section of its own since H61, and arrives after it, so the check waits for its first row.
+    await click('Audit log')
     await until(() => has('First administrator created'), 'the audit log')
     check('after the replacement the administrator lands in the administration area', true)
+    await click('Accounts')
+    await until(() => page(`return Boolean(window.__t.row('dana@example.com'))`), 'the accounts')
     await shot('11-admin')
 
     // 9. Disabling an account asks for the administrator's password again.
@@ -1329,8 +1332,11 @@ app.whenReady().then(async () => {
     await fill('Your password, to confirm', 'Admin password 1', row)
     await click('Disable', row)
     await until(() => page(`return ${row}.innerText.includes('Disabled')`), 'the account disabled')
-    check('the account is disabled, and the audit log records it', await has('Account disabled'))
     await shot('12-admin-disabled')
+    await click('Audit log')
+    check('the account is disabled, and the audit log records it', await until(() => has('Account disabled'), 'its audit entry'))
+    await click('Accounts')
+    await until(() => page(`return Boolean(document.querySelector('form.row'))`), 'the accounts')
 
     // 10. A new administrator gets a one-time password, shown once.
     const form = "document.querySelector('form.row')"
@@ -1342,6 +1348,27 @@ app.whenReady().then(async () => {
     const shown = await page(`return document.querySelector('[role=status] code')?.textContent ?? ''`)
     check("the new administrator's one-time password is shown", shown.length > 0, shown.length)
     await shot('13-admin-new')
+
+    // 10b. The attempt history (H61): this run's attempts if it made any, else the empty history; nothing sealed is
+    // shown; a type filter narrows the list and is cleared again.
+    await click('Attempt history')
+    await waitText('Every comparison by every user')
+    const listed = await until(() => page(`
+      if (document.querySelector('.history__table')) return document.querySelectorAll('.history__table tr.attempt').length
+      return document.body.innerText.includes('No attempts yet.') ? -1 : 0`), 'the history')
+    check('the history lists the attempts of this run, or says there are none', listed !== 0, listed)
+    check('the history shows no image, recording or print', await page(`return !document.querySelector('.history img, .history canvas, .history audio')`))
+    await shot('13h-history')
+    await click('Type')
+    await page(`[...document.querySelectorAll('[role=option]')].find((o) => o.textContent === 'Fingerprint').click()`)
+    await until(() => page(`return Boolean(window.__t.button('Type: Fingerprint'))`), 'the type filter')
+    // The rows of the filters before stay, marked busy, until the new answer comes.
+    await until(() => page(`return document.querySelector('.history__list')?.getAttribute('aria-busy') === 'false'`), 'the filtered history')
+    check('the type filter leaves only fingerprint comparisons', await page(`
+      return [...document.querySelectorAll('.history__table tr.attempt td:nth-child(3)')].every((cell) => cell.textContent.startsWith('Fingerprint'))`))
+    await shot('13i-history-fingerprint')
+    await click('Clear filters')
+    await until(() => page(`return !window.__t.button('Type: Fingerprint')`), 'the filters cleared')
 
     // 11. The administration area in both themes, then sign-out.
     for (const [theme, label] of [['light', 'Light'], ['dark', 'Dark']] as const) {

@@ -365,7 +365,11 @@ table.
 
 The attempt's outcome stays unsealed, so the administration area can filter
 the history (H12); its capture is sealed (H14). The administration area turns
-subject identifiers into usernames through the identity links.
+subject identifiers into usernames through the identity links. Its attempt
+history (H61) reads the outcome columns of `attempt` and `fused_attempt`, the
+leading enrolment's subject to tell the user's own from another's, and the
+taking attempt's time for H59; it never loads `probe`. It needs no new table,
+column or index: the pages follow `at` and `id`, and `at` is indexed.
 
 Fingerprint verification stores one row for every completed comparison,
 including a non-match (H35). Quality rejection, cancellation or a technical

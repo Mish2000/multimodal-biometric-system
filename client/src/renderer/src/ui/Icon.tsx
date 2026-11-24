@@ -2,12 +2,15 @@
 // Each one stands beside words that say the same, so it is hidden from assistive technology.
 import type { ReactElement } from 'react'
 
-export type IconName = 'check' | 'ring' | 'info' | 'alert' | 'eye' | 'eye-off'
+export type IconName = 'check' | 'ring' | 'info' | 'alert' | 'eye' | 'eye-off' | 'chevron' | 'close' | 'search'
 
 const EYE = 'M2.5 12s3.5-6.5 9.5-6.5S21.5 12 21.5 12s-3.5 6.5-9.5 6.5S2.5 12 2.5 12z'
 
 const SHAPES: Record<IconName, ReactElement> = {
   check: <path d="M5 12.5l4.5 4.5L19 7.5" />,
+  chevron: <path d="M6 9.5l6 6 6-6" />, // H61: a filter's choices, a combined test's comparisons
+  close: <path d="M7 7l10 10M17 7L7 17" />,
+  search: <><circle cx="10.5" cy="10.5" r="6" /><path d="M15 15l5 5" /></>,
   ring: <circle cx="12" cy="12" r="7" />,
   info: <><circle cx="12" cy="12" r="9" /><path d="M12 11v5.5" /><path d="M12 7.5h.01" /></>,
   alert: <><circle cx="12" cy="12" r="9" /><path d="M12 7.5v5.5" /><path d="M12 16.5h.01" /></>,

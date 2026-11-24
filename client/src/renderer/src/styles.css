@@ -2345,3 +2345,216 @@ progress::-webkit-progress-value { background: var(--ink); }
 .ranking th { white-space: normal; vertical-align: bottom; }
 .ranking__sub { display: block; color: var(--ink-2); font-size: 12px; font-weight: 400; }
 .ranking tr.own td { font-weight: 600; }
+
+/* H61: the administration area. Its sections are underline tabs under the bar, a level below the bar's own pills;
+   each section keeps the page still, and a list scrolls inside its panel under a header that stays. */
+.shell:has(> .page--fill) { height: 100vh; }
+.page.page--fill { display: flex; flex-direction: column; flex: 1; min-height: 0; padding-top: 0; padding-bottom: var(--space-24); }
+.admin { display: grid; grid-template-rows: auto minmax(0, 1fr); flex: 1; min-height: 0; }
+.admin-tabs { display: flex; gap: var(--space-32); border-bottom: 1px solid var(--mist); }
+.admin-tabs a {
+  margin-bottom: -1px;
+  padding: 14px 0 12px;
+  border-bottom: 2px solid transparent;
+  color: var(--ink-2);
+  font-size: 15px;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color var(--duration-fast) ease, border-color var(--duration-fast) ease;
+}
+.admin-tabs a.active { border-bottom-color: var(--ink); color: var(--ink); font-weight: 600; }
+@media (hover: hover) and (pointer: fine) {
+  .admin-tabs a:hover { color: var(--ink); }
+}
+.admin-section { min-height: 0; overflow: auto; padding-top: var(--space-32); }
+.admin-head { display: grid; gap: var(--space-8); margin-bottom: var(--space-16); }
+.admin-head h1 { margin: 0; }
+.admin-head .lead { max-width: 56rem; margin: 0; }
+
+/* The history: its head, the filters, the list and its foot, one under the other; only the list grows. */
+.history { display: flex; flex-direction: column; gap: var(--space-16); min-height: 0; padding-top: var(--space-32); }
+.history .admin-head { margin-bottom: 0; }
+
+.filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-8); }
+.filter-search {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  width: 13rem;
+  height: var(--control-small);
+  padding-inline: 12px 6px;
+  border: 1px solid var(--edge);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--ink-2);
+}
+.filter-search .icon { width: 18px; height: 18px; flex: none; }
+.filter-search input {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+}
+.filter-search input::placeholder { color: var(--ink-2); opacity: 1; }
+.filter-search:focus-within { outline: 2px solid var(--ink); outline-offset: 2px; }
+.filter-search--set { border-color: var(--ink); background: var(--wash); }
+.filter-search--set input { font-weight: 600; }
+.filter { position: relative; display: inline-flex; align-items: center; border: 1px solid var(--edge); border-radius: var(--radius-pill); background: var(--surface); }
+.filter[data-on] { border-color: var(--ink); background: var(--wash); }
+.filter__open {
+  gap: 6px;
+  min-height: calc(var(--control-small) - 2px);
+  padding: 0 10px 0 14px;
+  border: 0;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 400;
+}
+.filter[data-on] .filter__open { padding-inline-end: 4px; font-weight: 600; }
+.filter__open .icon { width: 16px; height: 16px; color: var(--ink-2); }
+.filter__remove {
+  width: 24px;
+  min-height: 24px;
+  margin-inline-end: 6px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: var(--ink-2);
+}
+.filter__remove .icon { width: 14px; height: 14px; }
+@media (hover: hover) and (pointer: fine) {
+  .filter__remove:hover { background: var(--surface); color: var(--ink); }
+}
+.filter__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  inset-inline-start: 0;
+  z-index: 3;
+  min-width: 100%;
+  margin: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--mist);
+  border-radius: var(--radius-12);
+  background: var(--surface);
+  box-shadow: var(--shadow-overlay);
+  list-style: none;
+}
+.filter__menu li { padding: 8px 12px; border-radius: var(--radius-6); color: var(--ink); font-size: 14px; white-space: nowrap; cursor: pointer; }
+.filter__menu li[aria-selected='true'] { font-weight: 600; }
+.filter__menu li:focus { outline: none; background: var(--wash); }
+@media (hover: hover) and (pointer: fine) {
+  .filter__menu li:hover { background: var(--wash); }
+}
+.filters__clear { margin-inline-start: var(--space-4); }
+
+.history__list { flex: 1 1 auto; min-height: 0; overflow: auto; transition: opacity var(--duration-fast) ease; }
+/* Rows that answer the filters before the change fade a little, only when the answer is slow to come. */
+.history__list[aria-busy='true'] { opacity: 0.55; transition-delay: 200ms; }
+.history__list--empty { display: grid; place-items: center; }
+.history__empty { display: grid; justify-items: center; gap: var(--space-8); padding: var(--space-48) var(--space-24); text-align: center; }
+.history__empty h2 { margin: 0; font-size: 18px; font-weight: 600; }
+.history__empty p { margin: 0; color: var(--ink-2); font-size: 15px; }
+.history__empty button { margin-top: var(--space-8); }
+.history__table { table-layout: fixed; font-size: 14px; }
+.history__table th, .history__table td { padding: 9px 10px; vertical-align: top; }
+/* A sticky header keeps its hairline as a shadow: a collapsed border would scroll away with the rows. */
+.history__table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  border-bottom: 0;
+  background: var(--surface);
+  box-shadow: inset 0 -1px 0 var(--mist);
+  white-space: normal;
+  vertical-align: bottom;
+}
+.history__table col.col-when { width: 6%; }
+.history__table col.col-user { width: 11%; }
+.history__table col.col-test { width: 14%; }
+.history__table col.col-method { width: 12%; }
+.history__table col.col-score { width: 7%; }
+.history__table col.col-threshold { width: 8%; }
+.history__table col.col-result { width: 17%; }
+.history__table col.col-source { width: 12%; }
+.history__table col.col-time { width: 8%; }
+.history__table col.col-open { width: 5%; }
+.history__table tr.day th { padding-block: 7px; background: var(--canvas); color: var(--ink-2); font-size: 13px; font-weight: 600; white-space: nowrap; }
+.history__when { color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.history__table .mode { color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.history__score b { font-weight: 600; }
+.history__table .tag { vertical-align: top; }
+.history .sub { display: block; margin-top: 3px; color: var(--ink-2); font-size: 13px; line-height: 1.35; }
+.history__user .tag { margin-inline-start: 2px; }
+.leader { display: flex; align-items: flex-start; gap: 4px; }
+.leader .icon { flex: none; width: 15px; height: 15px; margin-top: 1px; }
+.history .leader--alert { color: var(--alert); font-weight: 600; }
+.history__open { text-align: end; }
+.disclose {
+  width: 30px;
+  min-height: 30px;
+  margin-block: -5px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--surface);
+}
+.disclose .icon { width: 16px; height: 16px; transition: transform var(--duration-fast) var(--ease-out); }
+.disclose[aria-expanded='true'] { border-color: var(--ink); }
+.disclose[aria-expanded='true'] .icon { transform: rotate(180deg); }
+.attempt--open,
+.parts-row,
+.history__table tbody tr.attempt--open:hover,
+.history__table tbody tr.parts-row:hover { background: var(--wash); }
+.attempt--open td { border-bottom-color: transparent; }
+.parts-row > td { padding: 0 10px 14px; }
+.parts {
+  display: grid;
+  gap: var(--space-12);
+  padding: var(--space-16) var(--space-24);
+  border: 1px solid var(--mist);
+  border-radius: var(--radius-12);
+  background: var(--surface);
+}
+.parts__total { margin: 0; color: var(--ink-2); font-size: 14px; line-height: 1.45; }
+.parts__total b { color: var(--ink); font-weight: 600; }
+.parts .stack-rail__groove { height: 8px; }
+.parts .stack-rail__tick { top: -4px; height: 16px; }
+.parts.not-accepted .stack-rail__piece { background: var(--ink); }
+.parts__table { table-layout: fixed; font-size: 14px; }
+.parts__table th, .parts__table td { padding: 6px 10px; }
+.parts__table th { white-space: normal; vertical-align: bottom; }
+.parts__table tbody tr:hover { background: none; }
+.parts__name { display: inline-flex; align-items: center; gap: var(--space-8); font-weight: 600; }
+.parts__name i { flex: none; width: 10px; height: 10px; border-radius: 2px; background: var(--mark); }
+.parts__table tr[data-modality='face'] .parts__name i { opacity: 0.72; }
+.parts__table tr[data-modality='voice'] .parts__name i { opacity: 0.5; }
+.parts.not-accepted .parts__name i { background: var(--ink); }
+.parts__table b { font-weight: 600; }
+.parts__of { color: var(--ink-2); font-size: 13px; }
+.parts__policy { margin: 0; color: var(--ink-2); font-size: 13px; }
+.history__foot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-16); color: var(--ink-2); font-size: 14px; }
+
+/* The narrowest window keeps the filters on one line while two of them are set, and the list as tall as it can. */
+@media (max-width: 1100px) {
+  .filters { gap: 6px; }
+  .filter-search { width: 10rem; }
+  .filter__open { padding-inline: 12px 8px; }
+  .filters__clear { padding-inline: 12px; }
+}
+@media (max-height: 720px) {
+  .history, .admin-section { padding-top: 20px; }
+  .history { gap: var(--space-12); }
+  .admin-tabs a { padding: 11px 0 9px; }
+  .admin-head { gap: var(--space-4); }
+  .admin-head h1 { font-size: 28px; }
+  .admin-head .lead { font-size: 15px; }
+  .history__table th, .history__table td { padding-block: 7px; }
+  .parts { gap: var(--space-8); padding-block: var(--space-12); }
+  .parts__table th, .parts__table td { padding-block: 4px; }
+}

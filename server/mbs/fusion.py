@@ -74,13 +74,18 @@ class Taken:
     at: datetime
 
 
+def policy_of(row: FusionPolicy) -> Policy:
+    """A stored policy version as the arithmetic reads it; the history (H61) reads the version each test used."""
+    return Policy(row.id, {"fingerprint": row.weight_fingerprint, "face": row.weight_face, "voice": row.weight_voice},
+                  row.budget, row.threshold, row.calibration)
+
+
 def current_policy(databases: Databases) -> Policy:
     with Session(databases.biometric) as db:
         row = db.scalar(select(FusionPolicy).order_by(FusionPolicy.id.desc()).limit(1))
     if row is None:
         raise FusionError("policy_unavailable")
-    return Policy(row.id, {"fingerprint": row.weight_fingerprint, "face": row.weight_face, "voice": row.weight_voice},
-                  row.budget, row.threshold, row.calibration)
+    return policy_of(row)
 
 
 def cap(policy: Policy, modality: str) -> float:

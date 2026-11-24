@@ -39,7 +39,8 @@ export function Layout() {
           {t.signOut}
         </button>
       </header>
-      <main className="page">
+      {/* The administration area keeps the page still and scrolls its lists inside their panels (H61). */}
+      <main className={location.pathname.startsWith('/admin') ? 'page page--fill' : 'page'}>
         <ErrorBoundary resetKey={location.key}>
           <Outlet />
         </ErrorBoundary>

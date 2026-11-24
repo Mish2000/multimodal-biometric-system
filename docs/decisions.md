@@ -2285,3 +2285,41 @@ without layout findings), the fingerprint with OpenCV SIFT 80 of 80, and the fac
 The manual check on the HiScan PRO, the camera and the microphone passed on 2026-11-23: a combined 1:1 test, a
 placement of the fingertip only, another finger that is not enrolled with the same face and voice, which was refused,
 and 1:N.
+
+## 2026-11-24: the attempt history in the administration area
+
+- **H61** Approved on 2026-11-23, its key screens on 2026-11-24: the administration area gets its sections as tabs
+  under the bar (accounts, attempt history, audit log), and the attempt history shows administrators every comparison
+  by every user, the first step of increment 6's administration area.
+  - Newest first, 50 rows at a time with "Show more", read on after the last row by its time and identifier (keyset
+    paging), so attempts saved meanwhile shift no page; the rows are grouped by day.
+  - Filters: the dates (today, the last 7 or 30 days), a part of the username in any case, the type (fingerprint,
+    face, voice or combined), 1:1 or 1:N, the method, the result and the source. They travel in the body of `POST
+    /api/admin/attempts/search`, for administrators only: the client's routes carry no query string, and a username in
+    an address would be written to the server's access log.
+  - A row gives the time, the username (a disabled account marked), the type and mode, the method, the score against
+    its own threshold (a provisional threshold marked), the decision, the processing time and the source; in 1:N also
+    the gallery searched and whose enrolment led. The leader is never named: the user's own enrolment, another
+    registered user's, or one no longer enrolled, as H18 shows other users to a user; a search that found another
+    registered user above the threshold is marked, since an administrator must notice it. A capture compared again
+    (H59) names when it was taken.
+  - A combined test (H60) is one row with its points out of 100, threshold, decision and policy version; it opens to
+    its comparisons, each with its own threshold and decision, its evidence (capped evidence marked) and its points of
+    the weight, under the verdict and the stacked points. Its comparisons are not listed again on their own.
+  - Only outcomes are read: no sample, probe, template or embedding is loaded, and the one sealed value opened is each
+    user account's identity link, which turns subject identifiers into usernames. Reading the history is not a change,
+    so it is not audited (H12). No table, column or index is added, and nothing was downloaded.
+  - The key screens were designed and approved as images before any code (five frames in both languages, both themes
+    and both window sizes).
+
+Checks: the server's 382 tests with the live captures (18 new in test_history.py: who may read the history, its rows
+newest first with nothing sealed in the answer, every filter, keyset paging with an attempt saved meanwhile, a combined
+test with its comparisons and points, the 1:N leader never named, a capture compared again, a disabled account, and
+refused filters), ruff and mypy; the client's 250 tests (3 new), type checks, lint and build; the
+offscreen check without engines 41 of 41 (the history and the area's tabs in both themes and both window sizes,
+92 screenshots without layout findings), the fingerprint with OpenCV SIFT 83 of 83, and the face and the voice 82 of
+82. Its first face and voice run found that rows answering the filters before a change stayed on screen until the
+new answer came; the list is now marked busy meanwhile, and fades a little when the answer is slow.
+The manual check in the client passed on 2026-11-24, on the steps asked for: the server and the client restarted,
+the history of the real attempts since H35 with a combined test opened to its comparisons, the filters, Hebrew and
+the dark theme, and the accounts and the audit log in their tabs.

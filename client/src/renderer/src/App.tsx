@@ -3,7 +3,8 @@ import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router'
 import type { Account, OpenedLink } from '../../shared/bridge'
 import { ErrorBoundary } from './ErrorBoundary'
 import { Layout } from './Layout'
-import { Admin } from './pages/Admin'
+import { AttemptHistory } from './admin/History'
+import { Admin, AdminAccounts, AdminAudit } from './pages/Admin'
 import { ChangePassword } from './pages/ChangePassword'
 import { Face } from './pages/Face'
 import { Voice } from './pages/Voice'
@@ -51,7 +52,11 @@ export function App() {
           <Route path="/face" element={only('user', <Face />)} />
           <Route path="/voice" element={only('user', <Voice />)} />
           <Route path="/fusion" element={only('user', <Fusion />)} />
-          <Route path="/admin" element={only('admin', <Admin />)} />
+          <Route path="/admin" element={only('admin', <Admin />)}>
+            <Route index element={<AdminAccounts />} />
+            <Route path="history" element={<AttemptHistory />} />
+            <Route path="audit" element={<AdminAudit />} />
+          </Route>
           <Route path="/settings" element={only('any', <Settings />)} />
           <Route path="/password" element={account?.must_change_password ? <ChangePassword /> : <Navigate to={home} replace />} />
         </Route>

@@ -2,7 +2,7 @@
 
 Approved on 2026-10-20 (H11–H20 in `docs/decisions.md`),
 from the draft of 2026-10-19 as revised on 2026-10-20, and amended with his
-approval since (H24 to H60). Every decision is cited by its ID; a change needs
+approval since (H24 to H61). Every decision is cited by its ID; a change needs
 the researcher's approval and a new entry in the decision record.
 
 ## 1. Purpose and scope
@@ -457,7 +457,7 @@ SHA-256.
 | Voice capture | the sentence to read in the interface's language, a level meter and a timer; the microphone chosen by the client, with a selector when more than one can be used; after an enrolment, the three recordings as waveforms with playback, their checks and their pair scores (H54) |
 | 1:1 result | the new print beside the enrolled one with lines between matched points or pores, the new aligned face beside the closest enrolled one (H49), or the new recording beside the closest enrolled one as waveforms that can be played (H55), a score gauge marked with the threshold, the decision and the time it took |
 | 1:N result | an animated pass over the enrolled gallery, the ranked candidates with their scores, the top one marked when it passes the threshold; for the face the search takes milliseconds, so the pass plays once, for about 0.6 s, when the answer arrives (skipped when Windows' animation effects are off), and the caller's own closest enrolled face is shown beside the new one when it is among the five candidates (H50); the voice does the same, with its own closest enrolled recording beside the new one as waveforms that can be played (H56) |
-| Administration area (H12) | accounts with role and status, new administrators, disabling and enabling; the attempt history with filters; thresholds; the audit log; never national IDs or samples |
+| Administration area (H12) | its sections as tabs under the bar (H61): accounts with role and status, new administrators, disabling and enabling; the attempt history with filters (H61); thresholds; the audit log; never national IDs or samples |
 
 OpenCV SIFT comes first because its threshold is the only one that is not
 provisional on the HiScan PRO, it did best there (28 of 30 same-finger pairs,
@@ -498,7 +498,7 @@ Fingerprint verification stores completed comparisons, accepted or rejected
 (H35). Captures rejected by the quality gate, cancelled runs and technical
 failures create no comparison record. Its processing time covers quality,
 extraction and the three comparisons, excluding the wait for the finger and
-database storage. The administrative history screen follows in increment 6.
+database storage. The administration area shows them in the attempt history (H61).
 
 Face verification follows the same rules (H49): a completed comparison is
 stored with its sealed image, a rejected image is not, the time runs from the
@@ -537,6 +537,24 @@ makes no attempt.
 Administrative changes are stored in the audit log of the accounts database:
 time, administrator, action and target (an account, or the algorithm whose
 threshold changed).
+
+The attempt history (H61) shows administrators every comparison by every
+user, newest first, 50 rows at a time, read on after the last row by its time
+and identifier, so attempts saved meanwhile shift no page. Its filters are the
+dates, a part of the username, the type (fingerprint, face, voice or
+combined), 1:1 or 1:N, the method, the result and the source, and they travel
+in the request's body, never in its address. A row gives the time, the
+username (a disabled account marked), the type and mode, the method, the score
+against its own threshold, the decision, the processing time and the source;
+in 1:N also the gallery searched and whose enrolment led: the user's own,
+another registered user's, or one no longer enrolled, never another person's
+name; a capture compared again (H59) names when it was taken. A combined test
+is one row with its points, threshold, decision and policy version, which
+opens to its comparisons, each with its own threshold and decision, its
+evidence and its points. The history reads outcomes only: no sample, probe,
+template or embedding is loaded, and the one sealed value opened is each user
+account's identity link, which turns subject identifiers into usernames.
+Reading it is not a change, so it is not audited.
 
 ## 8. Repository and environments
 
@@ -713,3 +731,6 @@ themes during that work.
   capped by the weights 55, 25 and 20, one score out of 100, accepted above
   75 (a combined ratio above 1,000); it replaces H6's fusion of the
   fingerprint methods (5.1, 5.4, 6, 7).
+- **H61** The attempt history of the administration area, its sections as
+  tabs: every comparison and combined test with its outcome, filtered and read
+  in pages; the 1:N leader never named (6, 7).
