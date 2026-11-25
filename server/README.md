@@ -7,7 +7,8 @@ and 1:1 verification with OpenCV SIFT, Pore SIFT and Pore CNN
 (H35, H38, H39) and 1:N identification (H41, H42) with all three methods, and face enrolment (H48),
 1:1 verification (H49) and 1:N identification (H50), also from image files (H51), and voice enrolment
 (H54), 1:1 verification (H55) and 1:N identification (H56), also from recording files (H57), the
-combined test of every enrolled modality (H60) and the administration's attempt history (H61). It runs
+combined test of every enrolled modality (H60) and the administration's attempt history (H61) and reports
+(H62). It runs
 with the `multimodal-server` environment and
 starts PostgreSQL from the `multimodal-postgres` environment (`environments/`); the face engine runs in
 `multimodal-face` and the voice engine in `multimodal-voice`.
@@ -23,7 +24,7 @@ $python = '<conda envs>\multimodal-server\python.exe'
 & $python -m mbs create-admin --username <name> --email <address>   # prints a one-time password
 & $python -m mbs serve        # the API on 127.0.0.1; starts and stops PostgreSQL with it
 & $python -m mbs db status    # or start / stop
-& $python -m pytest           # 382 tests against a throwaway cluster (four need MBS_LIVE_CAPTURES)
+& $python -m pytest           # 404 tests against a throwaway cluster (four need MBS_LIVE_CAPTURES)
 & $python -m mypy             # type checks of mbs/ and tests/ (pyproject.toml)
 & '<conda envs>\multimodal-server\Library\bin\ruff.exe' check ..   # lint of all the system's Python (../ruff.toml)
 ```
@@ -138,6 +139,7 @@ checked on every request by `mbs/routes/policy.py`, the application's own depend
 | `GET /api/admin/accounts`, `POST /api/admin/accounts/{id}/status` | administrator | accounts; disable or enable |
 | `POST /api/admin/administrators`, `GET /api/admin/audit` | administrator | a new administrator; the audit log |
 | `POST /api/admin/attempts/search` | administrator | the attempt history: filters in the body, 50 rows a page after the last one read (H61) |
+| `POST /api/admin/reports` | administrator | the six reports, each method's and the combined test's (H62): the dates, 1:1 or 1:N, the source and the PC's time zone in the body (400 `unknown_time_zone` for a zone PostgreSQL does not know); sums only, counted in one snapshot, each equal to the history's total under the same filters |
 
 Errors answer `{"error": "<code>"}`; the client turns codes into English or Hebrew text.
 Before any route (H58, `mbs/guard.py`), a request addressed to a host other than 127.0.0.1 or

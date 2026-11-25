@@ -370,6 +370,12 @@ history (H61) reads the outcome columns of `attempt` and `fused_attempt`, the
 leading enrolment's subject to tell the user's own from another's, and the
 taking attempt's time for H59; it never loads `probe`. It needs no new table,
 column or index: the pages follow `at` and `id`, and `at` is indexed.
+The reports (H62) sum the same outcome columns in PostgreSQL: the decision,
+the score's bar against the current threshold of `algorithm` or of the latest
+`fusion_policy`, `duration_ms` for the median and the 90th percentile, `at` in
+the PC's time zone for the days, and for a combined test its fingerprint
+comparison's own `accepted`; they read no identity link and add no table,
+column or index.
 
 Fingerprint verification stores one row for every completed comparison,
 including a non-match (H35). Quality rejection, cancellation or a technical

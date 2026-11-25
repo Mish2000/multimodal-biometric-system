@@ -2,7 +2,7 @@
 
 Approved on 2026-10-20 (H11–H20 in `docs/decisions.md`),
 from the draft of 2026-10-19 as revised on 2026-10-20, and amended with his
-approval since (H24 to H61). Every decision is cited by its ID; a change needs
+approval since (H24 to H62). Every decision is cited by its ID; a change needs
 the researcher's approval and a new entry in the decision record.
 
 ## 1. Purpose and scope
@@ -457,7 +457,7 @@ SHA-256.
 | Voice capture | the sentence to read in the interface's language, a level meter and a timer; the microphone chosen by the client, with a selector when more than one can be used; after an enrolment, the three recordings as waveforms with playback, their checks and their pair scores (H54) |
 | 1:1 result | the new print beside the enrolled one with lines between matched points or pores, the new aligned face beside the closest enrolled one (H49), or the new recording beside the closest enrolled one as waveforms that can be played (H55), a score gauge marked with the threshold, the decision and the time it took |
 | 1:N result | an animated pass over the enrolled gallery, the ranked candidates with their scores, the top one marked when it passes the threshold; for the face the search takes milliseconds, so the pass plays once, for about 0.6 s, when the answer arrives (skipped when Windows' animation effects are off), and the caller's own closest enrolled face is shown beside the new one when it is among the five candidates (H50); the voice does the same, with its own closest enrolled recording beside the new one as waveforms that can be played (H56) |
-| Administration area (H12) | its sections as tabs under the bar (H61): accounts with role and status, new administrators, disabling and enabling; the attempt history with filters (H61); thresholds; the audit log; never national IDs or samples |
+| Administration area (H12) | its sections as tabs under the bar (H61): accounts with role and status, new administrators, disabling and enabling; the attempt history with filters (H61); the reports per method and for the combined test (H62); thresholds; the audit log; never national IDs or samples |
 
 OpenCV SIFT comes first because its threshold is the only one that is not
 provisional on the HiScan PRO, it did best there (28 of 30 same-finger pairs,
@@ -555,6 +555,31 @@ evidence and its points. The history reads outcomes only: no sample, probe,
 template or embedding is loaded, and the one sealed value opened is each user
 account's identity link, which turns subject identifiers into usernames.
 Reading it is not a change, so it is not audited.
+
+The reports (H62) sum the same attempts per method and for the combined test,
+under the history's filters of dates, 1:1 or 1:N, and source: each report
+counts exactly the attempts the history lists under the same filters, and
+leads to them. A method's report counts its comparisons of their own; the
+comparisons inside a combined test count in the combined test's report, as
+the history lists them inside their test. A report gives the current threshold
+with where it comes from (a provisional one marked); the attempts accepted and
+rejected in 1:1, found and not found in 1:N with whose enrolment led a found
+search (the user's own, another registered user's, or one no longer enrolled,
+never a name); the processing time's median and, from 10 attempts on, its 90th
+percentile, for each mode; every score in bars over the results' rail, aligned
+so that the threshold is an edge between two bars (fingerprint pairs doubling
+from bar to bar, which is ln(1 + pairs), similarities by 0.05, points by 5),
+each attempt marked by its own decision; and the attempts of each day of the
+PC's clock (of each hour today, of each week in a range longer than 62 days).
+The combined test's report adds its policy version and how often the test
+overruled the fingerprint alone: rescued (the fingerprint comparison not
+above its threshold, the test accepted) and stopped (the other way round).
+Attempts decided by an earlier threshold or policy keep their own decision,
+and a line says how many. Everything is counted in PostgreSQL in one snapshot
+and only sums leave it: no sample, probe, template, embedding or identity link
+is read. The days start at the PC's own midnight, in the time zone the client
+names, which the server checks against PostgreSQL's list. Reading the reports
+is not a change, so it is not audited.
 
 ## 8. Repository and environments
 
@@ -734,3 +759,7 @@ themes during that work.
 - **H61** The attempt history of the administration area, its sections as
   tabs: every comparison and combined test with its outcome, filtered and read
   in pages; the 1:N leader never named (6, 7).
+- **H62** The reports per method and for the combined test: the decisions, the
+  scores over the results' rail against the current threshold, the processing
+  times and the attempts per day, summed in PostgreSQL under the history's
+  filters and equal to its totals (6, 7).

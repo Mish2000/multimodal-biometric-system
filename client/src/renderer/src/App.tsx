@@ -4,6 +4,7 @@ import type { Account, OpenedLink } from '../../shared/bridge'
 import { ErrorBoundary } from './ErrorBoundary'
 import { Layout } from './Layout'
 import { AttemptHistory } from './admin/History'
+import { Reports } from './admin/Reports'
 import { Admin, AdminAccounts, AdminAudit } from './pages/Admin'
 import { ChangePassword } from './pages/ChangePassword'
 import { Face } from './pages/Face'
@@ -55,6 +56,7 @@ export function App() {
           <Route path="/admin" element={only('admin', <Admin />)}>
             <Route index element={<AdminAccounts />} />
             <Route path="history" element={<AttemptHistory />} />
+            <Route path="reports" element={<Reports />} />
             <Route path="audit" element={<AdminAudit />} />
           </Route>
           <Route path="/settings" element={only('any', <Settings />)} />

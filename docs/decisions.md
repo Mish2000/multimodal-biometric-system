@@ -2323,3 +2323,60 @@ new answer came; the list is now marked busy meanwhile, and fades a little when 
 The manual check in the client passed on 2026-11-24, on the steps asked for: the server and the client restarted,
 the history of the real attempts since H35 with a combined test opened to its comparisons, the filters, Hebrew and
 the dark theme, and the accounts and the audit log in their tabs.
+
+## 2026-11-25: the reports in the administration area
+
+- **H62** Approved on 2026-11-25, with its key screens: the administration area gets a fourth section, Reports,
+  between the attempt history and the audit log, with one report for each method (OpenCV SIFT, Pore SIFT, Pore CNN,
+  SFace, ECAPA-TDNN) and one for the combined test (H60), listed beside the chosen one.
+  - The filters are the history's: the dates (today, the last 7 or 30 days, or since the first attempt), 1:1 or 1:N,
+    and the source. A report counts exactly the attempts the history lists under the same filters, and "Show in the
+    history" opens the history with them.
+  - A report gives the current threshold with where it comes from (a provisional one marked); the attempts accepted
+    and rejected in 1:1, found and not found in 1:N with whose enrolment led a found search (the user's own, another
+    registered user's, marked, or one no longer enrolled; never a name); the processing time's median and, from 10
+    attempts on, its 90th percentile, for each mode; every score in bars over the results' rail, aligned so that the
+    threshold is an edge between two bars (fingerprint pairs doubling from bar to bar, which is ln(1 + pairs), the
+    axis H60 calibrated the fingerprint on; similarities by 0.05; points by 5), so a score equal to the threshold lies
+    left of it as its decision does; and the attempts of each day of the PC's clock (of each hour today, of each week
+    in a range longer than 62 days). "Above the threshold" is each attempt's decision, not an accuracy: some attempts
+    are deliberate tests.
+  - The combined test's report adds its policy version, the face's and the voice's provisional scales, and how often
+    the test overruled the fingerprint alone: rescued (the fingerprint comparison not above its threshold, the test
+    accepted) and stopped (the other way round). The comparisons inside a combined test count there and not in their
+    methods' reports, as the history lists them inside their test; in 1:N their score is that of the person the
+    combined score ranked first.
+  - Attempts decided by an earlier threshold or policy version (possible once thresholds and the policy become
+    settings) keep their own decision and colour, and a line says how many.
+  - `POST /api/admin/reports`, for administrators only, takes the filters and the PC's time zone in its body; the zone
+    is checked against PostgreSQL's own list, so each day starts at the PC's midnight, also when the clock changes.
+    All six reports come in one answer, counted in PostgreSQL in one snapshot (the counts, `percentile_cont`, each
+    score's bar corrected against the bar's own edges, the days by `AT TIME ZONE`), and only sums leave it: no
+    sample, probe, template, embedding or identity link is read, and there is no filter by user. Reading the reports
+    is not a change, so it is not audited. No table, column or index is added, and nothing was downloaded.
+  - The client draws both charts by hand as SVG, left to right in both languages as charts are; a bar is read out by
+    pointing at its column or with the arrow keys, and screen readers get the bars as a list and the busiest day in
+    words. The three marks keep Light Table's meanings (mark above the threshold, alert where another registered
+    user led, ink not above it); checked with a palette validator, they stay apart for colour-blind readers (at least
+    17 in OKLab units) with a contrast of at least 3:1 in both themes.
+  - The key screens were designed and approved as images before any code. A first version looked like a generic
+    dashboard beside the user screens, so the approved one speaks their language: the head as a result's (a context
+    line, the report's name as a light headline, the threshold as the lead, one light figure), the scores on the
+    results' rail with its labelled threshold tick, and light figures without frames.
+  - The attempt history (H61) opens with the filters a report passes it.
+
+Checks: the server's 404 tests with the live captures (22 new in test_reports.py: who may read the reports; every
+number against known values; the bars at their edges, the threshold among them, against their definition for every
+edge and the next number above it; the days around midnight and the clock change of 25 October 2026 in Israel, by
+day and by the hour; weeks for a long range; the filters; the combined test's comparisons kept out of the methods'
+reports, with rescued and stopped; whose enrolment led; an earlier threshold and policy; the same totals as the
+history under every filter; no sealed value opened; refused zones and filters), ruff and mypy; the client's 254 tests
+(4 new), type checks, lint and build; the offscreen check without engines 45 of 45 (the reports before any attempt, in
+both themes and both window sizes, 96 screenshots without layout findings), the face and the voice 88 of 88 (236
+screenshots: the voice's report drawn, a bar read out from the keys, and its history opened with its filters), and
+the fingerprint with OpenCV SIFT on synthetic prints 89 of 89 (232 screenshots: a report with searches led by
+another registered user); each run checks that every report counts exactly the history's total under four sets of
+filters.
+The manual check in the client passed on 2026-11-25, on the steps asked for: the server and the client restarted,
+the reports of the real attempts since H35, each report with a bar read out by the pointer and the arrow keys, the
+filters, the history opened from a report with the same total, Hebrew and the dark theme.

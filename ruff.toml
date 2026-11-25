@@ -25,5 +25,6 @@ ignore = ["E501"]
 allowed-unused-imports = [
     "test_face.face_client", "test_face.faces",
     "test_fingerprint.fp_client", "test_fingerprint.script", "test_fingerprint.service",
+    "test_history.world",
     "test_voice.voice_client", "test_voice.voices",
 ]

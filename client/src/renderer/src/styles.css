@@ -2558,3 +2558,154 @@ progress::-webkit-progress-value { background: var(--ink); }
   .parts { gap: var(--space-8); padding-block: var(--space-12); }
   .parts__table th, .parts__table td { padding-block: 4px; }
 }
+
+/* H62: the reports, as their key screens were approved on 2026-11-25 (version 2): in the user screens' language, built
+   as the combined test's result is. The head (a context line, the light headline, the lead) has one light figure at
+   its end, the scores lie on the results' rail as the one central object, and the figures follow under it, without
+   frames. The page never scrolls. */
+.latin { direction: ltr; unicode-bidi: isolate; }
+.nowrap { white-space: nowrap; }
+.reports-page { display: flex; flex-direction: column; gap: var(--space-24); min-height: 0; padding-top: var(--space-32); }
+.filters__range { margin-inline-start: auto; color: var(--ink-2); font-size: 14px; white-space: nowrap; }
+.reports {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: 12.5rem minmax(0, 1fr);
+  gap: var(--space-48);
+  min-height: 0;
+  transition: opacity var(--duration-fast) ease;
+}
+.reports[aria-busy='true'] { opacity: 0.55; transition-delay: 200ms; }
+
+/* The reports, on the canvas: the chosen one on the wash, as the bar marks where you are. */
+.report-list { display: grid; align-content: start; gap: 2px; }
+.report-list__group { margin: 0; padding: 14px 12px 2px; color: var(--ink-2); font-size: 13px; font-weight: 600; }
+.report-list__group:first-child { padding-top: 2px; }
+.report-list__item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  justify-content: stretch;
+  gap: 5px 8px;
+  width: 100%;
+  min-height: 0;
+  padding: 7px 12px 8px;
+  border: 0;
+  border-radius: var(--radius-6);
+  color: var(--ink);
+  font-weight: 400;
+  text-align: start;
+  white-space: normal;
+}
+.report-list__item:active:not(:disabled) { transform: none; }
+.report-list__item[aria-current='true'] { background: var(--wash); }
+.report-list__name { font-size: 15px; }
+.report-list__item[aria-current='true'] .report-list__name { font-weight: 600; }
+.report-list__count { color: var(--ink-2); font-size: 14px; font-variant-numeric: tabular-nums; }
+.report-list__share { grid-column: 1 / -1; height: 3px; border-radius: 2px; background: var(--mist); overflow: hidden; }
+.report-list__share i { display: block; width: calc(var(--a) * 100%); height: 100%; background: var(--mark); }
+@media (hover: hover) and (pointer: fine) {
+  .report-list__item:hover:not(:disabled) { background: var(--wash); }
+}
+
+/* The chosen report: one grid, so the days' strip stands under the head's figure. */
+.report {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 15rem;
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+  grid-template-areas: 'text kpi' 'text days' 'dist dist' 'figs figs' 'foot foot';
+  gap: 20px var(--space-48);
+  min-width: 0;
+  min-height: 0;
+}
+.report-head__text { grid-area: text; align-self: end; display: grid; gap: var(--space-8); min-width: 0; }
+.report-head__text h1 { margin: 0; line-height: 1.1; }
+.report-head__text .aside { margin: 0; }
+.report-head__lead { display: flex; flex-wrap: wrap; align-items: center; gap: 4px var(--space-12); max-width: 46rem; margin: 0; }
+.report-head__figure { grid-area: kpi; display: grid; justify-items: end; margin: 0; text-align: end; }
+.report-head__value { margin: 0; }
+.report-head__figure .figure-value { color: var(--mark-text); font-size: 48px; line-height: 1.05; }
+.report-head__figure .figure-label { font-size: 15px; }
+.perday { grid-area: days; }
+.distribution { grid-area: dist; }
+.report__figures { grid-area: figs; }
+.report__foot { grid-area: foot; }
+
+.rfig { display: grid; align-content: start; gap: 2px; min-width: 0; }
+.rfig__value { margin: 0; }
+.rfig__label { margin: 0; color: var(--ink); font-size: 14px; font-weight: 600; }
+.rfig__sub { margin: 0; color: var(--ink-2); font-size: 13px; line-height: 1.45; }
+.rfig__sub .leader--alert { color: var(--alert); font-weight: 600; }
+.rfig__sub .icon { width: 14px; height: 14px; margin-inline-end: 3px; vertical-align: -2px; }
+
+/* The scores on the rail: no frame, no grid, no count axis. */
+.distribution { display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: var(--space-8); min-height: 0; margin: 0; }
+.distribution__plot { position: relative; min-height: 0; border-radius: var(--radius-6); direction: ltr; }
+.distribution__plot:focus-visible { outline-offset: 4px; }
+.distribution__plot svg, .perday__plot svg { position: absolute; inset: 0; overflow: visible; }
+.distribution__foot { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px var(--space-24); }
+.distribution__readout { margin: 0; color: var(--ink-2); font-size: 14px; line-height: 1.4; }
+.distribution__readout b { color: var(--ink); font-weight: 600; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px var(--space-16); margin: 0; padding: 0; list-style: none; color: var(--ink-2); font-size: 13px; }
+.legend li { display: inline-flex; align-items: center; gap: 6px; }
+.swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+.swatch--above { background: var(--mark); }
+.swatch--other { background: var(--alert); }
+.swatch--below { background: var(--ink); }
+.distribution svg text, .perday svg text { font-family: var(--font); font-variant-numeric: tabular-nums; }
+.distribution svg .groove { fill: var(--mist); }
+.distribution svg .groove--wide { fill: var(--wash); }
+.distribution svg .tick { fill: var(--ink); }
+.distribution svg .guide { stroke: var(--ink); stroke-width: 1; stroke-opacity: 0.3; }
+.distribution svg .at { fill: var(--ink); font-size: 13px; font-weight: 600; }
+.distribution svg .count { fill: var(--ink-2); font-size: 12px; }
+.distribution svg .count--on { fill: var(--ink); font-weight: 600; }
+.distribution svg .bar-ring { fill: none; stroke: var(--ink); stroke-width: 2; }
+.distribution svg .end, .perday svg .end { fill: var(--ink-2); font-size: 13px; }
+.distribution svg .above, .perday svg .above { fill: var(--mark); }
+.distribution svg .other, .perday svg .other { fill: var(--alert); }
+.distribution svg .below, .perday svg .below { fill: var(--ink); }
+
+/* Under the rail, as the result's modalities are: each mode's figures, and the combined test's rescued and stopped. */
+.report__figures { display: flex; flex-wrap: nowrap; gap: var(--space-16) var(--space-48); min-width: 0; }
+.report__figures .rfig { flex: 1 1 0; max-width: 26rem; }
+
+/* The days: a small strip under the head's figure, its ends named as a rail's are. */
+.perday { display: grid; grid-template-rows: auto 60px; gap: 4px; margin: 0; }
+.perday__title { color: var(--ink-2); font-size: 13px; font-weight: 600; text-align: end; }
+.perday__plot { position: relative; direction: ltr; }
+.perday svg .base { stroke: var(--mist); stroke-width: 1; }
+.perday svg .count { fill: var(--ink-2); font-size: 12px; }
+
+.report__foot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-12) var(--space-32); }
+.report__notes { display: grid; gap: 2px; max-width: 46rem; }
+.report__note { margin: 0; color: var(--ink-2); font-size: 13px; line-height: 1.45; }
+.report__foot button { flex: none; }
+
+/* No attempt matches: the head stays, with what to do about it. */
+.report--empty { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); grid-template-areas: 'text' 'empty'; }
+.report-empty { grid-area: empty; align-self: center; display: grid; justify-items: center; gap: var(--space-8); padding-block: var(--space-24); text-align: center; }
+.report-empty h2 { margin: 0; font-size: 18px; font-weight: 600; }
+.report-empty p { margin: 0; color: var(--ink-2); font-size: 15px; }
+.report-empty button { margin-top: var(--space-8); }
+
+@media (max-width: 1100px) {
+  .reports { grid-template-columns: 11rem minmax(0, 1fr); gap: var(--space-32); }
+  .report { grid-template-columns: minmax(0, 1fr) 13rem; column-gap: var(--space-32); }
+  .report__figures { column-gap: var(--space-32); }
+}
+
+/* A low window: the head and the strip grow smaller, so the figures keep the full width and the scores their height. */
+@media (max-height: 720px) {
+  .reports-page { gap: var(--space-16); padding-top: 20px; }
+  .report { row-gap: 14px; }
+  .report-head__text .aside { display: none; }
+  .report-head__text h1 { font-size: 30px; }
+  .report-head__text { gap: 4px; }
+  .report-head__figure .figure-value { font-size: 34px; }
+  .report-head__figure .figure-label { font-size: 14px; }
+  .rfig .figure-value { font-size: 26px; }
+  .perday { grid-template-rows: auto 30px; gap: 2px; }
+  .report-list__item { padding-block: 5px 6px; }
+  .report-list__group { padding-top: 10px; }
+}

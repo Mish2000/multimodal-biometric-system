@@ -1370,6 +1370,76 @@ app.whenReady().then(async () => {
     await click('Clear filters')
     await until(() => page(`return !window.__t.button('Type: Fingerprint')`), 'the filters cleared')
 
+    // 10c. The reports (H62): the six reports beside the chosen one, each counting exactly the attempts the history
+    // lists under the same filters; a report with attempts draws its scores on the rail with the threshold labelled,
+    // reads a bar out from the keys, and opens the history with its own filters; nothing sealed is shown.
+    await click('Reports')
+    await until(() => page(`return document.querySelectorAll('.report-list__item').length === 6 &&
+      Boolean(document.querySelector('.report #report-name'))`), 'the reports')
+    type Counted = { code: string; n: number; modality: string }
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone
+    const midnight = new Date()
+    midnight.setHours(0, 0, 0, 0)
+    const sameAttempts: Record<string, Record<string, string>> = {
+      'opencv-sift': { type: 'fingerprint', method: 'opencv-sift' }, 'pore-sift': { type: 'fingerprint', method: 'pore-sift' },
+      'learned-pore': { type: 'fingerprint', method: 'learned-pore' }, sface: { type: 'face', method: 'sface' },
+      'ecapa-voxceleb': { type: 'voice', method: 'ecapa-voxceleb' }, combined: { type: 'combined' },
+    }
+    const differences: string[] = []
+    let everything: Counted[] = []
+    for (const [asked, listed] of [[{}, {}], [{ dates: 'today' }, { since: midnight.toISOString() }], [{ mode: 'identify' }, { mode: 'identify' }],
+      [{ source: 'device', mode: 'verify' }, { source: 'device', mode: 'verify' }]] as const) {
+      const answer = await serverClient.call('reports', { zone, ...asked })
+      if (!answer.ok) throw new Error(`the reports were refused: ${answer.error}`)
+      const counted = (answer.data as { reports: Counted[] }).reports
+      if (Object.keys(asked).length === 0) everything = counted
+      for (const report of counted) {
+        const history = await serverClient.call('attempts', { ...sameAttempts[report.code], ...listed, limit: 1 })
+        const total = history.ok ? (history.data as { total: number }).total : -1
+        if (total !== report.n) differences.push(`${report.code} ${JSON.stringify(asked)}: ${report.n} against ${total}`)
+      }
+    }
+    check('every report counts exactly the attempts the history lists under the same filters', differences.length === 0 && everything.length === 6, differences)
+    const listCounts = await page(`return [...document.querySelectorAll('.report-list__count')].map((count) => count.textContent)`)
+    check('the list shows each report with its attempts', JSON.stringify(listCounts) === JSON.stringify(everything.map((report) => report.n.toLocaleString('en-GB'))), listCounts)
+    check('the reports show no image, recording or print', await page(`return !document.querySelector('.reports-page img, .reports-page canvas, .reports-page audio')`))
+    await shot('13j-reports')
+    const busiest = [...everything].sort((a, b) => b.n - a.n)[0]
+    if (busiest !== undefined && busiest.n > 0) {
+      await page(`[...document.querySelectorAll('.report-list__item')][${everything.indexOf(busiest)}].click()`)
+      await until(() => page(`return document.querySelector('.report-list__item[aria-current=true]') === [...document.querySelectorAll('.report-list__item')][${everything.indexOf(busiest)}]`), 'the busiest report')
+      check('the busiest report draws its scores on the rail, its threshold labelled, without a grid', await until(() => page(`
+        const svg = document.querySelector('.distribution svg')
+        return svg !== null && svg.querySelectorAll('rect.above, rect.other, rect.below').length > 0 &&
+          (svg.querySelector('text.at')?.textContent ?? '').length > 0 && svg.querySelector('rect.tick') !== null &&
+          document.querySelector('.perday svg') !== null`), 'the chart drawn'))
+      const hint = await page(`return document.querySelector('.distribution__readout').textContent`)
+      await page(`const plot = document.querySelector('.distribution__plot'); plot.focus()
+        plot.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }))`)
+      const read = await until(() => page(`const text = document.querySelector('.distribution__readout').textContent
+        return text !== ${JSON.stringify(hint)} && text`), 'a bar read out')
+      check('the arrow keys read a bar out: its range and its counts', /: /.test(String(read)), read)
+      await shot('13k-reports-bar')
+      await click(`Show in the history (${busiest.n.toLocaleString('en-GB')})`)
+      await waitText('Every comparison by every user')
+      const historyTotal = await until(() => page(`if (document.querySelector('.history__list')?.getAttribute('aria-busy') !== 'false') return null
+        const foot = document.querySelector('.history__foot span')?.textContent ?? ''
+        const counted = foot.match(/([0-9,]+) results?$/) ?? foot.match(/of ([0-9,]+)$/)
+        return counted ? Number(counted[1].replace(/,/g, '')) : null`), 'the history of the report')
+      const names: Record<string, string> = {
+        'opencv-sift': 'OpenCV SIFT', 'pore-sift': 'Pore SIFT', 'learned-pore': 'Pore CNN', sface: 'SFace', 'ecapa-voxceleb': 'ECAPA-TDNN',
+      }
+      const kinds: Record<string, string> = { fingerprint: 'Fingerprint', face: 'Face', voice: 'Voice', combined: 'Combined' }
+      const pills = await page(`return [...document.querySelectorAll('.filter[data-on] .filter__open')].map((pill) => pill.textContent)`)
+      const expected = busiest.code === 'combined' ? ['Type: Combined'] : [`Type: ${kinds[busiest.modality]}`, `Method: ${names[busiest.code]}`]
+      check('a report opens the history with its filters, and the history lists as many', historyTotal === busiest.n &&
+        JSON.stringify(pills) === JSON.stringify(expected), { historyTotal, pills })
+      await click('Clear filters')
+      await until(() => page(`return document.querySelectorAll('.filter[data-on]').length === 0`), 'the filters cleared')
+    } else {
+      check('without attempts each report says so', await has('No attempts yet.'))
+    }
+
     // 11. The administration area in both themes, then sign-out.
     for (const [theme, label] of [['light', 'Light'], ['dark', 'Dark']] as const) {
       await click('Settings')

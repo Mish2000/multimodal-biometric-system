@@ -767,6 +767,101 @@ const en = {
       accept: (threshold: string) => `Accepted above ${threshold}`,
     },
   },
+  // H62: the reports, one per method and one for the combined test
+  reports: {
+    tab: 'Reports',
+    pre: (kind: string) => `Reports · ${kind}`,
+    kinds: { fingerprint: 'Fingerprint', face: 'Face', voice: 'Voice', combined: 'All the modalities' },
+    combined: 'Combined test',
+    list: 'Reports',
+    listItem: (name: string, n: number, shown: string, tests: boolean) =>
+      `${name}, ${shown} ${tests ? (n === 1 ? 'test' : 'tests') : n === 1 ? 'attempt' : 'attempts'}`,
+    filter: { dates: 'Dates', mode: '1:1 or 1:N', source: 'Source' },
+    dates: { today: 'Today', week: 'Last 7 days', month: 'Last 30 days' },
+    modes: { verify: 'Verify (1:1)', identify: 'Identify (1:N)' },
+    sources: { device: 'Devices', file: 'Files' },
+    sourceSet: (value: string) => `Source: ${value}`,
+    since: (range: string) => `Since the first attempt: ${range}`,
+    range: (from: string, to: string) => `${from} to ${to}`,
+    show: (n: string) => `Show in the history (${n})`,
+    lead: {
+      'opencv-sift': (v: string) => `Match above ${v} pairs, from SD302: plain against plain, 0.1% false accepts.`,
+      'pore-sift': (v: string) => `Match above ${v} pairs, the highest score between different fingers in H10’s check of one person.`,
+      'learned-pore': (v: string) => `Match above ${v} pairs, the highest score between different fingers in H10’s check of one person.`,
+      sface: (v: string) => `Match above a similarity of ${v}, OpenCV’s threshold for SFace.`,
+      'ecapa-voxceleb': (v: string) => `Match above a similarity of ${v}, SpeechBrain’s verification threshold.`,
+    },
+    combinedLead: (v: string, policy: number, weights: string, ratio: string) =>
+      `Accepted above ${v} points of 100 (policy ${policy}: weights ${weights}), a combined ratio above ×${ratio}.`,
+    provisional: 'provisional threshold',
+    scalesProvisional: (modalities: readonly string[]) => {
+      const name: Record<string, string> = { fingerprint: 'fingerprint', face: 'face', voice: 'voice' }
+      const names = modalities.map((m) => name[m] ?? m)
+      const listed = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : (names[0] ?? '')
+      return `${listed} scale${names.length > 1 ? 's' : ''} provisional`
+    },
+    fig: {
+      accepted: 'accepted in verification (1:1)',
+      found: 'found in identification (1:N)',
+      testsAccepted: 'tests accepted in 1:1',
+      testsFound: 'tests found in 1:N',
+      of: (n: string) => `of ${n}`,
+      rejected: (_n: number, shown: string) => `${shown} rejected`, // the Hebrew needs the number for its verb
+      notFound: (_n: number, shown: string) => `${shown} not found`,
+      own: (n: string) => `own enrolment: ${n}`,
+      other: (n: string) => `another registered user: ${n}`,
+      gone: (n: string) => `no longer enrolled: ${n}`,
+      above: 'above the threshold',
+      testsAbove: (v: string) => `tests above ${v}`,
+      median: (s: string) => `median ${s} s`,
+      p90: (s: string) => `9 of 10 within ${s} s`,
+      rescued: 'rescued',
+      rescuedText: (v: string) => `The fingerprint alone was not above ${v}, and the test passed.`,
+      stopped: 'stopped',
+      stoppedText: (v: string) => `The fingerprint alone was above ${v}, and the test did not pass.`,
+      none: { verify: 'No attempts in 1:1', identify: 'No attempts in 1:N' },
+    },
+    scores: 'Scores against the threshold',
+    unit: { pairs: 'in pairs', similarity: 'in similarity', points: 'in points' },
+    at: {
+      pairs: (v: string) => `Match above ${v} pairs`,
+      similarity: (v: string) => `Match above a similarity of ${v}`,
+      points: (v: string) => `Accepted above ${v} points`,
+    },
+    legend: { above: 'above the threshold', other: 'another registered user led', below: 'not above it' },
+    bar: {
+      pairs: (a: string, b: string) => (a === b ? `${a} pairs` : `${a} to ${b} pairs`),
+      upTo: (b: string) => `Up to ${b}`,
+      between: (a: string, b: string) => `Above ${a}, up to ${b}`,
+      above: (n: string, other: string | null) =>
+        `${n} above the threshold${other ? `, ${other} of them led by another registered user` : ''}`,
+      below: (n: string) => `${n} not above it`,
+      empty: 'none',
+    },
+    hint: 'Point at a bar, or use the arrow keys, to see its numbers.',
+    per: {
+      hour: { attempts: 'Attempts per hour, today', tests: 'Tests per hour, today' },
+      day: { attempts: 'Attempts per day', tests: 'Tests per day' },
+      week: { attempts: 'Attempts per week', tests: 'Tests per week' },
+    },
+    busiest: (count: string, when: string) => `The most, ${count}, ${when}.`,
+    onDay: (day: string) => `on ${day}`,
+    atHour: (hour: string) => `at ${hour}`,
+    inWeek: (day: string) => `in the week from ${day}`,
+    note: 'Completed comparisons only. “Above the threshold” is each attempt’s decision, not its accuracy: some attempts are deliberate tests.',
+    combinedNote: 'Completed tests only; their comparisons count here, not in the methods’ reports.',
+    earlier: (n: number, shown: string, thresholds: string) =>
+      `${n === 1 ? 'One of these attempts was' : `${shown} of these attempts were`} decided by an earlier threshold (${thresholds}) and ${n === 1 ? 'keeps its' : 'each keeps its'} own decision.`,
+    earlierPolicy: (n: number, shown: string, policies: string) =>
+      `${n === 1 ? 'One of these tests was' : `${shown} of these tests were`} decided by an earlier policy (${policies}) and ${n === 1 ? 'keeps its' : 'each keeps its'} own decision.`,
+    policyName: (id: number, v: string) => `version ${id}, accepted above ${v}`,
+    empty: { title: 'No attempts match these filters.', text: 'Choose other dates or another report, or clear the filters.' },
+    none: {
+      title: 'No attempts yet.',
+      method: 'Every completed comparison of this method is counted here.',
+      combined: 'Every completed combined test is counted here.',
+    },
+  },
   dateLocale: 'en-GB',
   // H60: the combined test of every enrolled modality
   fusion: {
@@ -1599,6 +1694,103 @@ const he: Texts = {
         `יחד פי ${f}, ‏${score} נקודות: אישור דורש יותר מפי ${ratio}.`,
       refused: 'הפנים והקול עברו כל אחד לבדו, אבל בלי תמיכה של טביעת האצבע בדיקה לא יכולה לעבור.',
       accept: (threshold: string) => `מאושר מעל ${threshold}`,
+    },
+  },
+  reports: {
+    tab: 'דוחות',
+    pre: (kind: string) => `דוחות · ${kind}`,
+    kinds: { fingerprint: 'טביעת אצבע', face: 'פנים', voice: 'קול', combined: 'כל האמצעים' },
+    combined: 'הבדיקה המשולבת',
+    list: 'הדוחות',
+    listItem: (name: string, n: number, shown: string, tests: boolean) =>
+      `${name}, ${n === 1 ? (tests ? 'בדיקה אחת' : 'ניסיון אחד') : `${shown} ${tests ? 'בדיקות' : 'ניסיונות'}`}`,
+    filter: { dates: 'תאריכים', mode: '1:1 או 1:N', source: 'מקור' },
+    dates: { today: 'היום', week: '7 הימים האחרונים', month: '30 הימים האחרונים' },
+    modes: { verify: 'אימות (1:1)', identify: 'זיהוי (1:N)' },
+    sources: { device: 'מכשירים', file: 'קבצים' },
+    sourceSet: (value: string) => `מקור: ${value}`,
+    since: (range: string) => `מהניסיון הראשון: ${range}`,
+    range: (from: string, to: string) => `${from} עד ${to}`,
+    show: (n: string) => `להצגה בהיסטוריה (${n})`,
+    lead: {
+      'opencv-sift': (v: string) => `התאמה מעל ${v} זוגות, מ־SD302: שטוחה מול שטוחה, 0.1% קבלות שגויות.`,
+      'pore-sift': (v: string) => `התאמה מעל ${v} זוגות, הציון הגבוה ביותר בין אצבעות שונות בבדיקת H10 של אדם אחד.`,
+      'learned-pore': (v: string) => `התאמה מעל ${v} זוגות, הציון הגבוה ביותר בין אצבעות שונות בבדיקת H10 של אדם אחד.`,
+      sface: (v: string) => `התאמה מעל דמיון ${v}, הסף של OpenCV ל־SFace.`,
+      'ecapa-voxceleb': (v: string) => `התאמה מעל דמיון ${v}, סף האימות של SpeechBrain.`,
+    },
+    combinedLead: (v: string, policy: number, weights: string, ratio: string) =>
+      `מאושר מעל ${v} נקודות מתוך 100 (מדיניות ${policy}: משקלות ${weights}), יחס משולב גבוה מפי ${ratio}.`,
+    provisional: 'סף זמני',
+    scalesProvisional: (modalities: readonly string[]) => {
+      const name: Record<string, string> = { fingerprint: 'טביעת האצבע', face: 'פנים', voice: 'קול' }
+      const names = modalities.map((m) => name[m] ?? m)
+      const listed = names.length > 1 ? `ל${names.slice(0, -1).join(', ל')} ול${names.at(-1)}` : `ל${names[0] ?? ''}`
+      return `סולם זמני ${listed}`
+    },
+    fig: {
+      accepted: 'התקבלו באימות (1:1)',
+      found: 'נמצאו בזיהוי (1:N)',
+      testsAccepted: 'בדיקות שהתקבלו ב־1:1',
+      testsFound: 'בדיקות שנמצאו ב־1:N',
+      of: (n: string) => `מתוך ${n}`,
+      rejected: (n: number, shown: string) => `${shown} ${n === 1 ? 'נדחה' : 'נדחו'}`,
+      notFound: (n: number, shown: string) => `${shown} ${n === 1 ? 'לא נמצא' : 'לא נמצאו'}`,
+      own: (n: string) => `הרישום של המשתמש עצמו: ${n}`,
+      other: (n: string) => `משתמש רשום אחר: ${n}`,
+      gone: (n: string) => `כבר לא רשום: ${n}`,
+      above: 'מעל הסף',
+      testsAbove: (v: string) => `בדיקות מעל ${v}`,
+      median: (s: string) => `חציון ${s} שניות`,
+      p90: (s: string) => `9 מתוך 10 תוך ${s} שניות`,
+      rescued: 'הציל',
+      rescuedText: (v: string) => `טביעת האצבע לבדה לא עברה את ${v}, והבדיקה עברה.`,
+      stopped: 'עצר',
+      stoppedText: (v: string) => `טביעת האצבע לבדה עברה את ${v}, והבדיקה לא עברה.`,
+      none: { verify: 'אין ניסיונות באימות', identify: 'אין ניסיונות בזיהוי' },
+    },
+    scores: 'הציונים מול הסף',
+    unit: { pairs: 'בזוגות', similarity: 'בדמיון', points: 'בנקודות' },
+    at: {
+      pairs: (v: string) => `התאמה מעל ${v} זוגות`,
+      similarity: (v: string) => `התאמה מעל דמיון ${v}`,
+      points: (v: string) => `מאושר מעל ${v} נקודות`,
+    },
+    legend: { above: 'מעל הסף', other: 'הוביל משתמש רשום אחר', below: 'לא מעל הסף' },
+    bar: {
+      pairs: (a: string, b: string) => (a === b ? `${a} זוגות` : `${a} עד ${b} זוגות`),
+      upTo: (b: string) => `עד ${b}`,
+      between: (a: string, b: string) => `מעל ${a} ועד ${b}`,
+      above: (n: string, other: string | null) => `${n} מעל הסף${other ? ` (ב־${other} מהם הוביל משתמש רשום אחר)` : ''}`,
+      below: (n: string) => `${n} לא מעל הסף`,
+      empty: 'אין',
+    },
+    hint: 'מצביעים על עמודה, או משתמשים בחיצים, כדי לראות את המספרים שלה.',
+    per: {
+      hour: { attempts: 'ניסיונות לשעה, היום', tests: 'בדיקות לשעה, היום' },
+      day: { attempts: 'ניסיונות ליום', tests: 'בדיקות ליום' },
+      week: { attempts: 'ניסיונות לשבוע', tests: 'בדיקות לשבוע' },
+    },
+    busiest: (count: string, when: string) => `הכי הרבה, ${count}, ${when}.`,
+    onDay: (day: string) => `ב־${day}`,
+    atHour: (hour: string) => `בשעה ${hour}`,
+    inWeek: (day: string) => `בשבוע שמתחיל ב־${day}`,
+    note: 'נספרות רק השוואות שהסתיימו. "מעל הסף" היא ההחלטה של כל ניסיון, לא מדד לדיוק: חלק מהניסיונות הם בדיקות מכוונות.',
+    combinedNote: 'נספרות רק בדיקות שהסתיימו, וההשוואות שלהן נספרות כאן ולא בדוחות של השיטות.',
+    earlier: (n: number, shown: string, thresholds: string) =>
+      n === 1
+        ? `ניסיון אחד כאן הוחלט לפי סף קודם (${thresholds}), והוא שומר על ההחלטה שלו.`
+        : `${shown} ניסיונות כאן הוחלטו לפי סף קודם (${thresholds}), וכל אחד מהם שומר על ההחלטה שלו.`,
+    earlierPolicy: (n: number, shown: string, policies: string) =>
+      n === 1
+        ? `בדיקה אחת כאן הוחלטה לפי מדיניות קודמת (${policies}), והיא שומרת על ההחלטה שלה.`
+        : `${shown} בדיקות כאן הוחלטו לפי מדיניות קודמת (${policies}), וכל אחת מהן שומרת על ההחלטה שלה.`,
+    policyName: (id: number, v: string) => `גרסה ${id}, מאושר מעל ${v}`,
+    empty: { title: 'אין ניסיונות שמתאימים למסננים.', text: 'אפשר לבחור תאריכים אחרים או דוח אחר, או לנקות את המסננים.' },
+    none: {
+      title: 'עוד אין ניסיונות.',
+      method: 'כל השוואה שמסתיימת בשיטה הזו נספרת כאן.',
+      combined: 'כל בדיקה משולבת שמסתיימת נספרת כאן.',
     },
   },
   dateLocale: 'he-IL',

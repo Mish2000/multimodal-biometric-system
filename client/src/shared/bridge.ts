@@ -19,6 +19,7 @@ export const ROUTES = {
   setStatus: ['POST', '/api/admin/accounts/{id}/status'],
   audit: ['GET', '/api/admin/audit'],
   attempts: ['POST', '/api/admin/attempts/search'], // H61: the filters travel in the body
+  reports: ['POST', '/api/admin/reports'], // H62: the filters and the PC's time zone in the body
   // H34: a finger's position, 1 to 10, in place of {finger}.
   deleteFingerprint: ['DELETE', '/api/fingerprint/fingers/{finger}'],
   fingerprintMethods: ['GET', '/api/fingerprint/methods'],
@@ -129,6 +130,73 @@ export interface HistoryFilters {
   method?: 'opencv-sift' | 'pore-sift' | 'learned-pore' | 'sface' | 'ecapa-voxceleb'
   result?: 'accepted' | 'rejected'
   source?: 'device' | 'file'
+}
+
+// H62: the reports, one per method and one for the combined test. Sums only, counted by the server: no attempt,
+// sample or name ever comes, and the leader of a 1:N search is told apart as in the history.
+export type ReportMethod = NonNullable<HistoryFilters['method']>
+export type ReportCode = ReportMethod | 'combined'
+export type ReportDates = 'today' | 'week' | 'month'
+export interface ReportFilters {
+  dates?: ReportDates
+  mode?: 'verify' | 'identify'
+  source?: 'device' | 'file'
+  zone: string // the PC's time zone, whose midnight starts each day
+}
+export interface ReportCounts {
+  accepted: number // above the threshold (found, in 1:N), those led by another registered user included
+  other: number // of them, searches led by another registered user's enrolment
+  rejected: number
+}
+export interface ReportBar extends ReportCounts {
+  k: number
+  low: number // a bar holds the scores above `low` up to `high`; the first one also every score below it
+  high: number
+}
+export interface ReportMode {
+  n: number
+  accepted: number
+  rejected: number
+  own: number
+  other: number
+  gone: number
+  median_ms: number | null
+  p90_ms: number | null // from 10 attempts on
+  rescued?: number // the combined test's: the fingerprint alone not above its threshold, the test accepted
+  stopped?: number // the fingerprint alone above it, the test not accepted
+}
+interface ReportBase {
+  threshold: number
+  n: number
+  verify: ReportMode
+  identify: ReportMode
+  bars: ReportBar[]
+  slots: ReportCounts[]
+}
+export interface MethodReport extends ReportBase {
+  code: ReportMethod
+  modality: HistoryModality
+  scale: 'pairs' | 'similarity'
+  provisional: boolean
+  earlier: Array<{ threshold: number; n: number }>
+}
+export interface CombinedReport extends ReportBase {
+  code: 'combined'
+  modality: 'combined'
+  scale: 'points'
+  policy: { id: number; weights: Record<HistoryModality, number>; budget: number; threshold: number; provisional: HistoryModality[] }
+  earlier: Array<{ policy: number; threshold: number; n: number }>
+}
+export type Report = MethodReport | CombinedReport
+export interface ReportRange {
+  from: string
+  to: string
+  unit: 'hour' | 'day' | 'week'
+  slots: number
+}
+export interface ReportsAnswer {
+  range: ReportRange
+  reports: Report[]
 }
 
 export interface Account {

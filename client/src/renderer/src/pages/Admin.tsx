@@ -39,6 +39,7 @@ export function Admin() {
           {t.accounts}
         </NavLink>
         <NavLink to="/admin/history">{t.history.title}</NavLink>
+        <NavLink to="/admin/reports">{t.reports.tab}</NavLink>
         <NavLink to="/admin/audit">{t.auditLog}</NavLink>
       </nav>
       <Outlet />

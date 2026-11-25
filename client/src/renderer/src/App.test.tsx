@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { StrictMode } from 'react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import type { Account, ApiResult, DisplayState, FaceIdentificationResult, FaceVerificationResult, EnrolmentEvent, HistoryCombined, HistoryCursor, HistoryFilters, HistoryPage, HistoryRow, Language, MbsBridge, OpenedLink, RouteName, Theme, VerificationEvent, FingerprintAlgorithm, FusionEvent, FusionSamples, IdentificationEvent, VoiceEnrolmentAnswer, VoiceIdentificationResult, VoiceMethod, VoiceSaved, VoiceVerificationResult } from '../../shared/bridge'
+import type { Account, ApiResult, DisplayState, FaceIdentificationResult, FaceVerificationResult, EnrolmentEvent, HistoryCombined, HistoryCursor, HistoryFilters, HistoryPage, HistoryRow, Language, MbsBridge, OpenedLink, MethodReport, Report, ReportBar, ReportFilters, ReportMode, ReportsAnswer, RouteName, Theme, VerificationEvent, FingerprintAlgorithm, FusionEvent, FusionSamples, IdentificationEvent, VoiceEnrolmentAnswer, VoiceIdentificationResult, VoiceMethod, VoiceSaved, VoiceVerificationResult } from '../../shared/bridge'
 import { App } from './App'
 import { FaceIdentificationView } from './face/FaceIdentification'
 import { FaceVerificationView } from './face/FaceVerification'
@@ -32,6 +32,9 @@ class FakeServer implements MbsBridge {
   // H61: what the attempt history was asked, and what it answers.
   historyAsked: HistoryAsk[] = []
   history: (ask: HistoryAsk) => HistoryPage = () => ({ rows: [], total: 0, next: null })
+  // H62: what the reports were asked, and what they answer.
+  reportsAsked: ReportFilters[] = []
+  reports: (ask: ReportFilters) => ReportsAnswer = () => reportsAnswer()
   accounts: Stored[] = []
   current: Stored | null = null
   up = true
@@ -380,6 +383,9 @@ class FakeServer implements MbsBridge {
       case 'attempts': // H61
         this.historyAsked.push(body as unknown as HistoryAsk)
         return ok(this.history(body as unknown as HistoryAsk))
+      case 'reports': // H62
+        this.reportsAsked.push(body as unknown as ReportFilters)
+        return ok(this.reports(body as unknown as ReportFilters))
       case 'setStatus': {
         if (body.password !== me.password) return no(403, 'wrong_password')
         const target = this.accounts.find((a) => a.id === id)
@@ -900,7 +906,147 @@ describe('the administration area', () => {
     expect(await screen.findByRole('heading', { name: 'יומן הביקורת', level: 1 })).toBeTruthy()
     expect(await screen.findByText('נוצר המנהל הראשון')).toBeTruthy()
   })
+
+  // H62: the reports, as the server answers them (synthetic sums near the key screens' figures).
+  const readout = () => {
+    const plot = screen.getByRole('group', { name: /Scores against the threshold|הציונים מול הסף/ })
+    return document.getElementById(plot.getAttribute('aria-describedby') ?? '')?.textContent
+  }
+
+  it('shows the chosen report with its figures, reads a bar out from the keys, and lists every report', async () => {
+    server.current = server.add('admin', 'admin')
+    open('/admin/reports')
+    expect(await screen.findByRole('heading', { name: 'OpenCV SIFT', level: 1 })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Reports' }).getAttribute('aria-current')).toBe('page')
+    expect(server.reportsAsked.at(-1)).toEqual({ zone: Intl.DateTimeFormat().resolvedOptions().timeZone })
+    expect(screen.getByText('Match above 57 pairs, from SD302: plain against plain, 0.1% false accepts.')).toBeTruthy()
+    expect(screen.getByText('Since the first attempt: 6 to 24 November 2026')).toBeTruthy()
+    expect(screen.getByText('110')).toBeTruthy()
+    expect(screen.getByText('of 126')).toBeTruthy()
+    expect(screen.getByText('12 rejected')).toBeTruthy()
+    expect(screen.getAllByText('9 of 10 within 0.80 s')).toHaveLength(2)
+    expect(screen.getByText('another registered user: 1')).toBeTruthy()
+    expect(screen.getByText('Attempts per day')).toBeTruthy()
+    expect(within(screen.getByRole('navigation', { name: 'Reports' })).getAllByRole('button').map((b) => b.textContent)).toEqual(
+      ['OpenCV SIFT126', 'Pore SIFT31', 'Pore CNN44', 'SFace58', 'ECAPA-TDNN37', 'Combined test24'])
+    expect(readout()).toBe('Point at a bar, or use the arrow keys, to see its numbers.')
+    const plot = screen.getByRole('group', { name: 'Scores against the threshold, in pairs' })
+    fireEvent.keyDown(plot, { key: 'ArrowRight' })
+    expect(readout()).toBe('7 to 13 pairs: 7 not above it')
+    fireEvent.keyDown(plot, { key: 'End' })
+    expect(readout()).toBe('464 to 927 pairs: 39 above the threshold')
+    fireEvent.keyDown(plot, { key: 'ArrowLeft' })
+    expect(readout()).toBe('232 to 463 pairs: 47 above the threshold, 1 of them led by another registered user')
+    fireEvent.keyDown(plot, { key: 'Escape' })
+    expect(readout()).toBe('Point at a bar, or use the arrow keys, to see its numbers.')
+    fireEvent.click(screen.getByRole('button', { name: 'Pore CNN, 44 attempts' }))
+    expect(await screen.findByRole('heading', { name: 'Pore CNN', level: 1 })).toBeTruthy()
+    expect(screen.getByText('provisional threshold')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Pore CNN, 44 attempts' }).getAttribute('aria-current')).toBe('true')
+  })
+
+  it('asks the reports again with each filter, and shows a report’s own attempts in the history', async () => {
+    server.current = server.add('admin', 'admin')
+    open('/admin/reports')
+    await screen.findByRole('heading', { name: 'OpenCV SIFT', level: 1 })
+    fireEvent.click(screen.getByRole('button', { name: 'Dates' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Last 7 days' }))
+    await waitFor(() => expect(server.reportsAsked.at(-1)).toMatchObject({ dates: 'week' }))
+    fireEvent.click(screen.getByRole('button', { name: '1:1 or 1:N' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Identify (1:N)' }))
+    await waitFor(() => expect(server.reportsAsked.at(-1)).toMatchObject({ dates: 'week', mode: 'identify' }))
+    await waitFor(() => expect(document.querySelector('.reports')?.getAttribute('aria-busy')).toBe('false'))
+    const labels = () => [...document.querySelectorAll('.rfig__label')].map((label) => label.textContent)
+    expect(labels()).toEqual(['found in identification (1:N)'])
+    fireEvent.click(screen.getByRole('button', { name: 'Show in the history (126)' }))
+    expect(await screen.findByRole('heading', { name: 'Attempt history', level: 1 })).toBeTruthy()
+    await waitFor(() => expect(server.historyAsked.at(-1)).toMatchObject({ type: 'fingerprint', method: 'opencv-sift', mode: 'identify' }))
+    expect(server.historyAsked.at(-1)?.since).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Method: OpenCV SIFT' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Last 7 days' })).toBeTruthy()
+  })
+
+  it('reads the combined test’s report in Hebrew, with rescued and stopped', async () => {
+    server.current = server.add('admin', 'admin', { language: 'he' })
+    open('/admin/reports')
+    expect(await screen.findByRole('heading', { name: 'OpenCV SIFT', level: 1 })).toBeTruthy()
+    expect(screen.getByText('מהניסיון הראשון: 6 עד 24 בנובמבר 2026')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'הבדיקה המשולבת, 24 בדיקות' }))
+    expect(await screen.findByRole('heading', { name: 'הבדיקה המשולבת', level: 1 })).toBeTruthy()
+    expect(screen.getByText('מאושר מעל 75 נקודות מתוך 100 (מדיניות 1: משקלות 55, 25 ו־20), יחס משולב גבוה מפי 1,000.')).toBeTruthy()
+    expect(screen.getByText('סולם זמני לפנים ולקול')).toBeTruthy()
+    expect(screen.getByText('בדיקות מעל 75')).toBeTruthy()
+    expect(screen.getByText('הציל')).toBeTruthy()
+    expect(screen.getByText('טביעת האצבע לבדה לא עברה את 57, והבדיקה עברה.')).toBeTruthy()
+    expect(screen.getByText('עצר')).toBeTruthy()
+    expect(screen.getByText('בדיקות ליום')).toBeTruthy()
+    expect(screen.getByText('נספרות רק בדיקות שהסתיימו, וההשוואות שלהן נספרות כאן ולא בדוחות של השיטות.')).toBeTruthy()
+    fireEvent.keyDown(screen.getByRole('group', { name: 'הציונים מול הסף, בנקודות' }), { key: 'Home' })
+    expect(readout()).toBe('עד 75: 5 לא מעל הסף')
+  })
+
+  it('says how many attempts an earlier threshold decided, and when no attempt matches', async () => {
+    server.current = server.add('admin', 'admin')
+    server.reports = (ask) => (ask.dates === 'today'
+      ? reportsAnswer({ n: 0, verify: reportMode(0, 0), identify: reportMode(0, 0) }, { from: '2026-11-24', to: '2026-11-24', unit: 'hour', slots: 24 })
+      : reportsAnswer({ earlier: [{ threshold: 50, n: 3 }] }))
+    open('/admin/reports')
+    expect(await screen.findByText('3 of these attempts were decided by an earlier threshold (50) and each keeps its own decision.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Dates' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Today' }))
+    expect(await screen.findByRole('heading', { name: 'No attempts match these filters.' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'OpenCV SIFT', level: 1 })).toBeTruthy()
+    expect(screen.getByText('24 November 2026')).toBeTruthy()
+    fireEvent.click(within(document.querySelector('.report-empty') as HTMLElement).getByRole('button', { name: 'Clear filters' }))
+    await waitFor(() => expect(server.reportsAsked.at(-1)).toEqual({ zone: Intl.DateTimeFormat().resolvedOptions().timeZone }))
+  })
 })
+
+// H62: the reports' synthetic answer. OpenCV SIFT's bars double from (6.25, 13.5] on, aligned on 57; its 126 attempts
+// are 104 in 1:1 and 22 in 1:N, one of them led by another registered user.
+function reportMode(n: number, accepted: number, extra: Partial<ReportMode> = {}): ReportMode {
+  return { n, accepted, rejected: n - accepted, own: 0, other: 0, gone: 0, median_ms: n > 0 ? 710 : null, p90_ms: n >= 10 ? 800 : null, ...extra }
+}
+
+function siftBars(): ReportBar[] {
+  const edge = (k: number) => 58 * 2 ** k - 1
+  const counts: Record<number, [number, number, number]> = { [-2]: [0, 0, 7], [-1]: [0, 0, 4], 0: [0, 0, 5], 1: [4, 0, 0], 2: [20, 0, 0], 3: [47, 1, 0], 4: [39, 0, 0] }
+  return [-5, -4, -3, -2, -1, 0, 1, 2, 3, 4].map((k) => {
+    const [accepted, other, rejected] = counts[k] ?? [0, 0, 0]
+    return { k, low: edge(k - 1), high: edge(k), accepted, other, rejected }
+  })
+}
+
+function twoBars(threshold: number, step: number, accepted: number, rejected: number): ReportBar[] {
+  return [
+    { k: 0, low: threshold - step, high: threshold, accepted: 0, other: 0, rejected },
+    { k: 1, low: threshold, high: threshold + step, accepted, other: 0, rejected: 0 },
+  ]
+}
+
+function reportsAnswer(sift: Partial<MethodReport> = {}, range: ReportsAnswer['range'] = { from: '2026-11-06', to: '2026-11-24', unit: 'day', slots: 19 }): ReportsAnswer {
+  const slots = Array.from({ length: range.slots }, (_, index) => ({ accepted: index === 2 ? 15 : 5, other: 0, rejected: index === 2 ? 2 : 1 }))
+  const method = (code: MethodReport['code'], modality: MethodReport['modality'], scale: MethodReport['scale'], threshold: number,
+    provisional: boolean, verify: ReportMode, identify: ReportMode, step: number): MethodReport => ({
+    code, modality, scale, threshold, provisional, n: verify.n + identify.n, verify, identify,
+    bars: twoBars(threshold, step, verify.accepted + identify.accepted, verify.rejected + identify.rejected), slots, earlier: [],
+  })
+  const reports: Report[] = [
+    { ...method('opencv-sift', 'fingerprint', 'pairs', 57, false, reportMode(104, 92), reportMode(22, 18, { own: 16, other: 1, gone: 1 }), 58), bars: siftBars(), ...sift },
+    method('pore-sift', 'fingerprint', 'pairs', 37, true, reportMode(26, 18), reportMode(5, 3, { own: 3 }), 38),
+    method('learned-pore', 'fingerprint', 'pairs', 21, true, reportMode(38, 30), reportMode(6, 5, { own: 5 }), 22),
+    method('sface', 'face', 'similarity', 0.363, false, reportMode(44, 36), reportMode(14, 12, { own: 11, other: 1 }), 0.05),
+    method('ecapa-voxceleb', 'voice', 'similarity', 0.25, false, reportMode(25, 21), reportMode(12, 10, { own: 8, other: 2 }), 0.05),
+    {
+      code: 'combined', modality: 'combined', scale: 'points', threshold: 75, n: 24,
+      verify: reportMode(19, 15, { rescued: 2, stopped: 1 }), identify: reportMode(5, 4, { own: 4, rescued: 0, stopped: 0 }),
+      bars: twoBars(75, 5, 19, 5), slots,
+      policy: { id: 1, weights: { fingerprint: 55, face: 25, voice: 20 }, budget: 6, threshold: 75, provisional: ['face', 'voice'] },
+      earlier: [],
+    },
+  ]
+  return { range, reports }
+}
 
 // Fingerprint enrolment (H33). The images are placeholders and the arrays are tiny; the canvases do not draw
 // in jsdom, so these tests follow the texts and the flow.

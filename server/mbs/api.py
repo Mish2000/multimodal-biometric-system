@@ -15,6 +15,7 @@ from .fingerprint import FingerprintService
 from .guard import Guard
 from .keys import Keys
 from .outbox import Outbox
+from .reports import ReportError
 from .routes import BODY_LIMITS, ROUTERS
 from .routes.policy import PUBLIC, allow, policy
 from .voice import VoiceError, VoiceService
@@ -43,6 +44,10 @@ def create_app(databases: Databases, keys: Keys, outbox: Outbox, fingerprints: F
     @app.exception_handler(VoiceError)
     def voice_error(request: Request, error: VoiceError) -> JSONResponse:
         return JSONResponse({"error": error.code, **error.extra}, status_code=error.status)
+
+    @app.exception_handler(ReportError)
+    def report_error(request: Request, error: ReportError) -> JSONResponse:
+        return JSONResponse({"error": error.code}, status_code=error.status)
 
     @app.get("/api/health")
     @allow(PUBLIC)

@@ -12,7 +12,7 @@
   <img alt=".NET Framework 4.8" src="https://img.shields.io/badge/.NET_Framework-4.8-512BD4?logo=dotnet&logoColor=white">
 </p>
 <p align="center">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-382%20server%20%C2%B7%20250%20client%20%C2%B7%2015%20scanner%20%C2%B7%2039%20engines-2EA44F">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-404%20server%20%C2%B7%20254%20client%20%C2%B7%2015%20scanner%20%C2%B7%2039%20engines-2EA44F">
   <img alt="Cryptography" src="https://img.shields.io/badge/crypto-AES--256--GCM%20%C2%B7%20Argon2id%20%C2%B7%20HMAC-7C3AED">
   <a href="https://github.com/Mish2000/multimodal-biometric-system/actions/workflows/checks.yml"><img alt="Checks" src="https://github.com/Mish2000/multimodal-biometric-system/actions/workflows/checks.yml/badge.svg?branch=main"></a>
   <img alt="Progress" src="https://img.shields.io/badge/progress-increment%205%20of%206%20complete-F59E0B">
@@ -104,7 +104,7 @@ checked 1000 ppi images.
 <td valign="top">
 
 **📜 Every decision on record**<br>
-Each design choice is numbered (H1 to H61), dated, and cited in the code and the commits.
+Each design choice is numbered (H1 to H62), dated, and cited in the code and the commits.
 
 </td>
 <td valign="top">
@@ -171,7 +171,7 @@ flowchart LR
 | 🟢 | **3 · Fingerprint, complete** | all three methods for verification and identification, with match drawings in 1:1 and for the user's own print in 1:N, checked on HiScan PRO |
 | 🟢 | **4 · Face, complete** | enrolment, 1:1 verification and 1:N identification from the built-in or a USB camera, chosen by the client, and from image files for 1:1 and 1:N; faces of every size from 112 pixels, checked by hand |
 | 🟢 | **5 · Voice, complete** | enrolment, 1:1 verification and 1:N identification from the PC's microphones, chosen by the client, and from WAV, MP3 and OGG files of up to two minutes for 1:1 and 1:N, checked by hand |
-| 🟡 | **6 · Finish** | the combined test of every enrolled modality and the attempt history in the administration (built and checked by hand); reports, threshold settings and the finished experience follow |
+| 🟡 | **6 · Finish** | the combined test of every enrolled modality, and the attempt history and the reports in the administration (built and checked by hand); threshold settings and the finished experience follow |
 
 ## Repository
 
@@ -199,7 +199,7 @@ conda activate multimodal-server
 cd server
 python -m mbs setup        # key file, local settings, cluster and databases
 python -m mbs serve        # the API on 127.0.0.1:55433
-python -m pytest           # 382 tests, including four local checks with MBS_LIVE_CAPTURES
+python -m pytest           # 404 tests, including four local checks with MBS_LIVE_CAPTURES
 python -m mypy             # type checks of the server and its tests
 ruff check ..              # lint of all the system's Python (ruff.toml)
 
@@ -207,7 +207,7 @@ ruff check ..              # lint of all the system's Python (ruff.toml)
 cd ../client
 npm ci
 npm run dev                # the app, with the server running
-npm test                   # 250 tests
+npm test                   # 254 tests
 npm run lint               # oxlint (.oxlintrc.json)
 npm run build && cd ..
 python tools/client-check/run.py first   # the built client against a throwaway server, offscreen

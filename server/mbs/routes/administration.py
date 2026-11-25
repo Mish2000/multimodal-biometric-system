@@ -1,6 +1,6 @@
 """The administration's routes (H12): the accounts, a new administrator, disabling and enabling an account, the
-audit log and the attempt history (H61). A change asks for the acting administrator's password again and is written
-to the audit log; reading is not a change."""
+audit log, the attempt history (H61) and the reports (H62). A change asks for the acting administrator's password
+again and is written to the audit log; reading is not a change."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from typing import Literal
 from fastapi import APIRouter
 from pydantic import AwareDatetime, BaseModel, Field
 
-from .. import accounts, history
+from .. import accounts, history, reports
 from ..models import ADMIN
 from .account import account_json
 from .common import DatabasesDep, KeysDep
@@ -51,6 +51,15 @@ class AttemptSearch(BaseModel):
     limit: int = Field(default=history.PAGE, ge=1, le=history.PAGE)
 
 
+class ReportFilters(BaseModel):
+    """The reports' filters, as the history's (H62): the dates, 1:1 or 1:N, and the source; with the PC's time zone,
+    whose midnight starts each day, checked against PostgreSQL's own list of zones."""
+    dates: Literal["today", "week", "month"] | None = None
+    mode: Literal["verify", "identify"] | None = None
+    source: Literal["device", "file"] | None = None
+    zone: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_+\-/]+$")
+
+
 @router.get("/api/admin/accounts")
 @allow(ADMIN)
 def admin_accounts(databases: DatabasesDep) -> dict:
@@ -85,3 +94,10 @@ def admin_attempts(body: AttemptSearch, databases: DatabasesDep, keys: KeysDep) 
                               method=body.method, result=body.result, source=body.source)
     after = (body.after.at, body.after.id) if body.after is not None else None
     return history.search(databases, keys, filters, after, body.limit)
+
+
+@router.post("/api/admin/reports")
+@allow(ADMIN)
+def admin_reports(body: ReportFilters, databases: DatabasesDep) -> dict:
+    filters = reports.Filters(dates=body.dates, mode=body.mode, source=body.source)
+    return reports.reports(databases, filters, body.zone)

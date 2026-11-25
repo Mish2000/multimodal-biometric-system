@@ -3,6 +3,7 @@
 // template or ID number, and the leader of a 1:N search is never named. The page stays still: the list scrolls in
 // its panel under a header that stays.
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useLocation } from 'react-router'
 import type { HistoryCombined, HistoryFilters, HistoryPage, HistoryRow } from '../../../shared/bridge'
 import { useSession } from '../session'
 import { errorText, type Texts } from '../texts'
@@ -11,7 +12,7 @@ import { Notice } from '../ui/Notice'
 import { Tag } from '../ui/Tag'
 import { FilterPill, type Choice } from './FilterPill'
 
-const METHODS = {
+export const METHODS = {
   'opencv-sift': 'OpenCV SIFT',
   'pore-sift': 'Pore SIFT',
   'learned-pore': 'Pore CNN',
@@ -33,6 +34,28 @@ interface Chosen {
   source: 'device' | 'file' | null
 }
 const NONE: Chosen = { dates: null, type: null, mode: null, method: null, result: null, source: null }
+
+// H62: a report opens the history with its own filters, so the history lists the very attempts it counted.
+export type HistoryPreset = Partial<Chosen>
+const ALLOWED: { [K in keyof Chosen]: readonly string[] } = {
+  dates: Object.keys(DAYS_BACK),
+  type: TYPES,
+  mode: ['verify', 'identify'],
+  method: Object.keys(METHODS),
+  result: ['accepted', 'rejected'],
+  source: ['device', 'file'],
+}
+function presetOf(state: unknown): Chosen {
+  const preset = (state as { preset?: Record<string, unknown> } | null)?.preset
+  const chosen: Record<string, unknown> = { ...NONE }
+  if (preset !== undefined && preset !== null && typeof preset === 'object') {
+    for (const key of Object.keys(NONE) as Array<keyof Chosen>) {
+      const value = preset[key]
+      if (typeof value === 'string' && ALLOWED[key].includes(value)) chosen[key] = value
+    }
+  }
+  return chosen as unknown as Chosen
+}
 
 // Ratios such as 1:1 and 1:N keep their order inside Hebrew.
 export function withRatios(text: string): ReactNode {
@@ -98,7 +121,8 @@ function dayOf(iso: string, t: Texts): { key: string; label: string } {
 export function AttemptHistory() {
   const { call, t } = useSession()
   const h = t.history
-  const [chosen, setChosen] = useState<Chosen>(NONE)
+  const location = useLocation()
+  const [chosen, setChosen] = useState<Chosen>(() => presetOf(location.state))
   const [user, setUser] = useState('')
   const [userQuery, setUserQuery] = useState('')
   const [page, setPage] = useState<HistoryPage | null>(null)
